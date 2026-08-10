@@ -205,6 +205,13 @@ AssistLK/
 │       │   ├── tracking/
 │       │   └── aiWorkflows/
 │       └── shared/
+            └── theme/
+                ├── colors.js
+                ├── typography.js
+                ├── spacing.js
+                ├── radius.js
+                ├── components.js
+                └── index.js
 │
 ├── mobile/
 │   └── lib/
@@ -214,6 +221,12 @@ AssistLK/
 │       │   ├── quotations/
 │       │   └── tracking/
 │       └── shared/
+            └── theme/
+                ├── app_colors.dart
+                ├── app_text_styles.dart
+                ├── app_spacing.dart
+                ├── app_radius.dart
+                └── app_theme.dart
 │
 ├── agent-service/
 │   ├── agents/

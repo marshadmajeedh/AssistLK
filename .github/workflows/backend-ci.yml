@@ -1,0 +1,57 @@
+name: Backend CI
+
+on:
+  push:
+    branches: [ main, develop ]
+    paths:
+      - "backend/**"
+      - ".github/workflows/backend-ci.yml"
+  pull_request:
+    branches: [ main, develop ]
+    paths:
+      - "backend/**"
+      - ".github/workflows/backend-ci.yml"
+
+jobs:
+  backend:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: "8.0.x"
+
+      - name: Find solution
+        id: solution
+        shell: bash
+        run: |
+          SLN=$(find backend -maxdepth 3 -name "*.sln" | head -n 1)
+          if [ -z "$SLN" ]; then
+            echo "found=false" >> "$GITHUB_OUTPUT"
+            echo "No .sln exists yet. Scaffold the ASP.NET solution in Phase 1."
+          else
+            echo "found=true" >> "$GITHUB_OUTPUT"
+            echo "path=$SLN" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Restore
+        if: steps.solution.outputs.found == 'true'
+        run: dotnet restore "${{ steps.solution.outputs.path }}"
+
+      - name: Build
+        if: steps.solution.outputs.found == 'true'
+        run: dotnet build "${{ steps.solution.outputs.path }}" --configuration Release --no-restore
+
+      - name: Test
+        if: steps.solution.outputs.found == 'true'
+        run: dotnet test "${{ steps.solution.outputs.path }}" --configuration Release --no-build --verbosity normal
+
+      - name: Placeholder notice
+        if: steps.solution.outputs.found != 'true'
+        run: |
+          echo "CI template is installed, but the backend solution has not been scaffolded yet."
+          echo "Before final evaluation this workflow must restore, build and run backend tests."

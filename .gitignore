@@ -1,0 +1,71 @@
+# ---------------- Secrets / environment ----------------
+.env
+.env.*
+!.env.example
+*.key
+*.pem
+secrets.json
+appsettings.Development.json
+
+# ---------------- .NET ----------------
+**/bin/
+**/obj/
+.vs/
+*.user
+*.suo
+TestResults/
+coverage/
+coverage.cobertura.xml
+
+# ---------------- Node / React ----------------
+node_modules/
+web/node_modules/
+web/dist/
+web/build/
+web/.vite/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# ---------------- Flutter / Dart ----------------
+.dart_tool/
+.packages
+.pub/
+build/
+mobile/build/
+mobile/.flutter-plugins
+mobile/.flutter-plugins-dependencies
+mobile/.metadata
+*.iml
+
+# Keep Flutter platform lock/config files created by the real project
+# Review this file after running `flutter create`.
+
+# ---------------- Python / Agent service ----------------
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+
+# ---------------- IDE / OS ----------------
+.idea/
+.vscode/*
+!.vscode/extensions.json
+!.vscode/settings.example.json
+.DS_Store
+Thumbs.db
+
+# ---------------- Logs / temp ----------------
+*.log
+logs/
+tmp/
+temp/
+
+# ---------------- Local uploads ----------------
+uploads/
+storage/local/

@@ -1,0 +1,27 @@
+# Rename this file to CODEOWNERS after replacing placeholder GitHub usernames.
+# This is only a starting point; shared code must still be reviewed across the team.
+
+# Component 1
+/backend/**/ServiceRequests/ @member1
+/web/src/features/serviceRequests/ @member1
+/mobile/lib/features/service_requests/ @member1
+/agent-service/agents/problem_understanding/ @member1
+
+# Component 2
+/backend/**/Providers/ @member2
+/web/src/features/providers/ @member2
+/mobile/lib/features/providers/ @member2
+/agent-service/agents/provider_matching/ @member2
+
+# Component 3
+/backend/**/Quotations/ @member3
+/backend/**/Bookings/ @member3
+/web/src/features/quotations/ @member3
+/mobile/lib/features/quotations/ @member3
+/agent-service/agents/service_coordination/ @member3
+
+# Component 4
+/backend/**/ServiceTracking/ @member4
+/web/src/features/tracking/ @member4
+/mobile/lib/features/tracking/ @member4
+/agent-service/agents/validation_safety/ @member4

@@ -389,6 +389,65 @@ feature/shared-database-foundation
 
 ---
 
+# 🎨 Shared UI Design System
+
+AssistLK is developed by multiple team members, but the final React and
+Flutter applications must look like one consistent system.
+
+For this reason, all members must use the shared AssistLK Design System.
+
+The shared design system controls:
+
+1. Colors
+2. Typography
+3. Spacing
+4. Border Radius
+5. Buttons
+6. Input Fields
+7. Cards
+8. Status Colors
+
+Do not create a separate theme inside your own component.
+
+---
+
+## 1. Shared Theme Locations
+
+### React
+
+All React theme files are located inside:
+
+```text
+web/src/shared/theme/
+└── src/
+    └── shared/
+        └── theme/
+            ├── colors.js
+            ├── typography.js
+            ├── spacing.js
+            ├── radius.js
+            ├── components.js
+            └── index.js
+```
+
+### Flutter
+
+All Flutter theme files are located inside:
+
+```text
+mobile/lib/shared/theme/
+└── lib/
+    └── shared/
+        └── theme/
+            ├── app_colors.dart
+            ├── app_text_styles.dart
+            ├── app_spacing.dart
+            ├── app_radius.dart
+            └── app_theme.dart
+```
+
+---
+
 # 6. MOST IMPORTANT – How Every Member Should Push Code
 
 ## Never do this

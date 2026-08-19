@@ -1613,12 +1613,12 @@ and every team member can explain, test, modify and debug the technical work the
 
 Update this table immediately after creating the repository.
 
-| Member | GitHub Username | Component |
-|---|---|---|
-| Member 1 | `@username` | Service Request & Problem Management |
-| Member 2 | `@username` | Provider Management & Intelligent Matching |
-| Member 3 | `@username` | Quotation, Booking & Service Coordination |
-| Member 4 | `@username` | Service Tracking, Completion & Feedback |
+| Member   | Member ID    | Component                                 |
+|----------|--------------|-------------------------------------------|
+| Member 1 | `IT24102580` | Service Request & Problem Management      |
+| Member 2 | `IT24103555` | Provider Management & Intelligent Matching|
+| Member 3 | `IT24102848` | Quotation, Booking & Service Coordination |
+| Member 4 | `IT24104222` | Service Tracking, Completion & Feedback   |
 
 ---
 

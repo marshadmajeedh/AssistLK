@@ -1,0 +1,64 @@
+﻿
+Microsoft Visual Studio Solution File, Format Version 12.00
+# Visual Studio Version 17
+VisualStudioVersion = 17.0.31903.59
+MinimumVisualStudioVersion = 10.0.40219.1
+Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "src", "src", "{903AB182-D880-4E6B-8CE7-1DFF037975B7}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "AssistLK.Api", "src\AssistLK.Api\AssistLK.Api.csproj", "{7CF1B81C-FAEB-4FFA-9152-86AB23530FA3}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "AssistLK.Application", "src\AssistLK.Application\AssistLK.Application.csproj", "{30E2BB4D-B5AD-46A0-913E-D8A6B6B1E9C8}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "AssistLK.Domain", "src\AssistLK.Domain\AssistLK.Domain.csproj", "{646353C6-1690-43BE-8A17-AB0A9FBADB86}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "AssistLK.Infrastructure", "src\AssistLK.Infrastructure\AssistLK.Infrastructure.csproj", "{00714032-F4D2-403C-8DD6-BACC6D8C22F8}"
+EndProject
+Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "tests", "tests", "{46447E22-7B85-4ABD-AD64-4BC0D318D1DE}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "AssistLK.Api.Tests", "tests\AssistLK.Api.Tests\AssistLK.Api.Tests.csproj", "{36F804A1-739E-441B-8717-7D5208EEE9F2}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "AssistLK.IntegrationTests", "tests\AssistLK.IntegrationTests\AssistLK.IntegrationTests.csproj", "{ABDB2264-0ABB-4489-BC89-906031AD925A}"
+EndProject
+Global
+	GlobalSection(SolutionConfigurationPlatforms) = preSolution
+		Debug|Any CPU = Debug|Any CPU
+		Release|Any CPU = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(SolutionProperties) = preSolution
+		HideSolutionNode = FALSE
+	EndGlobalSection
+	GlobalSection(ProjectConfigurationPlatforms) = postSolution
+		{7CF1B81C-FAEB-4FFA-9152-86AB23530FA3}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{7CF1B81C-FAEB-4FFA-9152-86AB23530FA3}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{7CF1B81C-FAEB-4FFA-9152-86AB23530FA3}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{7CF1B81C-FAEB-4FFA-9152-86AB23530FA3}.Release|Any CPU.Build.0 = Release|Any CPU
+		{30E2BB4D-B5AD-46A0-913E-D8A6B6B1E9C8}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{30E2BB4D-B5AD-46A0-913E-D8A6B6B1E9C8}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{30E2BB4D-B5AD-46A0-913E-D8A6B6B1E9C8}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{30E2BB4D-B5AD-46A0-913E-D8A6B6B1E9C8}.Release|Any CPU.Build.0 = Release|Any CPU
+		{646353C6-1690-43BE-8A17-AB0A9FBADB86}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{646353C6-1690-43BE-8A17-AB0A9FBADB86}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{646353C6-1690-43BE-8A17-AB0A9FBADB86}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{646353C6-1690-43BE-8A17-AB0A9FBADB86}.Release|Any CPU.Build.0 = Release|Any CPU
+		{00714032-F4D2-403C-8DD6-BACC6D8C22F8}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{00714032-F4D2-403C-8DD6-BACC6D8C22F8}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{00714032-F4D2-403C-8DD6-BACC6D8C22F8}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{00714032-F4D2-403C-8DD6-BACC6D8C22F8}.Release|Any CPU.Build.0 = Release|Any CPU
+		{36F804A1-739E-441B-8717-7D5208EEE9F2}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{36F804A1-739E-441B-8717-7D5208EEE9F2}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{36F804A1-739E-441B-8717-7D5208EEE9F2}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{36F804A1-739E-441B-8717-7D5208EEE9F2}.Release|Any CPU.Build.0 = Release|Any CPU
+		{ABDB2264-0ABB-4489-BC89-906031AD925A}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{ABDB2264-0ABB-4489-BC89-906031AD925A}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{ABDB2264-0ABB-4489-BC89-906031AD925A}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{ABDB2264-0ABB-4489-BC89-906031AD925A}.Release|Any CPU.Build.0 = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(NestedProjects) = preSolution
+		{7CF1B81C-FAEB-4FFA-9152-86AB23530FA3} = {903AB182-D880-4E6B-8CE7-1DFF037975B7}
+		{30E2BB4D-B5AD-46A0-913E-D8A6B6B1E9C8} = {903AB182-D880-4E6B-8CE7-1DFF037975B7}
+		{646353C6-1690-43BE-8A17-AB0A9FBADB86} = {903AB182-D880-4E6B-8CE7-1DFF037975B7}
+		{00714032-F4D2-403C-8DD6-BACC6D8C22F8} = {903AB182-D880-4E6B-8CE7-1DFF037975B7}
+		{36F804A1-739E-441B-8717-7D5208EEE9F2} = {46447E22-7B85-4ABD-AD64-4BC0D318D1DE}
+		{ABDB2264-0ABB-4489-BC89-906031AD925A} = {46447E22-7B85-4ABD-AD64-4BC0D318D1DE}
+	EndGlobalSection
+EndGlobal

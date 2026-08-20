@@ -1,6 +1,6 @@
-using System.Net;
 using System.Text.Json;
 using AssistLK.Api.DTOs;
+using AssistLK.Application.Common.Exceptions;
 
 namespace AssistLK.Api.Middleware;
 
@@ -40,12 +40,28 @@ public class ExceptionHandlingMiddleware
     {
         context.Response.ContentType = "application/json";
         context.Response.StatusCode =
-            (int)HttpStatusCode.InternalServerError;
+            exception switch
+            {
+                ArgumentException =>
+                    StatusCodes.Status400BadRequest,
+                UnauthorizedAccessException =>
+                    StatusCodes.Status401Unauthorized,
+                KeyNotFoundException =>
+                    StatusCodes.Status404NotFound,
+                ConflictException =>
+                    StatusCodes.Status409Conflict,
+                _ =>
+                    StatusCodes.Status500InternalServerError
+            };
 
         var response = new ErrorResponse
         {
             StatusCode = context.Response.StatusCode,
-            Message = "An unexpected error occurred.",
+            Message =
+                context.Response.StatusCode ==
+                StatusCodes.Status500InternalServerError
+                    ? "An unexpected error occurred."
+                    : exception.Message,
             Details = null
         };
 

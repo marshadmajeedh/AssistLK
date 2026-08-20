@@ -1,4 +1,5 @@
 using AssistLK.Api.Middleware;
+using AssistLK.Api.Seed;
 using AssistLK.Infrastructure;
 using System.Text;
 using System.Text.Json.Serialization;
@@ -161,6 +162,11 @@ app.UseAuthorization();
 app.MapControllers();
 
 app.MapHealthChecks("/health");
+
+await DevelopmentDataSeeder.SeedAsync(
+    app.Services,
+    app.Configuration,
+    app.Environment);
 
 app.Run();
 

@@ -1,10 +1,18 @@
 using AssistLK.Api.Middleware;
+using AssistLK.Infrastructure;
 
 var builder = WebApplication.CreateBuilder(args);
 
 // -------------------------------------------------------
 // Services
 // -------------------------------------------------------
+var connectionString =
+    builder.Configuration.GetConnectionString(
+        "DefaultConnection")
+    ?? throw new InvalidOperationException(
+        "Database connection string 'DefaultConnection' was not found.");
+
+builder.Services.AddInfrastructure(connectionString);
 
 builder.Services.AddControllers();
 

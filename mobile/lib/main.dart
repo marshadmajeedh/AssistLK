@@ -1,25 +1,32 @@
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
 
-import 'shared/theme/app_theme.dart';
+import 'app/app.dart';
+import 'core/api/api_client.dart';
+import 'core/auth/token_storage.dart';
+import 'features/auth/providers/auth_provider.dart';
+import 'features/auth/services/auth_service.dart';
 
-void main() {
-  runApp(const AssistLKApp());
-}
+Future<void> main() async {
+  WidgetsFlutterBinding.ensureInitialized();
 
-class AssistLKApp extends StatelessWidget {
-  const AssistLKApp({super.key});
+  final tokenStorage = TokenStorage();
 
-  @override
-  Widget build(BuildContext context) {
-    return MaterialApp(
-      title: 'AssistLK',
-      debugShowCheckedModeBanner: false,
-      theme: AppTheme.lightTheme,
-      home: const Scaffold(
-        body: Center(
-          child: Text('Home screen placeholder'),
-        ),
-      ),
-    );
-  }
+  final apiClient = ApiClient(tokenStorage: tokenStorage);
+
+  final authService = AuthService(apiClient: apiClient);
+
+  final authProvider = AuthProvider(
+    authService: authService,
+    tokenStorage: tokenStorage,
+  );
+
+  runApp(
+    ChangeNotifierProvider.value(
+      value: authProvider,
+      child: const AssistLKApp(),
+    ),
+  );
+
+  await authProvider.initialize();
 }

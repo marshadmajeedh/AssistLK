@@ -20,6 +20,9 @@ public class AssistLKDbContext : DbContext, IAgentWorkflowDbContext
     public DbSet<AgentExecution> AgentExecutions =>
         Set<AgentExecution>();
 
+    public DbSet<AgentExecutionMetric> AgentExecutionMetrics =>
+        Set<AgentExecutionMetric>();
+
     public DbSet<AgentApproval> AgentApprovals =>
         Set<AgentApproval>();
 
@@ -90,6 +93,26 @@ public class AssistLKDbContext : DbContext, IAgentWorkflowDbContext
 
                 entity.Property(x => x.Output)
                     .HasColumnType("text");
+            }
+        );
+
+        modelBuilder.Entity<AgentExecutionMetric>(
+            entity =>
+            {
+                entity.HasKey(x => x.Id);
+
+                entity.Property(x => x.AgentName)
+                    .IsRequired()
+                    .HasMaxLength(150);
+
+                entity.Property(x => x.Status)
+                    .IsRequired()
+                    .HasMaxLength(50);
+
+                entity.HasOne(x => x.Workflow)
+                    .WithMany()
+                    .HasForeignKey(x => x.WorkflowId)
+                    .OnDelete(DeleteBehavior.Cascade);
             }
         );
 

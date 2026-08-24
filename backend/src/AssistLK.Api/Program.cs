@@ -68,6 +68,8 @@ builder.Services.AddScoped<
 builder.Services.AddScoped<
     AgentExecutionService>();
 builder.Services.AddScoped<
+    AgentMonitoringService>();
+builder.Services.AddScoped<
     AgentMemoryService>();
 builder.Services.AddScoped<
     AgentContextService>();

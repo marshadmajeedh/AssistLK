@@ -12,4 +12,8 @@ public class AgentContext
     public Dictionary<string, object>
         Data { get; set; }
         = new();
+
+    public Dictionary<string, string>
+        Memory { get; set; }
+        = new();
 }

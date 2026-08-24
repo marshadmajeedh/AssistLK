@@ -67,6 +67,10 @@ builder.Services.AddScoped<
     AgentWorkflowService>();
 builder.Services.AddScoped<
     AgentExecutionService>();
+builder.Services.AddScoped<
+    AgentMemoryService>();
+builder.Services.AddScoped<
+    AgentContextService>();
 builder.Services.AddSingleton<
     AgentRegistry>();
 builder.Services.AddScoped<

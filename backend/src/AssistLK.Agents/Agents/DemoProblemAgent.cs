@@ -39,6 +39,8 @@ public class DemoProblemAgent : IAgent
             problem = "General vehicle issue";
         }
 
+        context.Memory["Issue"] =
+            problem;
 
         return new AgentResult
         {

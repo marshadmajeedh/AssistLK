@@ -13,6 +13,8 @@ public interface IAgentWorkflowDbContext
 
     DbSet<AgentAuditLog> AgentAuditLogs { get; }
 
+    DbSet<AgentMemory> AgentMemories { get; }
+
     Task<int> SaveChangesAsync(
         CancellationToken cancellationToken = default);
 }

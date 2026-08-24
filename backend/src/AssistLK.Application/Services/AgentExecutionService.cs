@@ -8,13 +8,18 @@ public class AgentExecutionService
 
     private readonly AgentOrchestrator _orchestrator;
 
+    private readonly AgentContextService _contextService;
+
     public AgentExecutionService(
         AgentWorkflowService workflowService,
-        AgentOrchestrator orchestrator)
+        AgentOrchestrator orchestrator,
+        AgentContextService contextService)
     {
         _workflowService = workflowService;
 
         _orchestrator = orchestrator;
+
+        _contextService = contextService;
     }
 
     public async Task<object> ExecuteAsync(
@@ -55,6 +60,9 @@ public class AgentExecutionService
                 Input =
                     input
             };
+
+                await _contextService
+                    .LoadMemoryAsync(context);
 
         var result =
             await _orchestrator.ExecuteAsync(

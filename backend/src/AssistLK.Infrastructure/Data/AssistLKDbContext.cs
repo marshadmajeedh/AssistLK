@@ -1,9 +1,10 @@
+using AssistLK.Application.Interfaces;
 using AssistLK.Domain.Entities;
 using Microsoft.EntityFrameworkCore;
 
 namespace AssistLK.Infrastructure.Data;
 
-public class AssistLKDbContext : DbContext
+public class AssistLKDbContext : DbContext, IAgentWorkflowDbContext
 {
     public AssistLKDbContext(
         DbContextOptions<AssistLKDbContext> options)
@@ -13,9 +14,111 @@ public class AssistLKDbContext : DbContext
 
     public DbSet<User> Users => Set<User>();
 
+    public DbSet<AgentWorkflow> AgentWorkflows =>
+        Set<AgentWorkflow>();
+
+    public DbSet<AgentExecution> AgentExecutions =>
+        Set<AgentExecution>();
+
+    public DbSet<AgentApproval> AgentApprovals =>
+        Set<AgentApproval>();
+
+    public DbSet<AgentAuditLog> AgentAuditLogs =>
+        Set<AgentAuditLog>();
+
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
         base.OnModelCreating(modelBuilder);
+
+        modelBuilder.Entity<AgentWorkflow>(
+            entity =>
+            {
+                entity.HasKey(x => x.Id);
+
+                entity.Property(x => x.WorkflowType)
+                    .IsRequired()
+                    .HasMaxLength(100);
+
+                entity.Property(x => x.Status)
+                    .IsRequired()
+                    .HasMaxLength(50);
+
+                entity.Property(x => x.CurrentAgent)
+                    .HasMaxLength(150);
+
+                entity.Property(x => x.Input)
+                    .HasColumnType("text");
+
+                entity.HasMany(x => x.Executions)
+                    .WithOne(x => x.Workflow)
+                    .HasForeignKey(x => x.WorkflowId)
+                    .OnDelete(DeleteBehavior.Cascade);
+
+                entity.HasMany(x => x.Approvals)
+                    .WithOne(x => x.Workflow)
+                    .HasForeignKey(x => x.WorkflowId)
+                    .OnDelete(DeleteBehavior.Cascade);
+
+                entity.HasMany(x => x.AuditLogs)
+                    .WithOne(x => x.Workflow)
+                    .HasForeignKey(x => x.WorkflowId)
+                    .OnDelete(DeleteBehavior.Cascade);
+            }
+        );
+
+        modelBuilder.Entity<AgentExecution>(
+            entity =>
+            {
+                entity.HasKey(x => x.Id);
+
+                entity.Property(x => x.AgentName)
+                    .IsRequired()
+                    .HasMaxLength(150);
+
+                entity.Property(x => x.Status)
+                    .IsRequired()
+                    .HasMaxLength(50);
+
+                entity.Property(x => x.Input)
+                    .HasColumnType("text");
+
+                entity.Property(x => x.Output)
+                    .HasColumnType("text");
+            }
+        );
+
+        modelBuilder.Entity<AgentApproval>(
+            entity =>
+            {
+                entity.HasKey(x => x.Id);
+
+                entity.Property(x => x.Action)
+                    .IsRequired()
+                    .HasMaxLength(200);
+
+                entity.Property(x => x.Status)
+                    .IsRequired()
+                    .HasMaxLength(50);
+
+                entity.Property(x => x.DecisionReason)
+                    .HasColumnType("text");
+            }
+        );
+
+        modelBuilder.Entity<AgentAuditLog>(
+            entity =>
+            {
+                entity.HasKey(x => x.Id);
+
+                entity.Property(x => x.EventType)
+                    .IsRequired()
+                    .HasMaxLength(100);
+
+                entity.Property(x => x.Description)
+                    .IsRequired()
+                    .HasColumnType("text");
+            }
+        );
 
         ConfigureUser(modelBuilder);
     }

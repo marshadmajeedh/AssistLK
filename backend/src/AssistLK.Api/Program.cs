@@ -5,6 +5,7 @@ using System.Text;
 using System.Text.Json.Serialization;
 using AssistLK.Api.Authentication;
 using AssistLK.Application.Interfaces;
+using AssistLK.Application.Services;
 using AssistLK.Application.Services.Auth;
 using AssistLK.Domain.Entities;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
@@ -59,6 +60,8 @@ builder.Services.AddScoped<
 builder.Services.AddScoped<
     IJwtTokenService,
     JwtTokenService>();
+builder.Services.AddScoped<
+    AgentWorkflowService>();
 
 builder.Services
     .AddAuthentication(

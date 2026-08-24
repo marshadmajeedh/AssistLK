@@ -26,6 +26,9 @@ public class AssistLKDbContext : DbContext, IAgentWorkflowDbContext
     public DbSet<AgentAuditLog> AgentAuditLogs =>
         Set<AgentAuditLog>();
 
+    public DbSet<AgentMemory> AgentMemories =>
+        Set<AgentMemory>();
+
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
         base.OnModelCreating(modelBuilder);
@@ -117,6 +120,30 @@ public class AssistLKDbContext : DbContext, IAgentWorkflowDbContext
                 entity.Property(x => x.Description)
                     .IsRequired()
                     .HasColumnType("text");
+            }
+        );
+
+        modelBuilder.Entity<AgentMemory>(
+            entity =>
+            {
+                entity.HasKey(x => x.Id);
+
+                entity.Property(x => x.Key)
+                    .IsRequired()
+                    .HasMaxLength(100);
+
+                entity.Property(x => x.Value)
+                    .IsRequired()
+                    .HasColumnType("text");
+
+                entity.Property(x => x.SourceAgent)
+                    .IsRequired()
+                    .HasMaxLength(150);
+
+                entity.HasOne(x => x.Workflow)
+                    .WithMany()
+                    .HasForeignKey(x => x.WorkflowId)
+                    .OnDelete(DeleteBehavior.Cascade);
             }
         );
 

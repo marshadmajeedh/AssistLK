@@ -15,6 +15,8 @@ public interface IAgentWorkflowDbContext
 
     DbSet<AgentMemory> AgentMemories { get; }
 
+    DbSet<AgentAction> AgentActions { get; }
+
     Task<int> SaveChangesAsync(
         CancellationToken cancellationToken = default);
 }

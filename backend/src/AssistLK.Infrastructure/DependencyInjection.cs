@@ -1,8 +1,8 @@
+using AssistLK.Application.Interfaces;
 using AssistLK.Infrastructure.Data;
+using AssistLK.Infrastructure.Repositories;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
-using AssistLK.Application.Interfaces;
-using AssistLK.Infrastructure.Repositories;
 
 namespace AssistLK.Infrastructure;
 
@@ -16,6 +16,9 @@ public static class DependencyInjection
         services.AddDbContext<AssistLKDbContext>(
             options =>
                 options.UseNpgsql(connectionString)
+        );
+        services.AddScoped<IAgentWorkflowDbContext>(
+            provider => provider.GetRequiredService<AssistLKDbContext>()
         );
         services.AddScoped<IUserRepository, UserRepository>();
         return services;

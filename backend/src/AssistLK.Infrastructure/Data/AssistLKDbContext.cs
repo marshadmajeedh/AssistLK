@@ -29,6 +29,9 @@ public class AssistLKDbContext : DbContext, IAgentWorkflowDbContext
     public DbSet<AgentMemory> AgentMemories =>
         Set<AgentMemory>();
 
+    public DbSet<AgentAction> AgentActions =>
+        Set<AgentAction>();
+
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
         base.OnModelCreating(modelBuilder);
@@ -139,6 +142,34 @@ public class AssistLKDbContext : DbContext, IAgentWorkflowDbContext
                 entity.Property(x => x.SourceAgent)
                     .IsRequired()
                     .HasMaxLength(150);
+
+                entity.HasOne(x => x.Workflow)
+                    .WithMany()
+                    .HasForeignKey(x => x.WorkflowId)
+                    .OnDelete(DeleteBehavior.Cascade);
+            }
+        );
+
+        modelBuilder.Entity<AgentAction>(
+            entity =>
+            {
+                entity.HasKey(x => x.Id);
+
+                entity.Property(x => x.ActionType)
+                    .IsRequired()
+                    .HasMaxLength(100);
+
+                entity.Property(x => x.Description)
+                    .IsRequired()
+                    .HasColumnType("text");
+
+                entity.Property(x => x.RiskLevel)
+                    .IsRequired()
+                    .HasMaxLength(50);
+
+                entity.Property(x => x.Status)
+                    .IsRequired()
+                    .HasMaxLength(50);
 
                 entity.HasOne(x => x.Workflow)
                     .WithMany()

@@ -71,8 +71,12 @@ builder.Services.AddScoped<
     AgentMemoryService>();
 builder.Services.AddScoped<
     AgentContextService>();
+builder.Services.AddScoped<
+    AgentSafetyService>();
 builder.Services.AddSingleton<
     AgentRegistry>();
+builder.Services.AddSingleton<
+    AgentSafetyPolicyEngine>();
 builder.Services.AddScoped<
     AgentOrchestrator>();
 builder.Services.AddScoped<

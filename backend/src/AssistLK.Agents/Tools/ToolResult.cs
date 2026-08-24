@@ -8,4 +8,6 @@ public class ToolResult
         = string.Empty;
 
     public object? Data { get; set; }
+
+    public string? ErrorCode { get; set; }
 }

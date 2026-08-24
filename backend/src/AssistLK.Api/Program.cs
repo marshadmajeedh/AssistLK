@@ -1,5 +1,6 @@
 using AssistLK.Agents.Agents;
 using AssistLK.Agents.Core;
+using AssistLK.Agents.Tools;
 using AssistLK.Api.Middleware;
 using AssistLK.Api.Seed;
 using AssistLK.Infrastructure;
@@ -72,6 +73,12 @@ builder.Services.AddScoped<
     AgentOrchestrator>();
 builder.Services.AddScoped<
     DemoProblemAgent>();
+builder.Services.AddSingleton<
+    ToolRegistry>();
+builder.Services.AddScoped<
+    ToolExecutor>();
+builder.Services.AddScoped<
+    DemoProviderSearchTool>();
 
 builder.Services
     .AddAuthentication(
@@ -170,6 +177,19 @@ using (var scope = app.Services.CreateScope())
         .GetRequiredService<DemoProblemAgent>();
 
     registry.Register(demoAgent);
+}
+
+using (var scope = app.Services.CreateScope())
+{
+    var registry =
+        scope.ServiceProvider
+        .GetRequiredService<ToolRegistry>();
+
+    var providerTool =
+        scope.ServiceProvider
+        .GetRequiredService<DemoProviderSearchTool>();
+
+    registry.Register(providerTool);
 }
 
 // -------------------------------------------------------

@@ -126,9 +126,19 @@ builder.Services.AddCors(options =>
     options.AddPolicy("AssistLKClients", policy =>
     {
         policy
-            .WithOrigins(
-                "http://localhost:5173"
-            )
+            .SetIsOriginAllowed(origin =>
+            {
+                if (!Uri.TryCreate(
+                        origin,
+                        UriKind.Absolute,
+                        out var uri))
+                {
+                    return false;
+                }
+
+                return uri.Scheme == Uri.UriSchemeHttp &&
+                    uri.Host == "localhost";
+            })
             .AllowAnyHeader()
             .AllowAnyMethod();
     });

@@ -9,6 +9,8 @@ public interface IAgentWorkflowDbContext
 
     DbSet<AgentExecution> AgentExecutions { get; }
 
+    DbSet<AgentExecutionMetric> AgentExecutionMetrics { get; }
+
     DbSet<AgentApproval> AgentApprovals { get; }
 
     DbSet<AgentAuditLog> AgentAuditLogs { get; }

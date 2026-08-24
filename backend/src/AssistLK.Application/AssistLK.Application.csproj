@@ -2,6 +2,7 @@
 
   <ItemGroup>
     <ProjectReference Include="..\AssistLK.Domain\AssistLK.Domain.csproj" />
+    <ProjectReference Include="..\AssistLK.Agents\AssistLK.Agents.csproj" />
   </ItemGroup>
 
   <ItemGroup>

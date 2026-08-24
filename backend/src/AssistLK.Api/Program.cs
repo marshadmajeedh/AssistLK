@@ -1,3 +1,5 @@
+using AssistLK.Agents.Agents;
+using AssistLK.Agents.Core;
 using AssistLK.Api.Middleware;
 using AssistLK.Api.Seed;
 using AssistLK.Infrastructure;
@@ -62,6 +64,14 @@ builder.Services.AddScoped<
     JwtTokenService>();
 builder.Services.AddScoped<
     AgentWorkflowService>();
+builder.Services.AddScoped<
+    AgentExecutionService>();
+builder.Services.AddSingleton<
+    AgentRegistry>();
+builder.Services.AddScoped<
+    AgentOrchestrator>();
+builder.Services.AddScoped<
+    DemoProblemAgent>();
 
 builder.Services
     .AddAuthentication(
@@ -148,6 +158,19 @@ builder.Services.AddCors(options =>
 });
 
 var app = builder.Build();
+
+using (var scope = app.Services.CreateScope())
+{
+    var registry =
+        scope.ServiceProvider
+        .GetRequiredService<AgentRegistry>();
+
+    var demoAgent =
+        scope.ServiceProvider
+        .GetRequiredService<DemoProblemAgent>();
+
+    registry.Register(demoAgent);
+}
 
 // -------------------------------------------------------
 // Middleware pipeline

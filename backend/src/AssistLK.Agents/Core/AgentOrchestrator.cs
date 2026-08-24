@@ -13,24 +13,27 @@ public class AgentOrchestrator
     }
 
     public async Task<AgentResult>
-        RunAsync(
+        ExecuteAsync(
             string agentName,
             AgentContext context)
     {
+
         var agent =
             _registry.Get(agentName);
 
-        if (agent == null)
+        if(agent == null)
         {
             return new AgentResult
             {
                 Success = false,
+
                 Message =
-                    $"Agent {agentName} not found"
+                $"Agent '{agentName}' not found."
             };
         }
 
         return await agent.ExecuteAsync(
-            context);
+            context
+        );
     }
 }

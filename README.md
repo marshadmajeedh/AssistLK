@@ -54,6 +54,25 @@ If the Agentic AI is implemented as a separate Python service, React and Flutter
 
 ---
 
+# Agentic AI Architecture
+
+AssistLK uses an agent-based architecture.
+
+Features:
+
+- ✅ Agent Orchestration
+- ✅ Shared Memory
+- ✅ Tool Execution
+- ✅ Safety Policies
+- ✅ Human Approval
+- ✅ Monitoring
+
+Documentation:
+
+See `/docs` folder.
+
+---
+
 ## 2. Team Components
 
 | Member | Primary Component | AI Contribution |

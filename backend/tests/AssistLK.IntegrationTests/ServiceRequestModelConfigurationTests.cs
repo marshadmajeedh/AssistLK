@@ -1,0 +1,81 @@
+using AssistLK.Domain.Entities;
+using AssistLK.Domain.Enums;
+using AssistLK.Infrastructure.Data;
+using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Metadata;
+
+namespace AssistLK.IntegrationTests;
+
+public class ServiceRequestModelConfigurationTests
+{
+    private static readonly IEntityType EntityType = CreateModel()
+        .FindEntityType(typeof(ServiceRequest))!;
+
+    [Fact]
+    public void ServiceRequest_IsMappedToTheExpectedTableAndProperties()
+    {
+        Assert.Equal("ServiceRequests", EntityType.GetTableName());
+
+        var customerId = EntityType.FindProperty(nameof(ServiceRequest.CustomerId))!;
+        var category = EntityType.FindProperty(nameof(ServiceRequest.Category))!;
+        var description = EntityType.FindProperty(nameof(ServiceRequest.Description))!;
+        var locationText = EntityType.FindProperty(nameof(ServiceRequest.LocationText))!;
+        var latitude = EntityType.FindProperty(nameof(ServiceRequest.Latitude))!;
+        var longitude = EntityType.FindProperty(nameof(ServiceRequest.Longitude))!;
+        var urgency = EntityType.FindProperty(nameof(ServiceRequest.Urgency))!;
+        var status = EntityType.FindProperty(nameof(ServiceRequest.Status))!;
+
+        Assert.False(customerId.IsNullable);
+        Assert.Equal(100, category.GetMaxLength());
+        Assert.Equal("text", description.GetColumnType());
+        Assert.Equal(255, locationText.GetMaxLength());
+        Assert.Equal(9, latitude.GetPrecision());
+        Assert.Equal(6, latitude.GetScale());
+        Assert.Equal(9, longitude.GetPrecision());
+        Assert.Equal(6, longitude.GetScale());
+        Assert.Equal(typeof(string), urgency.GetTypeMapping().Converter!.ProviderClrType);
+        Assert.Equal(typeof(string), status.GetTypeMapping().Converter!.ProviderClrType);
+    }
+
+    [Fact]
+    public void ServiceRequest_HasTheExpectedIndexesAndCustomerRelationship()
+    {
+        Assert.Contains(
+            EntityType.GetIndexes(),
+            index => index.Properties.Select(property => property.Name)
+                .SequenceEqual(new[] { nameof(ServiceRequest.CustomerId) }));
+        Assert.Contains(
+            EntityType.GetIndexes(),
+            index => index.Properties.Select(property => property.Name)
+                .SequenceEqual(new[] { nameof(ServiceRequest.Status) }));
+
+        var foreignKey = EntityType.GetForeignKeys().Single(
+            key => key.Properties.Single().Name == nameof(ServiceRequest.CustomerId));
+
+        Assert.Equal(typeof(User), foreignKey.PrincipalEntityType.ClrType);
+        Assert.Equal(nameof(User.Id), foreignKey.PrincipalKey.Properties.Single().Name);
+        Assert.Equal(DeleteBehavior.Restrict, foreignKey.DeleteBehavior);
+    }
+
+    [Fact]
+    public void ServiceRequest_HasTheExpectedCheckConstraints()
+    {
+        var constraintNames = EntityType.GetCheckConstraints()
+            .Select(constraint => constraint.Name)
+            .ToArray();
+
+        Assert.Contains("CK_ServiceRequests_Latitude", constraintNames);
+        Assert.Contains("CK_ServiceRequests_Longitude", constraintNames);
+    }
+
+    private static IModel CreateModel()
+    {
+        var options = new DbContextOptionsBuilder<AssistLKDbContext>()
+            .UseNpgsql("Host=localhost;Database=AssistLKTests;Username=test;Password=test")
+            .Options;
+
+        using var context = new AssistLKDbContext(options);
+        return context.GetService<IDesignTimeModel>().Model;
+    }
+}

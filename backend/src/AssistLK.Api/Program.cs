@@ -86,6 +86,8 @@ builder.Services.AddScoped<
     AgentOrchestrator>();
 builder.Services.AddScoped<
     DemoProblemAgent>();
+builder.Services.AddScoped<
+    ProblemUnderstandingAgent>();
 builder.Services.AddSingleton<
     ToolRegistry>();
 builder.Services.AddScoped<
@@ -190,6 +192,12 @@ using (var scope = app.Services.CreateScope())
         .GetRequiredService<DemoProblemAgent>();
 
     registry.Register(demoAgent);
+
+    var problemUnderstandingAgent =
+        scope.ServiceProvider
+        .GetRequiredService<ProblemUnderstandingAgent>();
+
+    registry.Register(problemUnderstandingAgent);
 }
 
 using (var scope = app.Services.CreateScope())

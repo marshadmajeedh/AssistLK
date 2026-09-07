@@ -162,17 +162,17 @@ public static class PostgreSqlTestDatabase
 
         // Never truncate __EFMigrationsHistory
         const string truncateSql = """
-            TRUNCATE TABLE 
-                "ProblemAnalyses", 
-                "ServiceRequests", 
-                "AgentMemories", 
-                "AgentExecutionMetrics", 
-                "AgentActions", 
-                "AgentApprovals", 
-                "AgentAuditLogs", 
-                "AgentExecutions", 
-                "AgentWorkflows", 
-                "Users" 
+            TRUNCATE TABLE
+                "ProblemAnalyses",
+                "ServiceRequests",
+                "AgentMemories",
+                "AgentExecutionMetrics",
+                "AgentActions",
+                "AgentApprovals",
+                "AgentAuditLogs",
+                "AgentExecutions",
+                "AgentWorkflows",
+                "Users"
             RESTART IDENTITY CASCADE;
         """;
 

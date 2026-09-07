@@ -16,10 +16,10 @@ namespace AssistLK.Api.Tests;
 /// <summary>
 /// WebApplicationFactory fixture for Phase 7E API, authorization, routing, and response-contract tests.
 /// Uses EF Core InMemory provider and exercises the real JWT Bearer authentication pipeline.
-/// 
+///
 /// Note: These tests verify HTTP API routing, authorization policies, validation gates, and serialization contracts.
 /// They do NOT verify PostgreSQL database constraints, triggers, or PostgreSQL-specific persistence behaviour,
-/// which belong to Phase 7F.
+/// which are verified in dedicated PostgreSQL suites (PostgreSqlApiTestFactory and AssistLK.IntegrationTests).
 /// </summary>
 public class AssistLKApiTestFactory : WebApplicationFactory<Program>
 {

@@ -698,4 +698,3 @@ public class ServiceRequestsControllerSecurityTests : IClassFixture<AssistLKApiT
         Assert.Equal(ServiceRequestStatus.AwaitingInformation, verifyFetched.Status);
     }
 }
-

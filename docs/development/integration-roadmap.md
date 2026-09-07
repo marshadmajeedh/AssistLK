@@ -54,6 +54,16 @@ Each member develops the assigned agent independently while following the shared
 
 **Output:** Customer request to structured service request.
 
+> **Note on Component 1 Internal Sub-Phases (7A–7G):**
+> While the overall project roadmap allocates Phase 7 by component ownership (Phase 7A = Component 1, Phase 7B = Component 2, Phase 7C = Component 3, Phase 7D = Component 4), Component 1 internally executed seven structured development sub-phases:
+> - **7A:** Domain Entities (`ServiceRequest`, `ProblemAnalysis`), Enums, EF Core Mapping & Migration
+> - **7B:** Application Layer (DTOs, Repositories, `ServiceRequestService`, Ownership & Validation)
+> - **7C:** Problem Understanding Agent Implementation & Typed Model Contracts
+> - **7D:** Agent Tools (`ProblemClassification`, `LocationExtraction`, `ServiceKnowledge`), Memory & Safety Enforcement
+> - **7E:** Authenticated REST API (`ServiceRequestsController`), JWT Identity Claims & Response Contracts
+> - **7F:** Real PostgreSQL Integration Testing (Migrations, Constraints, Cascades, Concurrency & Guards)
+> - **7G:** Component 1 Cleanup, Architecture & Testing Documentation, Release Readiness
+
 ### Phase 7B: Component 2 Development
 
 **Owner:** Member 2

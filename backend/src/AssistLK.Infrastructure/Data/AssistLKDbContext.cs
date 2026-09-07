@@ -14,6 +14,10 @@ public class AssistLKDbContext : DbContext, IAgentWorkflowDbContext
 
     public DbSet<User> Users => Set<User>();
 
+    public DbSet<ServiceRequest> ServiceRequests => Set<ServiceRequest>();
+
+    public DbSet<ProblemAnalysis> ProblemAnalyses => Set<ProblemAnalysis>();
+
     public DbSet<AgentWorkflow> AgentWorkflows =>
         Set<AgentWorkflow>();
 
@@ -202,6 +206,8 @@ public class AssistLKDbContext : DbContext, IAgentWorkflowDbContext
         );
 
         ConfigureUser(modelBuilder);
+        ConfigureServiceRequest(modelBuilder);
+        ConfigureProblemAnalysis(modelBuilder);
     }
 
     private static void ConfigureUser(ModelBuilder modelBuilder)
@@ -243,6 +249,112 @@ public class AssistLKDbContext : DbContext, IAgentWorkflowDbContext
 
         user.Property(x => x.UpdatedAt)
             .IsRequired();
+    }
+
+    private static void ConfigureServiceRequest(ModelBuilder modelBuilder)
+    {
+        var request = modelBuilder.Entity<ServiceRequest>();
+
+        request.ToTable(
+            "ServiceRequests",
+            table =>
+            {
+                table.HasCheckConstraint(
+                    "CK_ServiceRequests_Latitude",
+                    "\"Latitude\" IS NULL OR \"Latitude\" BETWEEN -90 AND 90");
+
+                table.HasCheckConstraint(
+                    "CK_ServiceRequests_Longitude",
+                    "\"Longitude\" IS NULL OR \"Longitude\" BETWEEN -180 AND 180");
+            });
+
+        request.HasKey(x => x.Id);
+
+        request.Property(x => x.CustomerId)
+            .IsRequired();
+
+        request.Property(x => x.Category)
+            .IsRequired()
+            .HasMaxLength(100);
+
+        request.Property(x => x.Description)
+            .IsRequired()
+            .HasColumnType("text");
+
+        request.Property(x => x.LocationText)
+            .IsRequired()
+            .HasMaxLength(255);
+
+        request.Property(x => x.Latitude)
+            .HasPrecision(9, 6);
+
+        request.Property(x => x.Longitude)
+            .HasPrecision(9, 6);
+
+        request.Property(x => x.Urgency)
+            .HasConversion<string>()
+            .IsRequired()
+            .HasMaxLength(30);
+
+        request.Property(x => x.Status)
+            .HasConversion<string>()
+            .IsRequired()
+            .HasMaxLength(40);
+
+        request.Property(x => x.CreatedAt)
+            .IsRequired();
+
+        request.Property(x => x.UpdatedAt)
+            .IsRequired();
+
+        request.HasOne(x => x.Customer)
+            .WithMany()
+            .HasForeignKey(x => x.CustomerId)
+            .OnDelete(DeleteBehavior.Restrict);
+
+        request.HasIndex(x => x.CustomerId);
+        request.HasIndex(x => x.Status);
+    }
+
+    private static void ConfigureProblemAnalysis(ModelBuilder modelBuilder)
+    {
+        var analysis = modelBuilder.Entity<ProblemAnalysis>();
+
+        analysis.ToTable(
+            "ProblemAnalyses",
+            table => table.HasCheckConstraint(
+                "CK_ProblemAnalyses_Confidence",
+                "\"Confidence\" >= 0 AND \"Confidence\" <= 1"));
+
+        analysis.HasKey(x => x.Id);
+
+        analysis.Property(x => x.ServiceRequestId)
+            .IsRequired();
+
+        analysis.Property(x => x.DetectedProblem)
+            .IsRequired()
+            .HasColumnType("text");
+
+        analysis.Property(x => x.Confidence)
+            .IsRequired()
+            .HasPrecision(5, 4);
+
+        analysis.Property(x => x.AgentName)
+            .IsRequired()
+            .HasMaxLength(100);
+
+        analysis.Property(x => x.CreatedAt)
+            .IsRequired();
+
+        analysis.Property(x => x.UpdatedAt)
+            .IsRequired();
+
+        analysis.HasOne(x => x.ServiceRequest)
+            .WithMany(x => x.ProblemAnalyses)
+            .HasForeignKey(x => x.ServiceRequestId)
+            .OnDelete(DeleteBehavior.Cascade);
+
+        analysis.HasIndex(x => x.ServiceRequestId);
     }
 
     public override async Task<int> SaveChangesAsync(

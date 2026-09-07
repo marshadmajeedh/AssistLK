@@ -11,6 +11,19 @@ public class AgentSafetyPolicyEngine
             new AgentSafetyRule
             {
                 ActionType =
+                "ANALYZE_PROBLEM",
+
+                RiskLevel =
+                "LOW",
+
+                RequiresApproval =
+                false
+            },
+
+
+            new AgentSafetyRule
+            {
+                ActionType =
                 "SEARCH_PROVIDER",
 
                 RiskLevel =

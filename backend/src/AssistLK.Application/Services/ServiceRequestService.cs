@@ -244,6 +244,105 @@ public class ServiceRequestService : IServiceRequestService
         };
     }
 
+    public async Task<ServiceRequestResponse> BeginAnalysisAsync(
+        Guid serviceRequestId,
+        CancellationToken cancellationToken = default)
+    {
+        var serviceRequest = await _serviceRequestRepository.GetByIdAsync(
+            serviceRequestId,
+            cancellationToken: cancellationToken);
+
+        if (serviceRequest is null)
+        {
+            throw new KeyNotFoundException("Service request was not found.");
+        }
+
+        if (serviceRequest.Status is not ServiceRequestStatus.Created and
+            not ServiceRequestStatus.AwaitingInformation)
+        {
+            throw new InvalidOperationException(
+                $"Service request cannot begin analysis from status '{serviceRequest.Status}'.");
+        }
+
+        serviceRequest.Status = ServiceRequestStatus.Analyzing;
+        _serviceRequestRepository.Update(serviceRequest);
+        await _serviceRequestRepository.SaveChangesAsync(cancellationToken);
+
+        return MapResponse(serviceRequest);
+    }
+
+    public async Task<ServiceRequestResponse> MarkReadyForMatchingAsync(
+        Guid serviceRequestId,
+        CancellationToken cancellationToken = default)
+    {
+        var serviceRequest = await _serviceRequestRepository.GetByIdAsync(
+            serviceRequestId,
+            includeProblemAnalyses: true,
+            cancellationToken: cancellationToken);
+
+        if (serviceRequest is null)
+        {
+            throw new KeyNotFoundException("Service request was not found.");
+        }
+
+        if (serviceRequest.Status != ServiceRequestStatus.Analyzed)
+        {
+            throw new InvalidOperationException(
+                $"Service request must be in Analyzed status to be marked ready for matching, but was '{serviceRequest.Status}'.");
+        }
+
+        if (string.IsNullOrWhiteSpace(serviceRequest.Category) ||
+            string.Equals(serviceRequest.Category.Trim(), "Unclassified", StringComparison.OrdinalIgnoreCase))
+        {
+            throw new InvalidOperationException(
+                "Cannot mark service request ready for matching with an unclassified category.");
+        }
+
+        if (serviceRequest.Urgency == ServiceRequestUrgency.Unknown)
+        {
+            throw new InvalidOperationException(
+                "Cannot mark service request ready for matching with unknown urgency.");
+        }
+
+        if (string.IsNullOrWhiteSpace(serviceRequest.LocationText))
+        {
+            throw new InvalidOperationException(
+                "Service request must have location text to be marked ready for matching.");
+        }
+
+        ProblemAnalysis? latestAnalysis = null;
+        if (serviceRequest.ProblemAnalyses != null && serviceRequest.ProblemAnalyses.Any())
+        {
+            latestAnalysis = serviceRequest.ProblemAnalyses
+                .OrderByDescending(x => x.CreatedAt)
+                .FirstOrDefault();
+        }
+        else
+        {
+            latestAnalysis = await _problemAnalysisRepository.GetMostRecentByServiceRequestIdAsync(
+                serviceRequestId,
+                cancellationToken);
+        }
+
+        if (latestAnalysis is null)
+        {
+            throw new InvalidOperationException(
+                "Service request must have at least one problem analysis to be marked ready for matching.");
+        }
+
+        if (latestAnalysis.Confidence <= 0m || latestAnalysis.Confidence > 1m)
+        {
+            throw new InvalidOperationException(
+                "Cannot mark service request ready for matching because the latest problem analysis has an invalid confidence score.");
+        }
+
+        serviceRequest.Status = ServiceRequestStatus.ReadyForMatching;
+        _serviceRequestRepository.Update(serviceRequest);
+        await _serviceRequestRepository.SaveChangesAsync(cancellationToken);
+
+        return MapResponse(serviceRequest);
+    }
+
     private async Task<ServiceRequest> GetOwnedRequestAsync(
         Guid serviceRequestId,
         Guid customerId,

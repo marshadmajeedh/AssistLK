@@ -2,6 +2,7 @@ using AssistLK.Agents.Abstractions;
 using AssistLK.Agents.Agents;
 using AssistLK.Agents.Core;
 using AssistLK.Agents.Models;
+using AssistLK.Agents.Tools;
 using AssistLK.Domain.Enums;
 
 namespace AssistLK.IntegrationTests;
@@ -21,7 +22,14 @@ public class ProblemUnderstandingAgentTests
     // -------------------------------------------------------
 
     private static ProblemUnderstandingAgent CreateAgent()
-        => new ProblemUnderstandingAgent();
+    {
+        var toolRegistry = new ToolRegistry();
+        toolRegistry.Register(new ProblemClassificationTool());
+        toolRegistry.Register(new LocationExtractionTool());
+        toolRegistry.Register(new ServiceKnowledgeTool());
+        var toolExecutor = new ToolExecutor(toolRegistry);
+        return new ProblemUnderstandingAgent(toolExecutor);
+    }
 
     private static AgentContext BuildContext(
         string description,
@@ -382,18 +390,31 @@ public class ProblemUnderstandingAgentTests
     [Fact]
     public void Agent_CanBeInstantiatedWithoutDatabaseDependencies()
     {
-        // ProblemUnderstandingAgent has no constructor parameters.
-        // It must not inject IServiceRequestRepository,
-        // IProblemAnalysisRepository, or AssistLKDbContext.
-        var agent = new ProblemUnderstandingAgent();
+        var toolRegistry = new ToolRegistry();
+        var toolExecutor = new ToolExecutor(toolRegistry);
+        var agent = new ProblemUnderstandingAgent(toolExecutor);
 
         Assert.NotNull(agent);
 
+        // ToolExecutor is now an expected dependency.
         var ctors = typeof(ProblemUnderstandingAgent).GetConstructors();
         Assert.Single(ctors);
 
         var parameters = ctors[0].GetParameters();
-        Assert.Empty(parameters);
+        Assert.Single(parameters);
+        Assert.Equal(typeof(ToolExecutor), parameters[0].ParameterType);
+
+        var forbiddenTypeNames = new[]
+        {
+            "AssistLKDbContext",
+            "IServiceRequestRepository",
+            "IProblemAnalysisRepository"
+        };
+
+        foreach (var param in parameters)
+        {
+            Assert.DoesNotContain(forbiddenTypeNames, name => param.ParameterType.Name.Contains(name));
+        }
     }
 
     // -------------------------------------------------------

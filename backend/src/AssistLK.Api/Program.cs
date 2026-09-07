@@ -93,7 +93,15 @@ builder.Services.AddSingleton<
 builder.Services.AddScoped<
     ToolExecutor>();
 builder.Services.AddScoped<
+    ProblemUnderstandingWorkflowService>();
+builder.Services.AddScoped<
     DemoProviderSearchTool>();
+builder.Services.AddScoped<
+    ProblemClassificationTool>();
+builder.Services.AddScoped<
+    LocationExtractionTool>();
+builder.Services.AddScoped<
+    ServiceKnowledgeTool>();
 
 builder.Services
     .AddAuthentication(
@@ -211,6 +219,18 @@ using (var scope = app.Services.CreateScope())
         .GetRequiredService<DemoProviderSearchTool>();
 
     registry.Register(providerTool);
+
+    registry.Register(
+        scope.ServiceProvider
+        .GetRequiredService<ProblemClassificationTool>());
+
+    registry.Register(
+        scope.ServiceProvider
+        .GetRequiredService<LocationExtractionTool>());
+
+    registry.Register(
+        scope.ServiceProvider
+        .GetRequiredService<ServiceKnowledgeTool>());
 }
 
 // -------------------------------------------------------

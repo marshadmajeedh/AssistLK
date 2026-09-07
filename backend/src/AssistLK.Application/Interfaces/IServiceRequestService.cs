@@ -39,4 +39,12 @@ public interface IServiceRequestService
     Task<ServiceRequestForMatchingResponse?> GetReadyForMatchingAsync(
         Guid serviceRequestId,
         CancellationToken cancellationToken = default);
+
+    Task<ServiceRequestResponse> BeginAnalysisAsync(
+        Guid serviceRequestId,
+        CancellationToken cancellationToken = default);
+
+    Task<ServiceRequestResponse> MarkReadyForMatchingAsync(
+        Guid serviceRequestId,
+        CancellationToken cancellationToken = default);
 }

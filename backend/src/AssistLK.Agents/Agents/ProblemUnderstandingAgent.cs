@@ -1,6 +1,7 @@
 using AssistLK.Agents.Abstractions;
 using AssistLK.Agents.Core;
 using AssistLK.Agents.Models;
+using AssistLK.Agents.Tools;
 using AssistLK.Domain.Enums;
 
 namespace AssistLK.Agents.Agents;
@@ -22,11 +23,16 @@ namespace AssistLK.Agents.Agents;
 ///
 /// Lifecycle state transitions remain the responsibility of
 /// IServiceRequestService / ServiceRequestService.
-/// Memory integration (Phase 7D) and tool integration (Phase 7D)
-/// are not included in this phase.
 /// </summary>
 public sealed class ProblemUnderstandingAgent : IAgent
 {
+    private readonly ToolExecutor _toolExecutor;
+
+    public ProblemUnderstandingAgent(ToolExecutor toolExecutor)
+    {
+        _toolExecutor = toolExecutor ?? throw new ArgumentNullException(nameof(toolExecutor));
+    }
+
     // -------------------------------------------------------
     // Agent identity
     // -------------------------------------------------------
@@ -114,7 +120,7 @@ public sealed class ProblemUnderstandingAgent : IAgent
     // IAgent implementation
     // -------------------------------------------------------
 
-    public Task<AgentResult> ExecuteAsync(
+    public async Task<AgentResult> ExecuteAsync(
         AgentContext context,
         CancellationToken cancellationToken = default)
     {
@@ -130,17 +136,23 @@ public sealed class ProblemUnderstandingAgent : IAgent
         // Gracefully handle empty or whitespace-only descriptions.
         if (string.IsNullOrWhiteSpace(description))
         {
-            return Task.FromResult(BuildNeedsMoreInformationResult(
+            context.Data["ToolCalls"] = 0;
+            context.Data["ToolCallCount"] = 0;
+
+            return BuildNeedsMoreInformationResult(
                 serviceRequestId: input?.ServiceRequestId ?? Guid.Empty,
                 locationText: input?.LocationText,
                 questions: new[]
                 {
                     "Could you describe the problem you are experiencing?"
                 },
-                confidence: 0m));
+                confidence: 0m);
         }
 
-        var output = Analyse(description, input);
+        var (output, toolCalls) = await AnalyseWithToolsAsync(description, input, cancellationToken);
+
+        context.Data["ToolCalls"] = toolCalls;
+        context.Data["ToolCallCount"] = toolCalls;
 
         var result = new AgentResult
         {
@@ -157,7 +169,140 @@ public sealed class ProblemUnderstandingAgent : IAgent
                 : "Analysed"
         };
 
-        return Task.FromResult(result);
+        return result;
+    }
+
+    // -------------------------------------------------------
+    // Analysis with tool delegation & safe degradation
+    // -------------------------------------------------------
+
+    private async Task<(ProblemUnderstandingOutput Output, int ToolCallCount)> AnalyseWithToolsAsync(
+        string description,
+        ProblemUnderstandingInput? input,
+        CancellationToken cancellationToken)
+    {
+        int toolCalls = 0;
+
+        // 1. Tool: Location extraction
+        string? locationText = input?.LocationText;
+        decimal? latitude = input?.Latitude;
+        decimal? longitude = input?.Longitude;
+
+        try
+        {
+            var locParams = new Dictionary<string, object>();
+            if (!string.IsNullOrWhiteSpace(locationText)) locParams["locationText"] = locationText;
+            if (latitude.HasValue) locParams["latitude"] = latitude.Value;
+            if (longitude.HasValue) locParams["longitude"] = longitude.Value;
+
+            var locResult = await _toolExecutor.ExecuteAsync("LocationExtractionTool", locParams);
+            toolCalls++;
+
+            if (locResult.Success && locResult.Data is LocationExtractionData locData)
+            {
+                locationText = locData.NormalizedLocation;
+                latitude = locData.Latitude;
+                longitude = locData.Longitude;
+            }
+        }
+        catch
+        {
+            // Location tool failure degrades safely: retain unnormalized location text
+        }
+
+        // 2. Tool: Problem classification
+        bool classificationToolSucceeded = false;
+        ProblemClassificationData? classData = null;
+        try
+        {
+            var classParams = new Dictionary<string, object>
+            {
+                ["description"] = description
+            };
+            var classResult = await _toolExecutor.ExecuteAsync("ProblemClassificationTool", classParams);
+            toolCalls++;
+
+            if (classResult.Success && classResult.Data is ProblemClassificationData cd)
+            {
+                classificationToolSucceeded = true;
+                classData = cd;
+            }
+        }
+        catch
+        {
+            classificationToolSucceeded = false;
+        }
+
+        // Degradation requirement: If classification cannot be established after a tool failure,
+        // Category = Unclassified, NeedsMoreInformation = true. Never fabricate a category.
+        if (!classificationToolSucceeded || classData is null)
+        {
+            var degradedOutput = new ProblemUnderstandingOutput
+            {
+                Category = "Unclassified",
+                ProblemSummary = "Possible service issue. Category could not be established.",
+                Urgency = ServiceRequestUrgency.Unknown,
+                NeedsMoreInformation = true,
+                FollowUpQuestions = new[]
+                {
+                    "Could you describe the system, equipment, or vehicle that needs attention?",
+                    "What specific symptoms are occurring?"
+                },
+                Confidence = 0.2m,
+                ExtractedLocation = locationText,
+                AdditionalInformation = new Dictionary<string, string>()
+            };
+
+            return (degradedOutput, toolCalls);
+        }
+
+        var baseOutput = Analyse(description, input);
+
+        string category = classData.Category;
+        decimal confidence = Math.Max(baseOutput.Confidence, classData.Confidence);
+
+        // 3. Tool: Service knowledge
+        var additionalInfo = new Dictionary<string, string>(baseOutput.AdditionalInformation);
+        try
+        {
+            var knowParams = new Dictionary<string, object>
+            {
+                ["category"] = category,
+                ["description"] = description
+            };
+            var knowResult = await _toolExecutor.ExecuteAsync("ServiceKnowledgeTool", knowParams);
+            toolCalls++;
+
+            if (knowResult.Success && knowResult.Data is ServiceKnowledgeData knowData)
+            {
+                additionalInfo["ServiceFamily"] = knowData.ServiceFamily;
+                additionalInfo["SafeTerminology"] = knowData.SafeGeneralTerminology;
+                if (knowData.RecommendsProfessionalInspection)
+                {
+                    additionalInfo["InspectionAdvised"] = "True";
+                }
+            }
+        }
+        catch
+        {
+            // Knowledge tool failure degrades safely
+        }
+
+        bool needsMoreInfo = baseOutput.NeedsMoreInformation || string.Equals(category, "Unclassified", StringComparison.OrdinalIgnoreCase);
+
+        var finalOutput = new ProblemUnderstandingOutput
+        {
+            Category = category,
+            ProblemSummary = baseOutput.ProblemSummary,
+            Urgency = category == "Unclassified" ? ServiceRequestUrgency.Unknown : baseOutput.Urgency,
+            NeedsMoreInformation = needsMoreInfo,
+            FollowUpQuestions = baseOutput.FollowUpQuestions,
+            Confidence = Clamp(confidence),
+            ExtractedLocation = locationText,
+            AdditionalInformation = additionalInfo
+        };
+
+        return (finalOutput, toolCalls);
     }
 
     // -------------------------------------------------------

@@ -11,6 +11,7 @@ public interface IServiceRequestService
 
     Task<ServiceRequestResponse> GetByIdAsync(
         Guid serviceRequestId,
+        Guid customerId,
         CancellationToken cancellationToken = default);
 
     Task<IReadOnlyList<ServiceRequestResponse>> GetCurrentCustomerRequestsAsync(
@@ -46,5 +47,7 @@ public interface IServiceRequestService
 
     Task<ServiceRequestResponse> MarkReadyForMatchingAsync(
         Guid serviceRequestId,
+        Guid customerId,
         CancellationToken cancellationToken = default);
 }
+

@@ -1,4 +1,5 @@
 using System.ComponentModel.DataAnnotations;
+using AssistLK.Application.Common.Exceptions;
 using AssistLK.Application.Interfaces;
 using AssistLK.Application.ServiceRequests.DTOs;
 using AssistLK.Domain.Entities;
@@ -65,15 +66,15 @@ public class ServiceRequestService : IServiceRequestService
 
     public async Task<ServiceRequestResponse> GetByIdAsync(
         Guid serviceRequestId,
+        Guid customerId,
         CancellationToken cancellationToken = default)
     {
-        var serviceRequest = await _serviceRequestRepository.GetByIdAsync(
+        var serviceRequest = await GetOwnedRequestAsync(
             serviceRequestId,
+            customerId,
             cancellationToken: cancellationToken);
 
-        return serviceRequest is null
-            ? throw new KeyNotFoundException("Service request was not found.")
-            : MapResponse(serviceRequest);
+        return MapResponse(serviceRequest);
     }
 
     public async Task<IReadOnlyList<ServiceRequestResponse>> GetCurrentCustomerRequestsAsync(
@@ -98,11 +99,11 @@ public class ServiceRequestService : IServiceRequestService
         var serviceRequest = await GetOwnedRequestAsync(
             serviceRequestId,
             customerId,
-            cancellationToken);
+            cancellationToken: cancellationToken);
 
         if (!EditableStatuses.Contains(serviceRequest.Status))
         {
-            throw new InvalidOperationException(
+            throw new ConflictException(
                 "Service request cannot be edited in its current status.");
         }
 
@@ -125,11 +126,11 @@ public class ServiceRequestService : IServiceRequestService
         var serviceRequest = await GetOwnedRequestAsync(
             serviceRequestId,
             customerId,
-            cancellationToken);
+            cancellationToken: cancellationToken);
 
         if (!CancellableStatuses.Contains(serviceRequest.Status))
         {
-            throw new InvalidOperationException(
+            throw new ConflictException(
                 "Service request cannot be cancelled in its current status.");
         }
 
@@ -159,7 +160,7 @@ public class ServiceRequestService : IServiceRequestService
             not ServiceRequestStatus.Analyzing and
             not ServiceRequestStatus.AwaitingInformation)
         {
-            throw new InvalidOperationException(
+            throw new ConflictException(
                 "Problem analysis cannot be applied in the current status.");
         }
 
@@ -260,7 +261,7 @@ public class ServiceRequestService : IServiceRequestService
         if (serviceRequest.Status is not ServiceRequestStatus.Created and
             not ServiceRequestStatus.AwaitingInformation)
         {
-            throw new InvalidOperationException(
+            throw new ConflictException(
                 $"Service request cannot begin analysis from status '{serviceRequest.Status}'.");
         }
 
@@ -273,40 +274,37 @@ public class ServiceRequestService : IServiceRequestService
 
     public async Task<ServiceRequestResponse> MarkReadyForMatchingAsync(
         Guid serviceRequestId,
+        Guid customerId,
         CancellationToken cancellationToken = default)
     {
-        var serviceRequest = await _serviceRequestRepository.GetByIdAsync(
+        var serviceRequest = await GetOwnedRequestAsync(
             serviceRequestId,
+            customerId,
             includeProblemAnalyses: true,
             cancellationToken: cancellationToken);
 
-        if (serviceRequest is null)
-        {
-            throw new KeyNotFoundException("Service request was not found.");
-        }
-
         if (serviceRequest.Status != ServiceRequestStatus.Analyzed)
         {
-            throw new InvalidOperationException(
+            throw new ConflictException(
                 $"Service request must be in Analyzed status to be marked ready for matching, but was '{serviceRequest.Status}'.");
         }
 
         if (string.IsNullOrWhiteSpace(serviceRequest.Category) ||
             string.Equals(serviceRequest.Category.Trim(), "Unclassified", StringComparison.OrdinalIgnoreCase))
         {
-            throw new InvalidOperationException(
+            throw new ConflictException(
                 "Cannot mark service request ready for matching with an unclassified category.");
         }
 
         if (serviceRequest.Urgency == ServiceRequestUrgency.Unknown)
         {
-            throw new InvalidOperationException(
+            throw new ConflictException(
                 "Cannot mark service request ready for matching with unknown urgency.");
         }
 
         if (string.IsNullOrWhiteSpace(serviceRequest.LocationText))
         {
-            throw new InvalidOperationException(
+            throw new ConflictException(
                 "Service request must have location text to be marked ready for matching.");
         }
 
@@ -326,13 +324,13 @@ public class ServiceRequestService : IServiceRequestService
 
         if (latestAnalysis is null)
         {
-            throw new InvalidOperationException(
+            throw new ConflictException(
                 "Service request must have at least one problem analysis to be marked ready for matching.");
         }
 
         if (latestAnalysis.Confidence <= 0m || latestAnalysis.Confidence > 1m)
         {
-            throw new InvalidOperationException(
+            throw new ConflictException(
                 "Cannot mark service request ready for matching because the latest problem analysis has an invalid confidence score.");
         }
 
@@ -346,11 +344,13 @@ public class ServiceRequestService : IServiceRequestService
     private async Task<ServiceRequest> GetOwnedRequestAsync(
         Guid serviceRequestId,
         Guid customerId,
-        CancellationToken cancellationToken)
+        bool includeProblemAnalyses = false,
+        CancellationToken cancellationToken = default)
     {
         var serviceRequest = await _serviceRequestRepository.GetByIdAndCustomerIdAsync(
             serviceRequestId,
             customerId,
+            includeProblemAnalyses: includeProblemAnalyses,
             cancellationToken: cancellationToken);
 
         return serviceRequest is null

@@ -1,3 +1,4 @@
+using AssistLK.Application.Common.Exceptions;
 using AssistLK.Application.Interfaces;
 using AssistLK.Application.ServiceRequests.DTOs;
 using AssistLK.Application.Services;
@@ -78,7 +79,7 @@ public class Component1LifecycleTests
             Status = invalidStatus
         });
 
-        await Assert.ThrowsAsync<InvalidOperationException>(() =>
+        await Assert.ThrowsAsync<ConflictException>(() =>
             service.BeginAnalysisAsync(id));
     }
 
@@ -147,10 +148,11 @@ public class Component1LifecycleTests
     {
         var (service, requests, analyses) = CreateTestContext();
         var id = Guid.NewGuid();
+        var customerId = Guid.NewGuid();
         requests.Add(new ServiceRequest
         {
             Id = id,
-            CustomerId = Guid.NewGuid(),
+            CustomerId = customerId,
             Description = "Car engine won't start",
             LocationText = "Colombo",
             Category = "Vehicle Repair",
@@ -167,10 +169,42 @@ public class Component1LifecycleTests
             AgentName = "ProblemUnderstandingAgent"
         });
 
-        var response = await service.MarkReadyForMatchingAsync(id);
+        var response = await service.MarkReadyForMatchingAsync(id, customerId);
 
         Assert.Equal(ServiceRequestStatus.ReadyForMatching, response.Status);
         Assert.Equal(ServiceRequestStatus.ReadyForMatching, requests.Single().Status);
+    }
+
+    [Fact]
+    public async Task MarkReadyForMatchingAsync_ThrowsKeyNotFound_WhenNotOwned()
+    {
+        var (service, requests, analyses) = CreateTestContext();
+        var id = Guid.NewGuid();
+        var ownerId = Guid.NewGuid();
+        var otherCustomerId = Guid.NewGuid();
+
+        requests.Add(new ServiceRequest
+        {
+            Id = id,
+            CustomerId = ownerId,
+            Description = "Car engine won't start",
+            LocationText = "Colombo",
+            Category = "Vehicle Repair",
+            Urgency = ServiceRequestUrgency.High,
+            Status = ServiceRequestStatus.Analyzed
+        });
+
+        analyses.Add(new ProblemAnalysis
+        {
+            Id = Guid.NewGuid(),
+            ServiceRequestId = id,
+            DetectedProblem = "Starter motor or battery fault",
+            Confidence = 0.85m,
+            AgentName = "ProblemUnderstandingAgent"
+        });
+
+        await Assert.ThrowsAsync<KeyNotFoundException>(() =>
+            service.MarkReadyForMatchingAsync(id, otherCustomerId));
     }
 
     [Fact]
@@ -178,10 +212,11 @@ public class Component1LifecycleTests
     {
         var (service, requests, analyses) = CreateTestContext();
         var id = Guid.NewGuid();
+        var customerId = Guid.NewGuid();
         requests.Add(new ServiceRequest
         {
             Id = id,
-            CustomerId = Guid.NewGuid(),
+            CustomerId = customerId,
             Description = "Vague description",
             LocationText = "Colombo",
             Category = "Unclassified",
@@ -198,8 +233,8 @@ public class Component1LifecycleTests
             AgentName = "ProblemUnderstandingAgent"
         });
 
-        await Assert.ThrowsAsync<InvalidOperationException>(() =>
-            service.MarkReadyForMatchingAsync(id));
+        await Assert.ThrowsAsync<ConflictException>(() =>
+            service.MarkReadyForMatchingAsync(id, customerId));
     }
 
     [Fact]
@@ -207,10 +242,11 @@ public class Component1LifecycleTests
     {
         var (service, requests, analyses) = CreateTestContext();
         var id = Guid.NewGuid();
+        var customerId = Guid.NewGuid();
         requests.Add(new ServiceRequest
         {
             Id = id,
-            CustomerId = Guid.NewGuid(),
+            CustomerId = customerId,
             Description = "Plumbing issue",
             LocationText = "Colombo",
             Category = "Plumbing",
@@ -227,8 +263,8 @@ public class Component1LifecycleTests
             AgentName = "ProblemUnderstandingAgent"
         });
 
-        await Assert.ThrowsAsync<InvalidOperationException>(() =>
-            service.MarkReadyForMatchingAsync(id));
+        await Assert.ThrowsAsync<ConflictException>(() =>
+            service.MarkReadyForMatchingAsync(id, customerId));
     }
 
     [Fact]
@@ -236,10 +272,11 @@ public class Component1LifecycleTests
     {
         var (service, requests, _) = CreateTestContext();
         var id = Guid.NewGuid();
+        var customerId = Guid.NewGuid();
         requests.Add(new ServiceRequest
         {
             Id = id,
-            CustomerId = Guid.NewGuid(),
+            CustomerId = customerId,
             Description = "Electrical issue",
             LocationText = "Colombo",
             Category = "Electrical",
@@ -247,8 +284,8 @@ public class Component1LifecycleTests
             Status = ServiceRequestStatus.Analyzed
         });
 
-        await Assert.ThrowsAsync<InvalidOperationException>(() =>
-            service.MarkReadyForMatchingAsync(id));
+        await Assert.ThrowsAsync<ConflictException>(() =>
+            service.MarkReadyForMatchingAsync(id, customerId));
     }
 
     [Fact]
@@ -256,10 +293,11 @@ public class Component1LifecycleTests
     {
         var (service, requests, analyses) = CreateTestContext();
         var id = Guid.NewGuid();
+        var customerId = Guid.NewGuid();
         requests.Add(new ServiceRequest
         {
             Id = id,
-            CustomerId = Guid.NewGuid(),
+            CustomerId = customerId,
             Description = "Car engine won't start",
             LocationText = "Kandy, Central Province",
             Latitude = null,  // Coordinates are optional
@@ -278,7 +316,7 @@ public class Component1LifecycleTests
             AgentName = "ProblemUnderstandingAgent"
         });
 
-        var response = await service.MarkReadyForMatchingAsync(id);
+        var response = await service.MarkReadyForMatchingAsync(id, customerId);
 
         Assert.Equal(ServiceRequestStatus.ReadyForMatching, response.Status);
         Assert.Null(response.Latitude);
@@ -291,10 +329,11 @@ public class Component1LifecycleTests
     {
         var (service, requests, analyses) = CreateTestContext();
         var id = Guid.NewGuid();
+        var customerId = Guid.NewGuid();
         requests.Add(new ServiceRequest
         {
             Id = id,
-            CustomerId = Guid.NewGuid(),
+            CustomerId = customerId,
             Description = "Car engine won't start",
             LocationText = "", // Missing!
             Category = "Vehicle Repair",
@@ -311,8 +350,8 @@ public class Component1LifecycleTests
             AgentName = "ProblemUnderstandingAgent"
         });
 
-        await Assert.ThrowsAsync<InvalidOperationException>(() =>
-            service.MarkReadyForMatchingAsync(id));
+        await Assert.ThrowsAsync<ConflictException>(() =>
+            service.MarkReadyForMatchingAsync(id, customerId));
     }
 
     [Theory]
@@ -323,10 +362,11 @@ public class Component1LifecycleTests
     {
         var (service, requests, analyses) = CreateTestContext();
         var id = Guid.NewGuid();
+        var customerId = Guid.NewGuid();
         requests.Add(new ServiceRequest
         {
             Id = id,
-            CustomerId = Guid.NewGuid(),
+            CustomerId = customerId,
             Description = "Car engine won't start",
             LocationText = "Colombo",
             Category = "Vehicle Repair",
@@ -343,8 +383,8 @@ public class Component1LifecycleTests
             AgentName = "ProblemUnderstandingAgent"
         });
 
-        await Assert.ThrowsAsync<InvalidOperationException>(() =>
-            service.MarkReadyForMatchingAsync(id));
+        await Assert.ThrowsAsync<ConflictException>(() =>
+            service.MarkReadyForMatchingAsync(id, customerId));
     }
 
     // In-memory test doubles
@@ -370,7 +410,14 @@ public class Component1LifecycleTests
         }
 
         public Task<ServiceRequest?> GetByIdAndCustomerIdAsync(Guid id, Guid customerId, bool includeProblemAnalyses = false, CancellationToken cancellationToken = default)
-            => Task.FromResult(_requests.SingleOrDefault(x => x.Id == id && x.CustomerId == customerId));
+        {
+            var req = _requests.SingleOrDefault(x => x.Id == id && x.CustomerId == customerId);
+            if (req != null && includeProblemAnalyses)
+            {
+                req.ProblemAnalyses = _analyses.Where(a => a.ServiceRequestId == id).ToList();
+            }
+            return Task.FromResult(req);
+        }
 
         public Task<IReadOnlyList<ServiceRequest>> GetByCustomerIdAsync(Guid customerId, CancellationToken cancellationToken = default)
             => Task.FromResult<IReadOnlyList<ServiceRequest>>(_requests.Where(x => x.CustomerId == customerId).ToArray());

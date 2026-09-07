@@ -4,9 +4,11 @@ using System.Text.Json;
 using AssistLK.Agents.Agents;
 using AssistLK.Agents.Core;
 using AssistLK.Agents.Models;
+using AssistLK.Application.Common.Exceptions;
 using AssistLK.Application.Interfaces;
 using AssistLK.Application.ServiceRequests.DTOs;
 using AssistLK.Domain.Entities;
+using AssistLK.Domain.Enums;
 
 namespace AssistLK.Application.Services;
 
@@ -44,6 +46,29 @@ public class ProblemUnderstandingWorkflowService
         _orchestrator = orchestrator;
         _registry = registry;
         _serviceRequestService = serviceRequestService;
+    }
+
+    public async Task<ProblemUnderstandingWorkflowResult> AnalyzeAsync(
+        Guid serviceRequestId,
+        Guid customerId,
+        CancellationToken cancellationToken = default)
+    {
+        // Enforce customer ownership at the application boundary before beginning analysis or mutating state
+        var serviceRequest = await _serviceRequestService.GetByIdAsync(
+            serviceRequestId,
+            customerId,
+            cancellationToken);
+
+        var input = new ProblemUnderstandingInput
+        {
+            ServiceRequestId = serviceRequest.ServiceRequestId,
+            Description = serviceRequest.Description,
+            LocationText = serviceRequest.LocationText,
+            Latitude = serviceRequest.Latitude,
+            Longitude = serviceRequest.Longitude
+        };
+
+        return await AnalyzeAsync(input, cancellationToken);
     }
 
     public async Task<ProblemUnderstandingWorkflowResult> AnalyzeAsync(
@@ -163,8 +188,28 @@ public class ProblemUnderstandingWorkflowService
                 WorkflowId = workflow.Id,
                 ExecutionId = execution.Id,
                 Outcome = output.NeedsMoreInformation ? "AwaitingInformation" : "Analyzed",
-                Output = output
+                Output = output,
+                ServiceRequestId = input.ServiceRequestId,
+                Status = output.NeedsMoreInformation ? ServiceRequestStatus.AwaitingInformation : ServiceRequestStatus.Analyzed,
+                Category = output.Category,
+                ProblemSummary = output.ProblemSummary,
+                Urgency = output.Urgency,
+                Confidence = output.Confidence,
+                NeedsMoreInformation = output.NeedsMoreInformation,
+                FollowUpQuestions = output.FollowUpQuestions
             };
+        }
+        catch (ConflictException)
+        {
+            stopwatch.Stop();
+
+            if (execution is not null)
+            {
+                await _workflowService.CompleteExecutionAsync(execution.Id, false, null);
+            }
+
+            await _workflowService.SetStatusAsync(workflow.Id, "Failed");
+            throw;
         }
         catch (Exception ex)
         {
@@ -191,7 +236,8 @@ public class ProblemUnderstandingWorkflowService
                 WorkflowId = workflow.Id,
                 ExecutionId = execution?.Id ?? Guid.Empty,
                 Outcome = "Failed",
-                ErrorMessage = ex.Message
+                ErrorMessage = ex.Message,
+                ServiceRequestId = input.ServiceRequestId
             };
         }
     }

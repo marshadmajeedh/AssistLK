@@ -1,3 +1,4 @@
+using AssistLK.Application.Common.Exceptions;
 using AssistLK.Application.Interfaces;
 using AssistLK.Application.ServiceRequests.DTOs;
 using AssistLK.Application.Services;
@@ -99,7 +100,7 @@ public class ServiceRequestServiceTests
         Assert.Equal("Kandy", updated.LocationText);
 
         repositories.Requests.Single().Status = ServiceRequestStatus.Analyzing;
-        await Assert.ThrowsAsync<InvalidOperationException>(() =>
+        await Assert.ThrowsAsync<ConflictException>(() =>
             repositories.Service.UpdateAsync(customerId, response.ServiceRequestId, ValidUpdate()));
 
         repositories.Requests.Single().Status = ServiceRequestStatus.AwaitingInformation;
@@ -127,7 +128,7 @@ public class ServiceRequestServiceTests
         var ready = await CreateRequest(repositories.Service, customerId, "Ready");
         repositories.Requests.Single(x => x.Id == ready.ServiceRequestId).Status =
             ServiceRequestStatus.ReadyForMatching;
-        await Assert.ThrowsAsync<InvalidOperationException>(() =>
+        await Assert.ThrowsAsync<ConflictException>(() =>
             repositories.Service.CancelAsync(customerId, ready.ServiceRequestId));
     }
 
@@ -281,8 +282,18 @@ public class ServiceRequestServiceTests
             return Task.FromResult(request);
         }
 
-        public Task<ServiceRequest?> GetByIdAndCustomerIdAsync(Guid id, Guid customerId, bool includeProblemAnalyses = false, CancellationToken cancellationToken = default) =>
-            Task.FromResult(_requests.SingleOrDefault(x => x.Id == id && x.CustomerId == customerId));
+        public Task<ServiceRequest?> GetByIdAndCustomerIdAsync(Guid id, Guid customerId, bool includeProblemAnalyses = false, CancellationToken cancellationToken = default)
+        {
+            var request = _requests.SingleOrDefault(x => x.Id == id && x.CustomerId == customerId);
+            if (includeProblemAnalyses && request is not null)
+            {
+                request.ProblemAnalyses = _analyses
+                    .Where(x => x.ServiceRequestId == id)
+                    .ToList();
+            }
+
+            return Task.FromResult(request);
+        }
 
         public Task<IReadOnlyList<ServiceRequest>> GetByCustomerIdAsync(Guid customerId, CancellationToken cancellationToken = default) =>
             Task.FromResult<IReadOnlyList<ServiceRequest>>(_requests.Where(x => x.CustomerId == customerId).ToArray());

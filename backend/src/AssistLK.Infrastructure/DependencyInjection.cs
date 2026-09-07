@@ -21,6 +21,8 @@ public static class DependencyInjection
             provider => provider.GetRequiredService<AssistLKDbContext>()
         );
         services.AddScoped<IUserRepository, UserRepository>();
+        services.AddScoped<IServiceRequestRepository, ServiceRequestRepository>();
+        services.AddScoped<IProblemAnalysisRepository, ProblemAnalysisRepository>();
         return services;
     }
 }

@@ -10,8 +10,10 @@ public class ProblemAnalysisTests
         var values = Enum.GetNames<ServiceRequestUrgency>();
 
         Assert.Equal(
-            new[] { "Low", "Medium", "High", "Critical" },
+            new[] { "Unknown", "Low", "Medium", "High", "Critical" },
             values);
+        Assert.Equal(0, (int)ServiceRequestUrgency.Unknown);
+        Assert.Equal(4, (int)ServiceRequestUrgency.Critical);
     }
 
     [Fact]

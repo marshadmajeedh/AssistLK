@@ -61,6 +61,9 @@ builder.Services.AddScoped<
     IAuthService,
     AuthService>();
 builder.Services.AddScoped<
+    IServiceRequestService,
+    ServiceRequestService>();
+builder.Services.AddScoped<
     IJwtTokenService,
     JwtTokenService>();
 builder.Services.AddScoped<

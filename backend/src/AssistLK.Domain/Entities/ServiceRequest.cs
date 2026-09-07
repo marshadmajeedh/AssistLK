@@ -8,7 +8,7 @@ public class ServiceRequest : BaseEntity
 
     public User Customer { get; set; } = null!;
 
-    public string Category { get; set; } = string.Empty;
+    public string Category { get; set; } = "Unclassified";
 
     public string Description { get; set; } = string.Empty;
 
@@ -20,7 +20,7 @@ public class ServiceRequest : BaseEntity
 
     public ServiceRequestUrgency Urgency { get; set; }
 
-    public ServiceRequestStatus Status { get; set; }
+    public ServiceRequestStatus Status { get; set; } = ServiceRequestStatus.Created;
 
     public ICollection<ProblemAnalysis> ProblemAnalyses { get; set; }
         = new List<ProblemAnalysis>();

@@ -28,7 +28,7 @@ public class ServiceRequestTests
     }
 
     [Fact]
-    public void ServiceRequest_UsesTheFirstDeclaredEnumValuesAsDefaults()
+    public void ServiceRequest_UsesTheRequiredInitialValuesAsDefaults()
     {
         var request = new ServiceRequest();
 
@@ -38,7 +38,7 @@ public class ServiceRequestTests
         Assert.Equal(
             Enum.GetValues<ServiceRequestStatus>().First(),
             request.Status);
-        Assert.Equal(string.Empty, request.Category);
+        Assert.Equal("Unclassified", request.Category);
         Assert.Equal(string.Empty, request.Description);
         Assert.Equal(string.Empty, request.LocationText);
         Assert.Empty(request.ProblemAnalyses);

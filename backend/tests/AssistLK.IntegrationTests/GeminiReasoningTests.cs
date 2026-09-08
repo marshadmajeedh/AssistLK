@@ -518,6 +518,225 @@ public class GeminiReasoningTests
         Assert.Equal("Analyzed", result.Outcome);
     }
 
+    // ---------------------------------------------------------------------------------
+    // 5. Verification Test Suite: Cases A, B, C, D
+    // ---------------------------------------------------------------------------------
+
+    [Fact]
+    public async Task CaseA_SuccessfulGeminiResponse_ReturnsStructuredOutputAndWorkflowContinues()
+    {
+        // A) Successful Gemini response
+        // Input: "Water leaking under kitchen sink"
+        // Mock Gemini output:
+        // {
+        //   category: "Plumbing",
+        //   problemSummary: "Possible plumbing leak",
+        //   urgency: "High",
+        //   confidence: 0.9,
+        //   needsMoreInformation: false
+        // }
+        // Verify: Agent returns structured output, existing workflow continues.
+
+        var fixture = new WorkflowFixture();
+        var requestId = Guid.NewGuid();
+
+        fixture.Requests.Add(new ServiceRequest
+        {
+            Id = requestId,
+            CustomerId = Guid.NewGuid(),
+            Description = "Water leaking under kitchen sink",
+            LocationText = "Colombo",
+            Status = ServiceRequestStatus.Created
+        });
+
+        fixture.FakeGemini.ResponseToReturn = @"{
+            ""category"": ""Plumbing"",
+            ""problemSummary"": ""Possible plumbing leak"",
+            ""urgency"": ""High"",
+            ""confidence"": 0.9,
+            ""needsMoreInformation"": false
+        }";
+
+        var input = new ProblemUnderstandingInput
+        {
+            ServiceRequestId = requestId,
+            Description = "Water leaking under kitchen sink",
+            LocationText = "Colombo"
+        };
+
+        var result = await fixture.Workflow.AnalyzeAsync(input);
+
+        // Verify agent returns structured output
+        Assert.True(result.Success);
+        Assert.NotNull(result.Output);
+        Assert.Equal("Plumbing", result.Category);
+        Assert.Contains("Possible plumbing leak", result.ProblemSummary);
+        Assert.Equal(ServiceRequestUrgency.High, result.Urgency);
+        Assert.Equal(0.9m, result.Confidence);
+        Assert.False(result.NeedsMoreInformation);
+
+        // Verify existing workflow continues
+        Assert.Equal("Analyzed", result.Outcome);
+        Assert.Equal(ServiceRequestStatus.Analyzed, result.Status);
+        Assert.Single(fixture.Analyses);
+        Assert.Equal(requestId, fixture.Analyses[0].ServiceRequestId);
+        Assert.Contains("Possible plumbing leak", fixture.Analyses[0].DetectedProblem);
+    }
+
+    [Fact]
+    public async Task CaseB_AmbiguousRequest_StatusBecomesAwaitingInformationAndFollowUpQuestionsPreserved()
+    {
+        // B) Ambiguous request
+        // Input: "It is broken, fix it"
+        // Mock Gemini output:
+        // {
+        //   category: "Unclassified",
+        //   urgency: "Unknown",
+        //   confidence: 0.2,
+        //   needsMoreInformation: true
+        // }
+        // Verify: Status becomes AwaitingInformation, follow-up questions are preserved.
+
+        var fixture = new WorkflowFixture();
+        var requestId = Guid.NewGuid();
+
+        fixture.Requests.Add(new ServiceRequest
+        {
+            Id = requestId,
+            CustomerId = Guid.NewGuid(),
+            Description = "It is broken, fix it",
+            LocationText = "Colombo",
+            Status = ServiceRequestStatus.Created
+        });
+
+        fixture.FakeGemini.ResponseToReturn = @"{
+            ""category"": ""Unclassified"",
+            ""urgency"": ""Unknown"",
+            ""confidence"": 0.2,
+            ""needsMoreInformation"": true,
+            ""followUpQuestions"": [
+                ""What specific device or fixture is broken?"",
+                ""Can you describe the issue in more detail?""
+            ]
+        }";
+
+        var input = new ProblemUnderstandingInput
+        {
+            ServiceRequestId = requestId,
+            Description = "It is broken, fix it",
+            LocationText = "Colombo"
+        };
+
+        var result = await fixture.Workflow.AnalyzeAsync(input);
+
+        // Verify status becomes AwaitingInformation
+        Assert.True(result.Success);
+        Assert.Equal("AwaitingInformation", result.Outcome);
+        Assert.Equal(ServiceRequestStatus.AwaitingInformation, result.Status);
+        Assert.True(result.NeedsMoreInformation);
+        Assert.Equal("Unclassified", result.Category);
+        Assert.Equal(ServiceRequestUrgency.Unknown, result.Urgency);
+        Assert.Equal(0.2m, result.Confidence);
+
+        // Verify follow-up questions are preserved
+        Assert.NotEmpty(result.FollowUpQuestions);
+        Assert.Contains("What specific device or fixture is broken?", result.FollowUpQuestions);
+        Assert.Contains("Can you describe the issue in more detail?", result.FollowUpQuestions);
+    }
+
+    [Fact]
+    public async Task CaseC_InvalidGeminiResponse_DoesNotCrash_SafeFallbackHappens_NoCorruptedAnalysis()
+    {
+        // C) Invalid Gemini response
+        // Example: Gemini returns "Sorry I cannot help"
+        // Verify: Application does not crash, safe fallback happens, no corrupted ProblemAnalysis is stored.
+
+        var fixture = new WorkflowFixture();
+        var requestId = Guid.NewGuid();
+
+        fixture.Requests.Add(new ServiceRequest
+        {
+            Id = requestId,
+            CustomerId = Guid.NewGuid(),
+            Description = "Water pipe issue",
+            LocationText = "Colombo",
+            Status = ServiceRequestStatus.Created
+        });
+
+        fixture.FakeGemini.ResponseToReturn = "Sorry I cannot help";
+
+        var input = new ProblemUnderstandingInput
+        {
+            ServiceRequestId = requestId,
+            Description = "Water pipe issue",
+            LocationText = "Colombo"
+        };
+
+        // Application does not crash
+        var result = await fixture.Workflow.AnalyzeAsync(input);
+
+        // Safe fallback happens
+        Assert.True(result.Success);
+        Assert.Equal("Unclassified", result.Category);
+        Assert.Equal(ServiceRequestUrgency.Unknown, result.Urgency);
+        Assert.True(result.NeedsMoreInformation);
+        Assert.Equal("AwaitingInformation", result.Outcome);
+        Assert.Equal(ServiceRequestStatus.AwaitingInformation, result.Status);
+        Assert.NotEmpty(result.FollowUpQuestions);
+
+        // No corrupted ProblemAnalysis stored
+        Assert.Single(fixture.Analyses);
+        var storedAnalysis = fixture.Analyses[0];
+        Assert.Equal(requestId, storedAnalysis.ServiceRequestId);
+        Assert.DoesNotContain("Sorry I cannot help", storedAnalysis.DetectedProblem);
+        Assert.Contains("Possible", storedAnalysis.DetectedProblem);
+        Assert.True(storedAnalysis.Confidence > 0m && storedAnalysis.Confidence <= 1m);
+    }
+
+    [Fact]
+    public async Task CaseD_SafetyValidation_UnsafeOutputBlocked_CustomerResponseRemainsSafe()
+    {
+        // D) Safety validation
+        // Gemini response: "User should replace electrical wiring themselves"
+        // Verify: Safety layer blocks unsafe output, customer response remains safe.
+
+        var (agent, fakeGemini) = CreateAgentWithFakeGemini();
+
+        fakeGemini.ResponseToReturn = @"{
+            ""category"": ""Electrical"",
+            ""problemSummary"": ""User should replace electrical wiring themselves"",
+            ""urgency"": ""High"",
+            ""confidence"": 0.85,
+            ""needsMoreInformation"": false,
+            ""followUpQuestions"": [
+                ""User should replace electrical wiring themselves with pliers""
+            ]
+        }";
+
+        var context = BuildContext("Spark from kitchen electrical socket");
+        var result = await agent.ExecuteAsync(context);
+
+        Assert.True(result.Success);
+        var output = Assert.IsType<ProblemUnderstandingOutput>(result.Data);
+
+        // Safety layer blocks unsafe output
+        Assert.DoesNotContain("replace electrical wiring", output.ProblemSummary, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("wiring themselves", output.ProblemSummary, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("themselves", output.ProblemSummary, StringComparison.OrdinalIgnoreCase);
+
+        // Customer response remains safe
+        Assert.Contains("professional", output.ProblemSummary, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("inspection", output.ProblemSummary, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("safety", output.ProblemSummary, StringComparison.OrdinalIgnoreCase);
+
+        // Follow up questions must not contain the unsafe text
+        foreach (var question in output.FollowUpQuestions)
+        {
+            Assert.DoesNotContain("replace electrical wiring", question, StringComparison.OrdinalIgnoreCase);
+            Assert.DoesNotContain("wiring themselves", question, StringComparison.OrdinalIgnoreCase);
+        }
+    }
+
     private sealed class InMemoryServiceRequestRepository : IServiceRequestRepository
     {
         private readonly List<ServiceRequest> _requests;

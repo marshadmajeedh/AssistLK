@@ -451,7 +451,10 @@ public sealed class ProblemUnderstandingAgent : IAgent
             "open the wire", "open the wiring", "touch the wire", "handle the wire",
             "strip the wire", "strip wire", "replace the wire yourself", "fix the wire yourself",
             "inspect the wire yourself", "do it yourself", "breaker yourself",
-            "bypass", "disassemble the unit", "open the panel yourself"
+            "bypass", "disassemble the unit", "open the panel yourself",
+            "replace electrical wiring", "replace electrical wiring themselves",
+            "replace wiring", "wiring themselves", "wire themselves", "replace wiring yourself",
+            "replace electrical wire"
         };
 
         var guaranteedTerms = new[]

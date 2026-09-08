@@ -137,22 +137,26 @@ Stores immutable, structured analysis records produced by the Problem Understand
 
 ---
 
-## 6. Problem Understanding Agent Flow & Tools
+## 6. Problem Understanding Agent Flow, Tools & Gemini Integration
 
 When `POST /api/service-requests/{id}/analyze` is invoked:
 
-1. **Context Initialization**: `ProblemUnderstandingWorkflowService` retrieves the request and initializes workflow execution, setting request status to `Analyzing`.
-2. **Tool Execution via `IToolExecutor`**:
-   - **`ProblemClassificationTool`**: Matches domain patterns, detects canonical service category (`Plumbing`, `Electrical`, `Vehicle Repair`, `Appliance Repair`), evaluates ambiguity, and calculates classification confidence.
-   - **`LocationExtractionTool`**: Scans input text for Sri Lankan districts, major cities (Colombo, Kandy, Galle, Gampaha, Kurunegala, etc.), suburbs, and landmark tokens.
+1. **Context Initialization**: `ProblemUnderstandingWorkflowService` retrieves the request, verifies customer ownership, and initializes workflow execution, setting request status to `Analyzing`.
+2. **Google Gemini LLM Integration (`GeminiService`)**:
+   - `ProblemUnderstandingAgent` formats a domain prompt incorporating Sri Lankan context, common local transliterations (Sinhala/Tamil colloquialisms), and strict JSON output schema specifications.
+   - Invokes `_geminiService.GenerateStructuredOutputAsync<ProblemUnderstandingOutput>()` using Google Gemini 1.5 Flash.
+   - The LLM performs semantic reasoning, categorizing the problem, extracting entities, assessing urgency rationale, and determining if additional customer clarification is needed.
+3. **Deterministic Tool Execution via `IToolExecutor` (Hybrid & Fallback)**:
+   - **`ProblemClassificationTool`**: Pattern-matches symptoms against known domains (`Plumbing`, `Electrical`, `Vehicle Repair`, `Appliance Repair`) to calculate classification confidence and provide baseline validation or fallback if the LLM is unreachable.
+   - **`LocationExtractionTool`**: Scans input text for Sri Lankan districts, major cities (Colombo, Kandy, Galle, Gampaha, Kurunegala, etc.), suburbs, and landmark tokens, preserving GPS coordinate integrity.
    - **`ServiceKnowledgeTool`**: Cross-references symptoms with domain safety guidelines. Detects emergency safety triggers (gas leaks, sparks, total brake failure) and formulates uncertainty-aware summaries without hazardous DIY advice.
-3. **Synthesis & Reasoning**: `ProblemUnderstandingAgent` aggregates tool results into `ProblemUnderstandingOutput`.
+4. **Synthesis & Reasoning**: `ProblemUnderstandingAgent` aggregates Gemini reasoning and tool outputs into `ProblemUnderstandingOutput`.
    - If confidence is below threshold (< 0.60) or vital technical/location details are missing, `NeedsMoreInformation` is set to `true`, and targeted follow-up questions are populated.
-4. **Memory Synchronization**: Writes the 8 standardized keys into `AgentMemories`.
-5. **State Finalization**:
+5. **Memory Synchronization**: Writes the 8 standardized keys into `AgentMemories` in PostgreSQL.
+6. **State Finalization**:
    - If `NeedsMoreInformation == true`: Transition to `AwaitingInformation`.
    - If information is complete: Transition to `Analyzed`.
-   - A new `ProblemAnalysis` entity is persisted in PostgreSQL.
+   - A new immutable `ProblemAnalysis` entity is persisted in PostgreSQL.
 
 ---
 

@@ -410,7 +410,7 @@ Reject the update, preserve the current state, and record the security or valida
 - Authorize status updates by role, booking ownership, and valid state transition.
 - Protect customer location and provider location information.
 - Require consent and least privilege for location tracking.
-- Prevent clients from changing status through direct database or agent-service access.
+- Prevent clients from changing status through direct database or internal agent service access.
 - Do not commit credentials, tokens, or private data in fixtures.
 
 ## 23. Testing Requirements

@@ -8,6 +8,8 @@ import {
 import LoginPage from "../../features/auth/pages/LoginPage";
 import ServiceRequestListPage from "../../features/serviceRequests/pages/ServiceRequestListPage";
 import CreateServiceRequestPage from "../../features/serviceRequests/pages/CreateServiceRequestPage";
+import ServiceRequestDetailPage from "../../features/serviceRequests/pages/ServiceRequestDetailPage";
+import EditServiceRequestPage from "../../features/serviceRequests/pages/EditServiceRequestPage";
 
 import ProtectedRoute from "../../shared/auth/ProtectedRoute";
 import { useAuthStore } from "../../shared/auth/authStore";
@@ -117,16 +119,12 @@ function AppRouter() {
 
 						<Route
 							path="/service-requests/:id"
-							element={
-								<PlaceholderPage title="Service Request Details" />
-							}
+							element={<ServiceRequestDetailPage />}
 						/>
 
 						<Route
 							path="/service-requests/:id/edit"
-							element={
-								<PlaceholderPage title="Edit Service Request" />
-							}
+							element={<EditServiceRequestPage />}
 						/>
 					</Route>
 				</Route>

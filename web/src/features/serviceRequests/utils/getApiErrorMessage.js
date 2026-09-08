@@ -27,6 +27,20 @@ export function getApiErrorMessage(
     return "The requested service request was not found.";
   }
 
+  // Explicit HTTP 409 Conflict handling for lifecycle state conflicts
+  if (status === 409) {
+    if (typeof data?.message === "string" && data.message.trim().length > 0) {
+      return data.message.trim();
+    }
+    if (typeof data?.title === "string" && data.title.trim().length > 0) {
+      return data.title.trim();
+    }
+    if (typeof data === "string" && data.trim().length > 0) {
+      return data.trim();
+    }
+    return "This service request cannot be modified in its current status.";
+  }
+
   // Check for ASP.NET Core Validation Problem Details errors dictionary
   if (data?.errors && typeof data.errors === "object") {
     const errorMessages = Object.values(data.errors)

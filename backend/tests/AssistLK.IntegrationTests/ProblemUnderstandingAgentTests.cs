@@ -401,8 +401,9 @@ public class ProblemUnderstandingAgentTests
         Assert.Single(ctors);
 
         var parameters = ctors[0].GetParameters();
-        Assert.Single(parameters);
+        Assert.Equal(2, parameters.Length);
         Assert.Equal(typeof(ToolExecutor), parameters[0].ParameterType);
+        Assert.Equal(typeof(IGeminiService), parameters[1].ParameterType);
 
         var forbiddenTypeNames = new[]
         {

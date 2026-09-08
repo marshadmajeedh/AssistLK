@@ -52,77 +52,83 @@ React and Flutter use the same ASP.NET Core API, identity model, permissions, an
 
 ## 4. Clean Architecture Structure
 
-The backend follows Clean Architecture:
+The backend follows Clean Architecture divided into 5 focused .NET 8 projects:
 
 ```text
-AssistLK Backend
-    -> API Layer
-    -> Application Layer
-    -> Domain Layer
-    -> Infrastructure Layer
+AssistLK.Api
+    Controllers/
+
+AssistLK.Application
+    Services/
+    Interfaces/
+    DTOs/
+
+AssistLK.Agents
+    Agents/
+    Tools/
+    Safety/
+    Memory/
+
+AssistLK.Domain
+    Entities/
+    Enums/
+
+AssistLK.Infrastructure
+    DbContext/ (Data & Migrations)
+    Repositories/
 ```
 
-Dependencies must point inward toward the domain and application abstractions. Controllers and external integrations must not contain core business rules.
+Dependencies point inward toward domain and application abstractions. Controllers and external integrations must not contain core business rules.
 
 ## 5. API Layer
 
 **Location:** `AssistLK.Api`
 
-**Responsibilities:**
-
-- Receive HTTP requests.
-- Validate input and authorization context.
-- Map requests to application use cases.
-- Return consistent responses.
-- Connect frontend clients with backend services.
-
-Examples:
-
-```http
-POST /api/service-requests
-GET /api/providers
-POST /api/bookings
-```
+**Components:**
+- `Controllers/`: Thin HTTP controllers enforcing route security, parsing JWT claims, and delegating to application services.
+- `Authentication/`: JWT token generation implementation (`JwtTokenService`).
+- `Middleware/`: Global error and exception handling (`ExceptionHandlingMiddleware`).
+- `DTOs/`: API-level request and response transfer models.
 
 ## 6. Application Layer
 
 **Location:** `AssistLK.Application`
 
-**Responsibilities:**
+**Components:**
+- `Services/`: Domain application use cases and agent workflow orchestrators (`ProblemUnderstandingWorkflowService`, `ServiceRequestService`, `AuthService`, etc.).
+- `Interfaces/`: Repository and service abstractions (`IServiceRequestService`, `IProblemAnalysisRepository`, `IAgentWorkflowDbContext`, etc.).
+- `DTOs/`: Application-level data transfer models and component handoff contracts (`ServiceRequestForMatchingResponse`).
+- `Common/Exceptions/`: Custom domain exceptions (`ConflictException`).
 
-- Coordinate application use cases.
-- Apply business rules and validation.
-- Coordinate agent workflows.
-- Define ports for infrastructure services.
+## 7. Agents Layer
 
-Examples include provider matching, quotation, booking, and service tracking services.
+**Location:** `AssistLK.Agents`
 
-## 7. Domain Layer
+**Components:**
+- `Agents/`: Specialized AI agents (`ProblemUnderstandingAgent`, etc.) implementing `IAgent`.
+- `Tools/`: Deterministic domain tools (`ProblemClassificationTool`, `LocationExtractionTool`, `ServiceKnowledgeTool`) implementing `IAgentTool`.
+- `Core/`: Foundational execution engine (`AgentOrchestrator`, `ToolExecutor`, `AgentSafetyPolicyEngine`).
+- `Models/`: Agent input/output contracts (`ProblemUnderstandingInput`, `ProblemUnderstandingOutput`, `AgentResult`).
+- `Services/`: Google Gemini LLM API client (`GeminiService` implementing `IGeminiService`).
+
+## 8. Domain Layer
 
 **Location:** `AssistLK.Domain`
 
-**Responsibilities:**
+**Components:**
+- `Entities/`: Core business entities (`ServiceRequest`, `ProblemAnalysis`, `User`, `AgentWorkflow`, `AgentExecution`, `AgentMemory`, `BaseEntity`).
+- `Enums/`: Domain enumerations (`ServiceRequestStatus`, `ServiceRequestUrgency`, `UserRole`, `AgentWorkflowStatus`, `AgentApprovalStatus`).
 
-- Define entities.
-- Define enums and value objects.
-- Hold core business models and invariants.
-
-Examples include `User`, `Provider`, `Booking`, `ServiceRequest`, and `Quotation`.
-
-## 8. Infrastructure Layer
+## 9. Infrastructure Layer
 
 **Location:** `AssistLK.Infrastructure`
 
-**Responsibilities:**
+**Components:**
+- `Data/`: Central `AssistLKDbContext`, entity configurations, and EF Core PostgreSQL migrations.
+- `Repositories/`: Repository implementations (`ServiceRequestRepository`, `ProblemAnalysisRepository`, `UserRepository`).
+- `DependencyInjection.cs`: Registration of database contexts, repositories, and infrastructural services.
 
-- Implement database access.
-- Implement repositories and external service adapters.
-- Manage PostgreSQL and Entity Framework Core integrations.
-- Integrate notification, maps, and other external APIs.
-
-External failures must produce an explicit recoverable workflow state rather than a partially applied business operation.
-
-## 9. Agentic AI Architecture
+## 10. Agentic AI Architecture
 
 AssistLK uses multiple specialized agents coordinated by the shared Agent Foundation.
 
@@ -137,7 +143,7 @@ User Request
 
 Agents do not directly call one another. The orchestrator controls execution order and shared workflow memory carries structured context between them.
 
-## 10. Agent Foundation Components
+## 11. Agent Foundation Components
 
 ### Agent Orchestrator
 
@@ -163,7 +169,7 @@ Tracks agent execution, success or failure, execution time, tool usage, and erro
 
 Records important state transitions, approvals, actor information, correlation identifiers, and execution evidence without storing hidden chain-of-thought.
 
-## 11. Component Architecture
+## 12. Component Architecture
 
 AssistLK contains four intelligent components:
 
@@ -176,7 +182,7 @@ Component 1: Problem Understanding Agent
 
 Each component remains independently testable and communicates through shared contracts, workflow memory, and orchestrated transitions.
 
-## 12. Component Ownership
+## 13. Component Ownership
 
 ### Component 1: Smart Service Request and Problem Understanding
 
@@ -196,7 +202,7 @@ Manages status tracking, notifications, service history, and completion confirma
 
 Component ownership means primary technical responsibility, not exclusive access. Cross-component changes require coordination with the owning member.
 
-## 13. Security Architecture
+## 14. Security Architecture
 
 Security must include:
 
@@ -210,13 +216,13 @@ Security must include:
 
 Domain operations are authorized and validated by the API. AI suggestions are untrusted input until validated.
 
-## 14. Scalability Considerations
+## 15. Scalability Considerations
 
 The architecture supports adding new service categories, agents, tools, and provider networks. New agents should be registered with the orchestrator and shared contracts without changing unrelated components.
 
 Use versioned API contracts and correlation IDs for cross-service requests. Keep agent responses structured and bounded, and design external integrations behind replaceable infrastructure adapters.
 
-## 15. Design Principles
+## 16. Design Principles
 
 AssistLK follows:
 

@@ -31,30 +31,46 @@ Provider Matching API Controller
 
 Do not skip architectural layers. Keep business rules in the backend application and domain layers, and keep controllers thin.
 
-## 3. Folder Structure Rules
+## 3. Clean Architecture Solution Structure
 
-The backend feature areas should be organized as:
+The backend follows Clean Architecture divided into 5 distinct .NET 8 projects. Components must place code into the designated architectural layer rather than grouping disparate layers into API feature folders:
 
 ```text
 AssistLK.Api
-	Features
-		-> ProblemUnderstanding
-		-> ProviderMatching
-		-> QuotationBooking
-		-> ServiceTracking
+    Controllers/               # HTTP API controllers (thin, route-binding, role authorization)
+    Authentication/            # JWT token generation (JwtTokenService)
+    Middleware/                # Global exception handling & error mapping
+    DTOs/                      # API request and response transfer models
+    Seed/                      # Development bootstrap data seeding
+
+AssistLK.Application
+    Services/                  # Domain application & workflow orchestrators (ProblemUnderstandingWorkflowService)
+    Interfaces/                # Repository & service contracts (IServiceRequestService, etc.)
+    DTOs/                      # Application-level data transfer objects & handoff contracts
+    Common/Exceptions/         # Application domain exceptions (ConflictException, etc.)
+
+AssistLK.Agents
+    Agents/                    # Specialized AI agents implementing IAgent
+    Tools/                     # Domain agent tools implementing IAgentTool
+    Core/                      # AgentOrchestrator, ToolExecutor, AgentSafetyPolicyEngine
+    Models/                    # AgentResult, AgentSafetyRule, Input/Output models
+    Services/                  # GeminiService (Google Gemini API LLM integration)
+
+AssistLK.Domain
+    Entities/                  # Enterprise entities (ServiceRequest, ProblemAnalysis, User, BaseEntity)
+    Enums/                     # Domain enumerations (ServiceRequestStatus, Urgency, UserRole)
+
+AssistLK.Infrastructure
+    Data/                      # AssistLKDbContext & EF Core Migrations
+    Repositories/              # Repository implementations (ServiceRequestRepository, etc.)
 ```
 
-Each feature should use the following structure where applicable:
-
-```text
-ProviderMatching
-	-> Controllers
-	-> DTOs
-	-> Agents
-	-> Services
-	-> Tools
-	-> Validators
-```
+### Layer Placement Standards:
+1. **Controllers** belong in `AssistLK.Api/Controllers/`. They must remain thin, enforcing route security, parsing JWT claims, and delegating use cases to Application services.
+2. **Business Services** belong in `AssistLK.Application/Services/`. Services manage business rules and coordinate workflow execution without directly depending on EF Core DbContext.
+3. **AI Agents & Tools** belong in `AssistLK.Agents/Agents/` and `AssistLK.Agents/Tools/`. Agents use `GeminiService` for LLM reasoning and invoke tools via `ToolExecutor`.
+4. **Domain Entities** belong in `AssistLK.Domain/Entities/`. They define enterprise invariants and entity relationships.
+5. **Data Access & Persistence** belong in `AssistLK.Infrastructure/Data/` and `Repositories/`.
 
 ## 4. Agent Development Rules
 

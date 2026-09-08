@@ -90,8 +90,6 @@ builder.Services.AddHttpClient();
 builder.Services.AddScoped<IGeminiService, GeminiService>();
 builder.Services.AddScoped<GeminiService>();
 builder.Services.AddScoped<
-    DemoProblemAgent>();
-builder.Services.AddScoped<
     ProblemUnderstandingAgent>();
 builder.Services.AddSingleton<
     ToolRegistry>();
@@ -199,12 +197,6 @@ using (var scope = app.Services.CreateScope())
     var registry =
         scope.ServiceProvider
         .GetRequiredService<AgentRegistry>();
-
-    var demoAgent =
-        scope.ServiceProvider
-        .GetRequiredService<DemoProblemAgent>();
-
-    registry.Register(demoAgent);
 
     var problemUnderstandingAgent =
         scope.ServiceProvider

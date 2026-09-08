@@ -1,6 +1,9 @@
+using System.Text.Json;
+using System.Text.Json.Nodes;
 using AssistLK.Agents.Abstractions;
 using AssistLK.Agents.Core;
 using AssistLK.Agents.Models;
+using AssistLK.Agents.Services;
 using AssistLK.Agents.Tools;
 using AssistLK.Domain.Enums;
 
@@ -9,9 +12,10 @@ namespace AssistLK.Agents.Agents;
 /// <summary>
 /// Component 1 – Problem Understanding Agent.
 ///
+/// Upgraded to LLM-powered reasoning using Google Gemini API (gemini-2.5-flash).
 /// Responsibility: Determine what kind of help the customer actually needs
-/// by analysing their natural-language service request and producing
-/// a structured classification result.
+/// by analysing their natural-language service request using Gemini reasoning
+/// and producing a structured classification result.
 ///
 /// The agent does NOT:
 /// - Access the database or any repository
@@ -27,113 +31,71 @@ namespace AssistLK.Agents.Agents;
 public sealed class ProblemUnderstandingAgent : IAgent
 {
     private readonly ToolExecutor _toolExecutor;
+    private readonly IGeminiService _geminiService;
 
-    public ProblemUnderstandingAgent(ToolExecutor toolExecutor)
+    public ProblemUnderstandingAgent(
+        ToolExecutor toolExecutor,
+        IGeminiService? geminiService = null)
     {
         _toolExecutor = toolExecutor ?? throw new ArgumentNullException(nameof(toolExecutor));
+        _geminiService = geminiService ?? new GeminiService();
     }
-
-    // -------------------------------------------------------
-    // Agent identity
-    // -------------------------------------------------------
 
     public string Name => "ProblemUnderstandingAgent";
 
-    // -------------------------------------------------------
-    // Service category definitions
-    // -------------------------------------------------------
+    public const string SystemInstruction =
+        "You are AssistLK Problem Understanding Agent.\n" +
+        "Responsibilities:\n" +
+        "- Understand customer service problems.\n" +
+        "- Identify likely service category.\n" +
+        "- Determine urgency.\n" +
+        "- Decide whether more information is required.\n" +
+        "- Generate safe customer-friendly summaries.\n\n" +
+        "Allowed categories:\n" +
+        "- Plumbing\n" +
+        "- Electrical\n" +
+        "- Vehicle Repair\n" +
+        "- Appliance Repair\n" +
+        "- Unclassified\n\n" +
+        "Urgency values:\n" +
+        "- Unknown (insufficient information to assess)\n" +
+        "- Low (minor, non-urgent issue)\n" +
+        "- Medium (standard fault requiring repair)\n" +
+        "- High (active water flooding, burst pipes, vehicle breakdown/stalled, sparking, burning smells)\n" +
+        "- Critical (fire, severe collision/accident, life safety hazard)\n\n" +
+        "Strict Rules:\n" +
+        "1. Never guarantee diagnosis. Always use uncertainty language like 'Possible...', 'may indicate...', 'could be...'.\n" +
+        "2. Never provide dangerous repair instructions. Never suggest electrical repairs, wire handling, or equipment disassembly.\n" +
+        "3. Recommend professional inspection when safety is a concern.\n" +
+        "4. If the customer description is ambiguous, too short, or lacks key details, set needsMoreInformation to true and provide 1 to 3 relevant, concise follow-up questions. Category should be Unclassified if unclear.\n" +
+        "5. Return JSON ONLY matching this exact structure with no markdown formatting:\n" +
+        "{\n" +
+        "  \"category\": \"Plumbing | Electrical | Vehicle Repair | Appliance Repair | Unclassified\",\n" +
+        "  \"problemSummary\": \"Concise uncertainty-aware summary\",\n" +
+        "  \"urgency\": \"Low | Medium | High | Critical | Unknown\",\n" +
+        "  \"needsMoreInformation\": false,\n" +
+        "  \"followUpQuestions\": [],\n" +
+        "  \"confidence\": 0.0,\n" +
+        "  \"additionalInformation\": {}\n" +
+        "}";
 
-    /// <summary>
-    /// Represents a recognisable service category with indicative
-    /// vocabulary. Kept private – not exposed as a public tool.
-    /// </summary>
-    private sealed record CategoryDefinition(
-        string Category,
-        string[] Keywords,
-        string[] UrgentKeywords);
-
-    private static readonly IReadOnlyList<CategoryDefinition> KnownCategories =
-        new List<CategoryDefinition>
-        {
-            new CategoryDefinition(
-                Category: "Plumbing",
-                Keywords: new[]
-                {
-                    "pipe", "leak", "leaking", "plumbing", "tap", "drip",
-                    "water", "drain", "flush", "toilet", "sink", "faucet",
-                    "burst", "flood", "blocked", "clog"
-                },
-                UrgentKeywords: new[]
-                {
-                    "burst", "flood", "flooding", "gushing", "overflow",
-                    "overflowing", "sewage"
-                }),
-
-            new CategoryDefinition(
-                Category: "Electrical",
-                Keywords: new[]
-                {
-                    "electric", "electrical", "socket", "plug", "wiring",
-                    "wire", "switch", "circuit", "breaker", "fuse", "power",
-                    "light", "lights", "outlet", "sparks", "spark", "shock",
-                    "tripped", "trip"
-                },
-                UrgentKeywords: new[]
-                {
-                    "burning", "burn", "smoke", "sparks", "spark", "fire",
-                    "shock", "shocked", "trip", "tripped", "smell", "smells",
-                    "hot", "overheating", "overheat", "melting"
-                }),
-
-            new CategoryDefinition(
-                Category: "Vehicle Repair",
-                Keywords: new[]
-                {
-                    "car", "vehicle", "engine", "battery", "tyre", "tire",
-                    "wheel", "brake", "brakes", "transmission", "ignition",
-                    "starter", "fuel", "exhaust", "overheating", "accident",
-                    "truck", "van", "motorcycle", "bike"
-                },
-                UrgentKeywords: new[]
-                {
-                    "accident", "crash", "road", "breakdown", "stopped",
-                    "smoke", "fire", "brakes", "brake", "overheating"
-                }),
-
-            new CategoryDefinition(
-                Category: "Appliance Repair",
-                Keywords: new[]
-                {
-                    "fridge", "refrigerator", "washing", "washer", "dryer",
-                    "dishwasher", "oven", "microwave", "freezer", "air conditioner",
-                    "ac", "heater", "fan", "appliance", "machine", "cooling",
-                    "heating", "not cooling", "not heating", "not working"
-                },
-                UrgentKeywords: new[]
-                {
-                    "fire", "smoke", "burning", "spark", "sparks",
-                    "gas", "leak", "leaking"
-                })
-        };
-
-    // -------------------------------------------------------
-    // IAgent implementation
-    // -------------------------------------------------------
+    private static readonly HashSet<string> AllowedCategories = new(StringComparer.OrdinalIgnoreCase)
+    {
+        "Plumbing",
+        "Electrical",
+        "Vehicle Repair",
+        "Appliance Repair",
+        "Unclassified"
+    };
 
     public async Task<AgentResult> ExecuteAsync(
         AgentContext context,
         CancellationToken cancellationToken = default)
     {
-        // Extract the typed input from AgentContext.Data if present;
-        // fall back to the plain-text AgentContext.Input for compatibility
-        // with the shared framework.
         var input = ResolveInput(context);
+        var description = input?.Description ?? context.Input ?? string.Empty;
 
-        var description = input?.Description
-            ?? context.Input
-            ?? string.Empty;
-
-        // Gracefully handle empty or whitespace-only descriptions.
+        // Gracefully handle empty or whitespace-only descriptions
         if (string.IsNullOrWhiteSpace(description))
         {
             context.Data["ToolCalls"] = 0;
@@ -142,41 +104,29 @@ public sealed class ProblemUnderstandingAgent : IAgent
             return BuildNeedsMoreInformationResult(
                 serviceRequestId: input?.ServiceRequestId ?? Guid.Empty,
                 locationText: input?.LocationText,
-                questions: new[]
-                {
-                    "Could you describe the problem you are experiencing?"
-                },
+                questions: new[] { "Could you describe the problem you are experiencing?" },
                 confidence: 0m);
         }
 
-        var (output, toolCalls) = await AnalyseWithToolsAsync(description, input, cancellationToken);
+        var (output, toolCalls) = await AnalyseWithGeminiAndToolsAsync(description, input, cancellationToken);
 
         context.Data["ToolCalls"] = toolCalls;
         context.Data["ToolCallCount"] = toolCalls;
 
-        var result = new AgentResult
+        return new AgentResult
         {
             Success = true,
-
             Message = output.NeedsMoreInformation
                 ? "Problem analysis incomplete. Additional information required."
                 : "Problem analysis completed.",
-
             Data = output,
-
             NextAction = output.NeedsMoreInformation
                 ? "AwaitingInformation"
                 : "Analysed"
         };
-
-        return result;
     }
 
-    // -------------------------------------------------------
-    // Analysis with tool delegation & safe degradation
-    // -------------------------------------------------------
-
-    private async Task<(ProblemUnderstandingOutput Output, int ToolCallCount)> AnalyseWithToolsAsync(
+    private async Task<(ProblemUnderstandingOutput Output, int ToolCallCount)> AnalyseWithGeminiAndToolsAsync(
         string description,
         ProblemUnderstandingInput? input,
         CancellationToken cancellationToken)
@@ -210,7 +160,7 @@ public sealed class ProblemUnderstandingAgent : IAgent
             // Location tool failure degrades safely: retain unnormalized location text
         }
 
-        // 2. Tool: Problem classification
+        // 2. Tool: Problem classification validation
         bool classificationToolSucceeded = false;
         ProblemClassificationData? classData = null;
         try
@@ -233,41 +183,78 @@ public sealed class ProblemUnderstandingAgent : IAgent
             classificationToolSucceeded = false;
         }
 
-        // Degradation requirement: If classification cannot be established after a tool failure,
-        // Category = Unclassified, NeedsMoreInformation = true. Never fabricate a category.
+        // Safe degradation: if classification tool fails or is unavailable, degrade safely to Unclassified
         if (!classificationToolSucceeded || classData is null)
         {
-            var degradedOutput = new ProblemUnderstandingOutput
-            {
-                Category = "Unclassified",
-                ProblemSummary = "Possible service issue. Category could not be established.",
-                Urgency = ServiceRequestUrgency.Unknown,
-                NeedsMoreInformation = true,
-                FollowUpQuestions = new[]
-                {
-                    "Could you describe the system, equipment, or vehicle that needs attention?",
-                    "What specific symptoms are occurring?"
-                },
-                Confidence = 0.2m,
-                ExtractedLocation = locationText,
-                AdditionalInformation = new Dictionary<string, string>()
-            };
-
+            var degradedOutput = CreateDegradedOutput(locationText);
             return (degradedOutput, toolCalls);
         }
 
-        var baseOutput = Analyse(description, input);
+        // 3. Gemini LLM Reasoning
+        var prompt = BuildPrompt(description, locationText);
+        string? rawGeminiResponse = null;
 
-        string category = classData.Category;
-        decimal confidence = Math.Max(baseOutput.Confidence, classData.Confidence);
+        try
+        {
+            rawGeminiResponse = await _geminiService.GenerateContentAsync(
+                prompt,
+                SystemInstruction,
+                cancellationToken);
+        }
+        catch
+        {
+            rawGeminiResponse = null;
+        }
 
-        // 3. Tool: Service knowledge
-        var additionalInfo = new Dictionary<string, string>(baseOutput.AdditionalInformation);
+        // Safe degradation if Gemini call failed or returned empty
+        if (string.IsNullOrWhiteSpace(rawGeminiResponse) ||
+            !TryParseGeminiResponse(rawGeminiResponse, out var parsedOutput))
+        {
+            var degraded = CreateDegradedOutput(locationText);
+            return (degraded, toolCalls);
+        }
+
+        // Align with classification tool if Gemini returned Unclassified but tool determined a canonical category
+        if (string.Equals(parsedOutput.Category, "Unclassified", StringComparison.OrdinalIgnoreCase) &&
+            !string.Equals(classData.Category, "Unclassified", StringComparison.OrdinalIgnoreCase))
+        {
+            parsedOutput.Category = classData.Category;
+            parsedOutput.Confidence = Math.Max(parsedOutput.Confidence, classData.Confidence);
+        }
+
+        // Ambiguity check: very short descriptions or generic phrasing require more info
+        var lowerDesc = description.ToLowerInvariant();
+        var descWords = description.Split(new[] { ' ', ',', '.', '!', '?' }, StringSplitOptions.RemoveEmptyEntries);
+        bool isAmbiguous = descWords.Length <= 4 && !lowerDesc.Contains("flood") && !lowerDesc.Contains("fire") && !lowerDesc.Contains("burst");
+        if (lowerDesc.Contains("broken") || lowerDesc.Contains("not working") || lowerDesc.Contains("something wrong"))
+        {
+            if (descWords.Length <= 6)
+            {
+                isAmbiguous = true;
+            }
+        }
+
+        if (isAmbiguous)
+        {
+            parsedOutput.NeedsMoreInformation = true;
+            if (parsedOutput.FollowUpQuestions.Count == 0)
+            {
+                parsedOutput.FollowUpQuestions = new[]
+                {
+                    "Could you describe the problem you are experiencing in more detail?",
+                    "What specific symptoms or equipment are involved?"
+                };
+            }
+            parsedOutput.Urgency = ServiceRequestUrgency.Unknown;
+        }
+
+        // 4. Tool: Service knowledge
+        var additionalInfo = new Dictionary<string, string>(parsedOutput.AdditionalInformation);
         try
         {
             var knowParams = new Dictionary<string, object>
             {
-                ["category"] = category,
+                ["category"] = parsedOutput.Category,
                 ["description"] = description
             };
             var knowResult = await _toolExecutor.ExecuteAsync("ServiceKnowledgeTool", knowParams);
@@ -288,461 +275,258 @@ public sealed class ProblemUnderstandingAgent : IAgent
             // Knowledge tool failure degrades safely
         }
 
-        bool needsMoreInfo = baseOutput.NeedsMoreInformation || string.Equals(category, "Unclassified", StringComparison.OrdinalIgnoreCase);
+        // 5. Safety validation and sanitization
+        ApplySafetyPolicies(parsedOutput, additionalInfo, locationText);
 
-        var finalOutput = new ProblemUnderstandingOutput
+        return (parsedOutput, toolCalls);
+    }
+
+    private static string BuildPrompt(string description, string? locationText)
+    {
+        var sb = new System.Text.StringBuilder();
+        sb.AppendLine("Analyze the following customer service request:");
+        sb.AppendLine($"Customer Description: \"{description}\"");
+        if (!string.IsNullOrWhiteSpace(locationText))
         {
-            Category = category,
-            ProblemSummary = baseOutput.ProblemSummary,
-            Urgency = category == "Unclassified" ? ServiceRequestUrgency.Unknown : baseOutput.Urgency,
-            NeedsMoreInformation = needsMoreInfo,
-            FollowUpQuestions = baseOutput.FollowUpQuestions,
-            Confidence = Clamp(confidence),
-            ExtractedLocation = locationText,
-            AdditionalInformation = additionalInfo
+            sb.AppendLine($"Customer Location: \"{locationText}\"");
+        }
+        sb.AppendLine("Return JSON only.");
+        return sb.ToString();
+    }
+
+    private static bool TryParseGeminiResponse(string raw, out ProblemUnderstandingOutput output)
+    {
+        output = new ProblemUnderstandingOutput();
+        try
+        {
+            var cleaned = CleanJsonResponse(raw);
+            var node = JsonNode.Parse(cleaned);
+            if (node is not JsonObject obj)
+            {
+                return false;
+            }
+
+            // Category
+            var category = obj["category"]?.GetValue<string>()?.Trim() ?? "Unclassified";
+            var matchedCategory = AllowedCategories.FirstOrDefault(c => string.Equals(c, category, StringComparison.OrdinalIgnoreCase)) ?? "Unclassified";
+            output.Category = matchedCategory;
+
+            // ProblemSummary
+            var summary = obj["problemSummary"]?.GetValue<string>()?.Trim() ?? string.Empty;
+            output.ProblemSummary = string.IsNullOrWhiteSpace(summary)
+                ? $"Possible {output.Category.ToLowerInvariant()} issue."
+                : summary;
+
+            // Urgency
+            var urgencyRaw = obj["urgency"]?.ToString()?.Trim();
+            output.Urgency = ParseUrgency(urgencyRaw, output.Category);
+
+            // NeedsMoreInformation
+            var needsMore = obj["needsMoreInformation"]?.GetValue<bool?>() ?? false;
+            if (string.Equals(output.Category, "Unclassified", StringComparison.OrdinalIgnoreCase))
+            {
+                needsMore = true;
+            }
+            output.NeedsMoreInformation = needsMore;
+
+            // FollowUpQuestions
+            var questions = new List<string>();
+            if (obj["followUpQuestions"] is JsonArray arr)
+            {
+                foreach (var item in arr)
+                {
+                    var q = item?.GetValue<string>()?.Trim();
+                    if (!string.IsNullOrWhiteSpace(q))
+                    {
+                        questions.Add(q);
+                    }
+                }
+            }
+
+            if (output.NeedsMoreInformation && questions.Count == 0)
+            {
+                questions.Add("Could you describe the problem you are experiencing in more detail?");
+                questions.Add("What specific symptoms or equipment are involved?");
+            }
+
+            output.FollowUpQuestions = questions.Take(3).ToArray();
+
+            // Confidence
+            decimal confidence = 0.5m;
+            if (obj["confidence"] != null)
+            {
+                if (decimal.TryParse(obj["confidence"]!.ToString(), System.Globalization.NumberStyles.Any, System.Globalization.CultureInfo.InvariantCulture, out var parsedConf))
+                {
+                    confidence = parsedConf;
+                }
+            }
+            output.Confidence = Clamp(confidence);
+
+            // AdditionalInformation
+            var additional = new Dictionary<string, string>();
+            if (obj["additionalInformation"] is JsonObject addObj)
+            {
+                foreach (var kv in addObj)
+                {
+                    if (kv.Value != null)
+                    {
+                        additional[kv.Key] = kv.Value.ToString();
+                    }
+                }
+            }
+            output.AdditionalInformation = additional;
+
+            return true;
+        }
+        catch
+        {
+            return false;
+        }
+    }
+
+    private static string CleanJsonResponse(string raw)
+    {
+        var trimmed = raw.Trim();
+        if (trimmed.StartsWith("```json", StringComparison.OrdinalIgnoreCase))
+        {
+            trimmed = trimmed[7..];
+        }
+        else if (trimmed.StartsWith("```", StringComparison.OrdinalIgnoreCase))
+        {
+            trimmed = trimmed[3..];
+        }
+
+        if (trimmed.EndsWith("```", StringComparison.OrdinalIgnoreCase))
+        {
+            trimmed = trimmed[..^3];
+        }
+
+        return trimmed.Trim();
+    }
+
+    private static ServiceRequestUrgency ParseUrgency(string? urgencyRaw, string category)
+    {
+        if (string.Equals(category, "Unclassified", StringComparison.OrdinalIgnoreCase))
+        {
+            return ServiceRequestUrgency.Unknown;
+        }
+
+        if (string.IsNullOrWhiteSpace(urgencyRaw))
+        {
+            return ServiceRequestUrgency.Medium;
+        }
+
+        if (Enum.TryParse<ServiceRequestUrgency>(urgencyRaw, true, out var parsed))
+        {
+            return parsed;
+        }
+
+        return urgencyRaw.ToLowerInvariant() switch
+        {
+            "critical" => ServiceRequestUrgency.Critical,
+            "high" => ServiceRequestUrgency.High,
+            "medium" => ServiceRequestUrgency.Medium,
+            "low" => ServiceRequestUrgency.Low,
+            _ => ServiceRequestUrgency.Medium
         };
-
-        return (finalOutput, toolCalls);
-    }
-
-    // -------------------------------------------------------
-    // Core analysis logic
-    // -------------------------------------------------------
-
-    private static ProblemUnderstandingOutput Analyse(
-        string description,
-        ProblemUnderstandingInput? input)
-    {
-        var lower = description.ToLowerInvariant();
-        var words = Tokenise(lower);
-
-        var matchedCategory = MatchCategory(words, lower);
-        var hasCategory = matchedCategory is not null;
-
-        var isUrgent = hasCategory
-            && ContainsAny(words, lower, matchedCategory!.UrgentKeywords);
-
-        // Determine whether we need more information.
-        var needsMoreInfo = !hasCategory || IsAmbiguous(description, lower, hasCategory);
-
-        var followUpQuestions = needsMoreInfo
-            ? BuildFollowUpQuestions(description, lower, matchedCategory)
-            : Array.Empty<string>();
-
-        var confidence = CalculateConfidence(
-            hasCategory: hasCategory,
-            isUrgent: isUrgent,
-            needsMoreInfo: needsMoreInfo,
-            matchedCategory: matchedCategory,
-            lower: lower);
-
-        var urgency = DetermineUrgency(
-            hasCategory: hasCategory,
-            isUrgent: isUrgent,
-            lower: lower,
-            matchedCategory: matchedCategory,
-            needsMoreInfo: needsMoreInfo);
-
-        var summary = BuildProblemSummary(
-            matchedCategory: matchedCategory,
-            lower: lower,
-            isUrgent: isUrgent);
-
-        return new ProblemUnderstandingOutput
-        {
-            Category = matchedCategory?.Category ?? "Unclassified",
-            ProblemSummary = summary,
-            Urgency = urgency,
-            NeedsMoreInformation = needsMoreInfo,
-            FollowUpQuestions = followUpQuestions,
-            Confidence = Clamp(confidence),
-            ExtractedLocation = string.IsNullOrWhiteSpace(input?.LocationText)
-                ? null
-                : input.LocationText,
-            AdditionalInformation = new Dictionary<string, string>()
-        };
-    }
-
-    // -------------------------------------------------------
-    // Category matching
-    // -------------------------------------------------------
-
-    private static CategoryDefinition? MatchCategory(
-        HashSet<string> words,
-        string lower)
-    {
-        CategoryDefinition? bestMatch = null;
-        int bestScore = 0;
-
-        foreach (var category in KnownCategories)
-        {
-            int score = CountMatches(words, lower, category.Keywords);
-            if (score > bestScore)
-            {
-                bestScore = score;
-                bestMatch = category;
-            }
-        }
-
-        // Require at least one keyword match to classify.
-        return bestScore > 0 ? bestMatch : null;
-    }
-
-    private static int CountMatches(
-        HashSet<string> words,
-        string lower,
-        string[] keywords)
-    {
-        int count = 0;
-        foreach (var kw in keywords)
-        {
-            if (kw.Contains(' '))
-            {
-                // Multi-word keyword: use substring matching.
-                if (lower.Contains(kw, StringComparison.OrdinalIgnoreCase))
-                    count++;
-            }
-            else
-            {
-                // Use prefix matching to handle plurals and inflections:
-                // "sockets" matches keyword "socket",
-                // "leaking" matches keyword "leak".
-                if (WordMatchesKeyword(words, kw))
-                    count++;
-            }
-        }
-        return count;
-    }
-
-    private static bool ContainsAny(
-        HashSet<string> words,
-        string lower,
-        string[] terms)
-    {
-        foreach (var term in terms)
-        {
-            if (term.Contains(' '))
-            {
-                if (lower.Contains(term, StringComparison.OrdinalIgnoreCase))
-                    return true;
-            }
-            else
-            {
-                if (WordMatchesKeyword(words, term))
-                    return true;
-            }
-        }
-        return false;
     }
 
     /// <summary>
-    /// Returns true when any tokenised word from the input either
-    /// exactly matches the keyword, or starts with the keyword
-    /// (covering plurals: "sockets" → "socket"),
-    /// or the keyword starts with the word (covering truncation).
+    /// Enforces safety policies on Gemini generated output:
+    /// - Eliminates dangerous DIY instructions
+    /// - Guarantees uncertainty language
+    /// - Filters out guaranteed diagnoses
+    /// - Ensures out-of-scope actions (booking, payments, quotations) are absent
     /// </summary>
-    private static bool WordMatchesKeyword(
-        HashSet<string> words,
-        string keyword)
+    private static void ApplySafetyPolicies(
+        ProblemUnderstandingOutput output,
+        Dictionary<string, string> additionalInfo,
+        string? locationText)
     {
-        if (words.Contains(keyword))
-            return true;
+        output.ExtractedLocation = locationText;
+        output.AdditionalInformation = additionalInfo;
 
-        foreach (var word in words)
+        var dangerousTerms = new[]
         {
-            // "sockets" starts with "socket" → match
-            if (word.StartsWith(keyword, StringComparison.OrdinalIgnoreCase))
-                return true;
-
-            // keyword "smells" vs word "smell" — keyword starts with word
-            if (keyword.StartsWith(word, StringComparison.OrdinalIgnoreCase) &&
-                word.Length >= 4)
-                return true;
-        }
-
-        return false;
-    }
-
-    // -------------------------------------------------------
-    // Ambiguity detection
-    // -------------------------------------------------------
-
-    private static bool IsAmbiguous(
-        string description,
-        string lower,
-        bool hasCategory)
-    {
-        if (!hasCategory)
-            return true;
-
-        // Very short descriptions (≤4 words) are likely too vague.
-        var wordCount = description
-            .Split(' ', StringSplitOptions.RemoveEmptyEntries).Length;
-        if (wordCount <= 4 && !lower.Contains("flood") && !lower.Contains("fire"))
-            return true;
-
-        // Lone generic words without problem description.
-        var tooGeneric = new[]
-        {
-            "broken", "not working", "issue", "problem",
-            "something wrong", "not ok"
+            "open the wire", "open the wiring", "touch the wire", "handle the wire",
+            "strip the wire", "strip wire", "replace the wire yourself", "fix the wire yourself",
+            "inspect the wire yourself", "do it yourself", "breaker yourself",
+            "bypass", "disassemble the unit", "open the panel yourself"
         };
-        if (ContainsAny(
-                new HashSet<string>(description
-                    .ToLowerInvariant()
-                    .Split(' ', StringSplitOptions.RemoveEmptyEntries)),
-                lower,
-                tooGeneric)
-            && wordCount <= 6)
+
+        var guaranteedTerms = new[]
         {
-            return true;
+            "definitely", "guaranteed", "your wiring is broken",
+            "your battery is dead", "100% certain"
+        };
+
+        // Sanitize problem summary
+        var summary = output.ProblemSummary;
+        bool hasDangerous = dangerousTerms.Any(t => summary.Contains(t, StringComparison.OrdinalIgnoreCase));
+        bool hasGuaranteed = guaranteedTerms.Any(t => summary.Contains(t, StringComparison.OrdinalIgnoreCase));
+
+        if (hasDangerous)
+        {
+            summary = "Possible safety issue. Professional inspection is recommended to ensure safety.";
         }
-
-        return false;
-    }
-
-    // -------------------------------------------------------
-    // Follow-up question generation
-    // -------------------------------------------------------
-
-    private static IReadOnlyList<string> BuildFollowUpQuestions(
-        string description,
-        string lower,
-        CategoryDefinition? category)
-    {
-        var questions = new List<string>();
-
-        if (category is null)
+        else if (hasGuaranteed)
         {
-            questions.Add(
-                "Could you describe the appliance, system, or vehicle that is affected?");
-            questions.Add(
-                "What symptoms are you experiencing? For example, is there noise, a smell, or a visible issue?");
-        }
-        else
-        {
-            switch (category.Category)
+            foreach (var g in guaranteedTerms)
             {
-                case "Vehicle Repair":
-                    questions.Add(
-                        "What happens when you try to start the vehicle? For example, does it make any sound?");
-                    if (!lower.Contains("warning") && !lower.Contains("light"))
-                        questions.Add(
-                            "Are any warning lights visible on the dashboard?");
-                    break;
-
-                case "Plumbing":
-                    questions.Add(
-                        "Which fixture or pipe is affected, and approximately how much water is leaking?");
-                    break;
-
-                case "Electrical":
-                    questions.Add(
-                        "Which circuit or area of the property is affected?");
-                    break;
-
-                case "Appliance Repair":
-                    if (!lower.Contains("fridge") &&
-                        !lower.Contains("washing") &&
-                        !lower.Contains("oven") &&
-                        !lower.Contains("microwave") &&
-                        !lower.Contains("freezer") &&
-                        !lower.Contains("dryer") &&
-                        !lower.Contains("dishwasher") &&
-                        !lower.Contains("air conditioner") &&
-                        !lower.Contains("heater"))
-                    {
-                        questions.Add(
-                            "What appliance is affected and what happens when you try to use it?");
-                    }
-                    else
-                    {
-                        questions.Add(
-                            "How long has the appliance had this problem, and does it make any unusual sounds or smells?");
-                    }
-                    break;
-
-                default:
-                    questions.Add(
-                        "Could you describe what you are experiencing in more detail?");
-                    break;
+                summary = summary.Replace(g, "possible issue", StringComparison.OrdinalIgnoreCase);
             }
         }
 
-        // Enforce the upper bound of 3 questions.
-        return questions.Take(3).ToArray();
-    }
-
-    // -------------------------------------------------------
-    // Urgency classification
-    // -------------------------------------------------------
-
-    private static ServiceRequestUrgency DetermineUrgency(
-        bool hasCategory,
-        bool isUrgent,
-        string lower,
-        CategoryDefinition? matchedCategory,
-        bool needsMoreInfo)
-    {
-        if (!hasCategory)
-            return ServiceRequestUrgency.Unknown;
-
-        // Electrical safety hazard: immediate risk detected.
-        if (matchedCategory?.Category == "Electrical" && isUrgent)
+        // Ensure uncertainty words
+        var uncertaintyWords = new[] { "possible", "may", "could", "potential" };
+        if (!uncertaintyWords.Any(u => summary.Contains(u, StringComparison.OrdinalIgnoreCase)))
         {
-            // Conservative: burning/sparks smell is at least High.
-            // "Fire" would push it to Critical.
-            if (lower.Contains("fire"))
-                return ServiceRequestUrgency.Critical;
-
-            return ServiceRequestUrgency.High;
+            summary = "Possible " + char.ToLowerInvariant(summary[0]) + summary[1..];
         }
 
-        // Flooding or burst pipe is High urgency.
-        if (matchedCategory?.Category == "Plumbing")
+        output.ProblemSummary = summary;
+
+        // Sanitize follow-up questions
+        var sanitizedQuestions = new List<string>();
+        foreach (var q in output.FollowUpQuestions)
         {
-            if (lower.Contains("burst") ||
-                lower.Contains("flood") ||
-                lower.Contains("flooding") ||
-                lower.Contains("overflow"))
-                return ServiceRequestUrgency.High;
-
-            if (lower.Contains("drip") || lower.Contains("dripping"))
-                return ServiceRequestUrgency.Low;
-
-            return ServiceRequestUrgency.Medium;
-        }
-
-        // Vehicle stopped on a road is High.
-        if (matchedCategory?.Category == "Vehicle Repair")
-        {
-            if (lower.Contains("accident") || lower.Contains("crash"))
-                return ServiceRequestUrgency.Critical;
-
-            if (isUrgent ||
-                lower.Contains("road") ||
-                lower.Contains("breakdown") ||
-                lower.Contains("stopped") ||
-                lower.Contains("won't start") ||
-                lower.Contains("will not start") ||
-                lower.Contains("doesn't start") ||
-                lower.Contains("does not start") ||
-                lower.Contains("can't start") ||
-                lower.Contains("cannot start"))
-                return ServiceRequestUrgency.High;
-
-            return ServiceRequestUrgency.Medium;
-        }
-
-        // Appliance.
-        if (matchedCategory?.Category == "Appliance Repair")
-        {
-            if (isUrgent) // e.g. gas leak, fire
-                return ServiceRequestUrgency.High;
-
-            return ServiceRequestUrgency.Low;
-        }
-
-        return needsMoreInfo
-            ? ServiceRequestUrgency.Unknown
-            : ServiceRequestUrgency.Medium;
-    }
-
-    // -------------------------------------------------------
-    // Problem summary generation
-    // -------------------------------------------------------
-
-    private static string BuildProblemSummary(
-        CategoryDefinition? matchedCategory,
-        string lower,
-        bool isUrgent)
-    {
-        if (matchedCategory is null)
-            return "Possible service issue. Category could not be determined from the available description.";
-
-        return matchedCategory.Category switch
-        {
-            "Plumbing" when lower.Contains("burst") || lower.Contains("flood") =>
-                "Possible burst pipe or water flooding. Immediate professional attention may be required.",
-
-            "Plumbing" =>
-                "Possible water leakage or plumbing fault.",
-
-            "Electrical" when isUrgent =>
-                "Possible electrical safety issue. Professional inspection is recommended.",
-
-            "Electrical" =>
-                "Possible electrical fault.",
-
-            "Vehicle Repair" when lower.Contains("accident") || lower.Contains("crash") =>
-                "Possible vehicle collision or serious mechanical failure.",
-
-            "Vehicle Repair" when lower.Contains("start") ||
-                                   lower.Contains("won't start") ||
-                                   lower.Contains("doesn't start") =>
-                "Possible battery or starting-system issue.",
-
-            "Vehicle Repair" =>
-                "Possible vehicle mechanical fault.",
-
-            "Appliance Repair" when lower.Contains("fridge") || lower.Contains("refrigerator") || lower.Contains("freezer") =>
-                "Possible refrigeration or cooling system fault.",
-
-            "Appliance Repair" when lower.Contains("washing") || lower.Contains("washer") || lower.Contains("dryer") =>
-                "Possible laundry appliance fault.",
-
-            "Appliance Repair" =>
-                "Possible appliance fault.",
-
-            _ =>
-                $"Possible {matchedCategory.Category.ToLowerInvariant()} issue."
-        };
-    }
-
-    // -------------------------------------------------------
-    // Confidence calculation
-    // -------------------------------------------------------
-
-    private static decimal CalculateConfidence(
-        bool hasCategory,
-        bool isUrgent,
-        bool needsMoreInfo,
-        CategoryDefinition? matchedCategory,
-        string lower)
-    {
-        if (!hasCategory)
-            return 0.2m;
-
-        if (needsMoreInfo)
-            return 0.4m;
-
-        // A clear, detailed description in a known category.
-        var baseConfidence = 0.75m;
-
-        // Boost confidence when the description mentions specific symptoms.
-        var specificSymptomTerms = new[]
-        {
-            "leaking", "dripping", "burst", "flooding",
-            "not start", "won't start", "doesn't start",
-            "burning", "sparks", "tripped",
-            "not cooling", "not heating", "not working"
-        };
-
-        foreach (var term in specificSymptomTerms)
-        {
-            if (lower.Contains(term, StringComparison.OrdinalIgnoreCase))
+            if (!dangerousTerms.Any(t => q.Contains(t, StringComparison.OrdinalIgnoreCase)))
             {
-                baseConfidence = Math.Min(baseConfidence + 0.10m, 0.92m);
-                break;
+                sanitizedQuestions.Add(q);
             }
         }
+        output.FollowUpQuestions = sanitizedQuestions;
 
-        return Clamp(baseConfidence);
+        // If category is unclassified, urgency must remain Unknown
+        if (string.Equals(output.Category, "Unclassified", StringComparison.OrdinalIgnoreCase))
+        {
+            output.Urgency = ServiceRequestUrgency.Unknown;
+            output.NeedsMoreInformation = true;
+            output.Confidence = Math.Min(output.Confidence, 0.4m);
+        }
     }
 
-    // -------------------------------------------------------
-    // Helper to build a "needs more information" result
-    // -------------------------------------------------------
+    private static ProblemUnderstandingOutput CreateDegradedOutput(string? locationText)
+    {
+        return new ProblemUnderstandingOutput
+        {
+            Category = "Unclassified",
+            ProblemSummary = "Possible service issue. Category could not be established.",
+            Urgency = ServiceRequestUrgency.Unknown,
+            NeedsMoreInformation = true,
+            FollowUpQuestions = new[]
+            {
+                "Could you describe the problem you are experiencing?",
+                "What specific symptoms or equipment are involved?"
+            },
+            Confidence = 0.2m,
+            ExtractedLocation = locationText,
+            AdditionalInformation = new Dictionary<string, string>
+            {
+                ["Degraded"] = "True"
+            }
+        };
+    }
 
     private static AgentResult BuildNeedsMoreInformationResult(
         Guid serviceRequestId,
@@ -753,15 +537,12 @@ public sealed class ProblemUnderstandingAgent : IAgent
         var output = new ProblemUnderstandingOutput
         {
             Category = "Unclassified",
-            ProblemSummary =
-                "Insufficient information provided to determine the problem.",
+            ProblemSummary = "Insufficient information provided to determine the problem.",
             Urgency = ServiceRequestUrgency.Unknown,
             NeedsMoreInformation = true,
             FollowUpQuestions = questions,
             Confidence = Clamp(confidence),
-            ExtractedLocation = string.IsNullOrWhiteSpace(locationText)
-                ? null
-                : locationText,
+            ExtractedLocation = string.IsNullOrWhiteSpace(locationText) ? null : locationText,
             AdditionalInformation = new Dictionary<string, string>()
         };
 
@@ -774,39 +555,15 @@ public sealed class ProblemUnderstandingAgent : IAgent
         };
     }
 
-    // -------------------------------------------------------
-    // Input resolution
-    // -------------------------------------------------------
-
     private static ProblemUnderstandingInput? ResolveInput(AgentContext context)
     {
-        if (context.Data.TryGetValue(
-                nameof(ProblemUnderstandingInput),
-                out var raw)
-            && raw is ProblemUnderstandingInput typed)
+        if (context.Data.TryGetValue(nameof(ProblemUnderstandingInput), out var raw) &&
+            raw is ProblemUnderstandingInput typed)
         {
             return typed;
         }
         return null;
     }
 
-    // -------------------------------------------------------
-    // Tokenisation
-    // -------------------------------------------------------
-
-    private static HashSet<string> Tokenise(string lower)
-    {
-        return new HashSet<string>(
-            lower.Split(
-                new[] { ' ', ',', '.', '!', '?', ';', ':', '\t', '\r', '\n' },
-                StringSplitOptions.RemoveEmptyEntries),
-            StringComparer.OrdinalIgnoreCase);
-    }
-
-    // -------------------------------------------------------
-    // Confidence clamping
-    // -------------------------------------------------------
-
-    private static decimal Clamp(decimal value)
-        => Math.Max(0m, Math.Min(1m, value));
+    private static decimal Clamp(decimal value) => Math.Max(0m, Math.Min(1m, value));
 }

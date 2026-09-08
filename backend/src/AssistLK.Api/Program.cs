@@ -1,5 +1,7 @@
+using AssistLK.Agents.Abstractions;
 using AssistLK.Agents.Agents;
 using AssistLK.Agents.Core;
+using AssistLK.Agents.Services;
 using AssistLK.Agents.Tools;
 using AssistLK.Api.Middleware;
 using AssistLK.Api.Seed;
@@ -84,6 +86,9 @@ builder.Services.AddSingleton<
     AgentSafetyPolicyEngine>();
 builder.Services.AddScoped<
     AgentOrchestrator>();
+builder.Services.AddHttpClient();
+builder.Services.AddScoped<IGeminiService, GeminiService>();
+builder.Services.AddScoped<GeminiService>();
 builder.Services.AddScoped<
     DemoProblemAgent>();
 builder.Services.AddScoped<

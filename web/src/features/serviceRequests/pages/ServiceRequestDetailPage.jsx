@@ -5,6 +5,7 @@ import {
   canCancelRequest,
   canEditRequest,
   canAnalyzeRequest,
+  canMarkReadyForMatching,
 } from "../utils/serviceRequestStatus";
 import getApiErrorMessage from "../utils/getApiErrorMessage";
 import AppButton from "../../../shared/components/AppButton";
@@ -14,6 +15,7 @@ import ErrorMessage from "../../../shared/components/ErrorMessage";
 import LoadingSpinner from "../../../shared/components/LoadingSpinner";
 import AnalysisResultCard from "../components/AnalysisResultCard";
 import ClarificationSection from "../components/ClarificationSection";
+import ReadyForMatchingSection from "../components/ReadyForMatchingSection";
 import { colors, radius, spacing, typography } from "../../../shared/theme";
 
 function formatDateTime(dateString) {
@@ -71,6 +73,11 @@ function ServiceRequestDetailPage() {
   const [showCancelConfirm, setShowCancelConfirm] = useState(false);
   const [isCancelling, setIsCancelling] = useState(false);
   const [cancelError, setCancelError] = useState(null);
+
+  // Ready-for-matching confirmation states
+  const [showReadyConfirm, setShowReadyConfirm] = useState(false);
+  const [isConfirmingReady, setIsConfirmingReady] = useState(false);
+  const [readyError, setReadyError] = useState(null);
 
   useEffect(() => {
     let isMounted = true;
@@ -157,6 +164,31 @@ function ServiceRequestDetailPage() {
     }
   };
 
+  const handleConfirmReadyForMatching = async () => {
+    if (isConfirmingReady || !request) return;
+
+    setIsConfirmingReady(true);
+    setReadyError(null);
+
+    try {
+      const requestId = request.serviceRequestId ?? request.id ?? id;
+      const updatedRequest =
+        await serviceRequestService.markReadyForMatching(requestId);
+
+      setRequest(updatedRequest);
+      setShowReadyConfirm(false);
+      setReadyError(null);
+    } catch (err) {
+      const message = getApiErrorMessage(
+        err,
+        "Failed to confirm service request for provider matching. Please try again."
+      );
+      setReadyError(message);
+    } finally {
+      setIsConfirmingReady(false);
+    }
+  };
+
   // Loading State
   if (loading) {
     return (
@@ -219,6 +251,7 @@ function ServiceRequestDetailPage() {
   const editable = canEditRequest(currentStatus);
   const cancellable = canCancelRequest(currentStatus);
   const analyzable = canAnalyzeRequest(currentStatus);
+  const canConfirm = canMarkReadyForMatching(currentStatus);
 
   return (
     <div
@@ -554,31 +587,141 @@ function ServiceRequestDetailPage() {
             />
           )}
 
-          {/* State D: Analyzed - AnalysisResultCard */}
+          {/* State D: Analyzed - AnalysisResultCard & Review/Confirmation Flow */}
           {currentStatus === "Analyzed" && (
-            <AnalysisResultCard
-              category={
-                (analysisResult?.status === "Analyzed"
-                  ? analysisResult.category
-                  : null) || request.category
-              }
-              urgency={
-                (analysisResult?.status === "Analyzed"
-                  ? analysisResult.urgency
-                  : null) || request.urgency
-              }
-              problemSummary={
-                analysisResult?.status === "Analyzed"
-                  ? analysisResult.problemSummary
-                  : null
-              }
-              confidence={
-                analysisResult?.status === "Analyzed"
-                  ? analysisResult.confidence
-                  : null
-              }
-              status={currentStatus}
-            />
+            <>
+              <AnalysisResultCard
+                category={
+                  (analysisResult?.status === "Analyzed"
+                    ? analysisResult.category
+                    : null) || request.category
+                }
+                urgency={
+                  (analysisResult?.status === "Analyzed"
+                    ? analysisResult.urgency
+                    : null) || request.urgency
+                }
+                problemSummary={
+                  analysisResult?.status === "Analyzed"
+                    ? analysisResult.problemSummary
+                    : null
+                }
+                confidence={
+                  analysisResult?.status === "Analyzed"
+                    ? analysisResult.confidence
+                    : null
+                }
+                status={currentStatus}
+              />
+
+              {/* Review & Customer Confirmation Card */}
+              <AppCard>
+                <h2
+                  style={{
+                    ...typography.cardHeading,
+                    margin: `0 0 ${spacing.xs}px 0`,
+                    color: colors.textPrimary,
+                  }}
+                >
+                  Review your service request
+                </h2>
+                <p
+                  style={{
+                    ...typography.body,
+                    color: colors.textSecondary,
+                    margin: `0 0 ${spacing.md}px 0`,
+                  }}
+                >
+                  Review the service category and urgency before continuing. Once confirmed, this request will be ready for provider matching.
+                </p>
+
+                {readyError && (
+                  <div style={{ marginBottom: spacing.md }}>
+                    <ErrorMessage message={readyError} />
+                  </div>
+                )}
+
+                {showReadyConfirm ? (
+                  <div
+                    style={{
+                      padding: spacing.md,
+                      backgroundColor: colors.background,
+                      borderRadius: radius.medium,
+                      border: `1px solid ${colors.border}`,
+                    }}
+                  >
+                    <h3
+                      style={{
+                        ...typography.cardHeading,
+                        margin: `0 0 ${spacing.xs}px 0`,
+                        color: colors.textPrimary,
+                        fontSize: "1.05rem",
+                      }}
+                    >
+                      Confirm this analyzed request?
+                    </h3>
+                    <p
+                      style={{
+                        ...typography.body,
+                        color: colors.textSecondary,
+                        margin: `0 0 ${spacing.md}px 0`,
+                      }}
+                    >
+                      After confirmation, you can no longer edit or cancel this request at this stage.
+                    </p>
+
+                    <div
+                      style={{
+                        display: "flex",
+                        alignItems: "center",
+                        flexWrap: "wrap",
+                        gap: spacing.sm,
+                      }}
+                    >
+                      <AppButton
+                        type="button"
+                        variant="outline"
+                        onClick={() => {
+                          setShowReadyConfirm(false);
+                          setReadyError(null);
+                        }}
+                        disabled={isConfirmingReady}
+                      >
+                        Go Back
+                      </AppButton>
+
+                      <AppButton
+                        type="button"
+                        variant="primary"
+                        onClick={handleConfirmReadyForMatching}
+                        disabled={isConfirmingReady}
+                      >
+                        {isConfirmingReady ? "Confirming request..." : "Confirm Request"}
+                      </AppButton>
+                    </div>
+                  </div>
+                ) : (
+                  <div>
+                    <AppButton
+                      type="button"
+                      variant="primary"
+                      onClick={() => {
+                        setShowReadyConfirm(true);
+                        setReadyError(null);
+                      }}
+                      disabled={!canConfirm}
+                    >
+                      Confirm for Provider Matching
+                    </AppButton>
+                  </div>
+                )}
+              </AppCard>
+            </>
+          )}
+
+          {/* State E: ReadyForMatching - Component Handoff Section */}
+          {currentStatus === "ReadyForMatching" && (
+            <ReadyForMatchingSection request={request} />
           )}
         </div>
       )}

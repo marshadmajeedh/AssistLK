@@ -58,11 +58,29 @@ export function canAnalyzeRequest(status) {
   return ANALYZABLE_STATUSES.includes(status);
 }
 
+export const READY_FOR_MATCHING_ALLOWED_STATUSES = Object.freeze([
+  "Analyzed",
+]);
+
+/**
+ * Checks whether a request can be confirmed for provider matching in the UI.
+ * @param {string} status - ServiceRequestStatus string
+ * @returns {boolean}
+ */
+export function canMarkReadyForMatching(status) {
+  if (!status || typeof status !== "string") {
+    return false;
+  }
+  return status === "Analyzed";
+}
+
 export default {
   EDITABLE_STATUSES,
   CANCELLABLE_STATUSES,
   ANALYZABLE_STATUSES,
+  READY_FOR_MATCHING_ALLOWED_STATUSES,
   canEditRequest,
   canCancelRequest,
   canAnalyzeRequest,
+  canMarkReadyForMatching,
 };

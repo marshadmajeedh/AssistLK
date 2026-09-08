@@ -12,6 +12,7 @@ function ErrorMessage({ message }) {
 
   return (
     <div
+      role="alert"
       style={{
         ...typography.body,
         marginTop: spacing.md,

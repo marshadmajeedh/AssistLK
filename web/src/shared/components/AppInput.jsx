@@ -14,6 +14,7 @@ function AppInput({
 }) {
   const generatedId = useId();
   const inputId = id ?? inputProps.id ?? generatedId;
+  const errorId = error ? `${inputId}-error` : undefined;
 
   return (
     <div>
@@ -33,6 +34,8 @@ function AppInput({
 
       <input
         id={inputId}
+        aria-invalid={Boolean(error)}
+        aria-describedby={errorId}
         {...inputProps}
         style={{
           ...inputStyles,
@@ -42,6 +45,8 @@ function AppInput({
 
       {error && (
         <div
+          id={errorId}
+          role="alert"
           style={{
             ...typography.small,
             color: colors.error,

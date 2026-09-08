@@ -9,6 +9,8 @@ function LoadingSpinner({
 }) {
   return (
     <div
+      role="status"
+      aria-live="polite"
       style={{
         padding: spacing.lg,
         textAlign: "center",

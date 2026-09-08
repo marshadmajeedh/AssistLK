@@ -14,6 +14,7 @@ function AppTextArea({
 }) {
   const generatedId = useId();
   const textareaId = id ?? textAreaProps.id ?? generatedId;
+  const errorId = error ? `${textareaId}-error` : undefined;
 
   return (
     <div>
@@ -33,6 +34,8 @@ function AppTextArea({
 
       <textarea
         id={textareaId}
+        aria-invalid={Boolean(error)}
+        aria-describedby={errorId}
         {...textAreaProps}
         style={{
           ...inputStyles,
@@ -46,6 +49,8 @@ function AppTextArea({
 
       {error && (
         <div
+          id={errorId}
+          role="alert"
           style={{
             ...typography.small,
             color: colors.error,

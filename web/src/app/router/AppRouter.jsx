@@ -6,6 +6,8 @@ import {
 } from "react-router-dom";
 
 import LoginPage from "../../features/auth/pages/LoginPage";
+import ServiceRequestListPage from "../../features/serviceRequests/pages/ServiceRequestListPage";
+import CreateServiceRequestPage from "../../features/serviceRequests/pages/CreateServiceRequestPage";
 
 import ProtectedRoute from "../../shared/auth/ProtectedRoute";
 import { useAuthStore } from "../../shared/auth/authStore";
@@ -105,16 +107,12 @@ function AppRouter() {
 					<Route element={<CustomerLayout />}>
 						<Route
 							path="/service-requests"
-							element={
-								<PlaceholderPage title="My Service Requests" />
-							}
+							element={<ServiceRequestListPage />}
 						/>
 
 						<Route
 							path="/service-requests/new"
-							element={
-								<PlaceholderPage title="Create Service Request" />
-							}
+							element={<CreateServiceRequestPage />}
 						/>
 
 						<Route

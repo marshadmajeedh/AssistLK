@@ -1,3 +1,4 @@
+import { useId } from "react";
 import {
   colors,
   inputStyles,
@@ -8,12 +9,17 @@ import {
 function AppInput({
   label,
   error,
+  id,
   ...inputProps
 }) {
+  const generatedId = useId();
+  const inputId = id ?? inputProps.id ?? generatedId;
+
   return (
     <div>
       {label && (
         <label
+          htmlFor={inputId}
           style={{
             ...typography.body,
             display: "block",
@@ -26,6 +32,7 @@ function AppInput({
       )}
 
       <input
+        id={inputId}
         {...inputProps}
         style={{
           ...inputStyles,

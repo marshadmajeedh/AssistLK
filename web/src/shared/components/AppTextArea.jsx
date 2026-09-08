@@ -1,3 +1,4 @@
+import { useId } from "react";
 import {
   colors,
   inputStyles,
@@ -8,12 +9,17 @@ import {
 function AppTextArea({
   label,
   error,
+  id,
   ...textAreaProps
 }) {
+  const generatedId = useId();
+  const textareaId = id ?? textAreaProps.id ?? generatedId;
+
   return (
     <div>
       {label && (
         <label
+          htmlFor={textareaId}
           style={{
             ...typography.body,
             display: "block",
@@ -26,6 +32,7 @@ function AppTextArea({
       )}
 
       <textarea
+        id={textareaId}
         {...textAreaProps}
         style={{
           ...inputStyles,

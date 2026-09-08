@@ -9,6 +9,14 @@ export const colors = {
   warning: "#C45A11",
   error: "#B42318",
 
+  // Status Light Tints (Badges, Alerts, Chips)
+  neutralLight: "#E5E7EB",
+  secondaryLight: "#E0F2F1",
+  warningLight: "#FEF3C7",
+  successLight: "#DCFCE7",
+  primaryLight: "#DBEAFE",
+  errorLight: "#FEE2E2",
+
   // Backgrounds
   background: "#F6F8FA",
   surface: "#FFFFFF",

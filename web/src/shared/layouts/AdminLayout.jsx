@@ -54,7 +54,7 @@ function AdminLayout() {
             Dashboard
           </NavLink>
 
-          <NavLink to="/service-requests">
+          <NavLink to="/admin/service-requests">
             Service Requests
           </NavLink>
 

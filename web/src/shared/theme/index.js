@@ -8,4 +8,5 @@ export {
   inputStyles,
   cardStyles,
   pageStyles,
+  badgeStyles,
 } from "./components";

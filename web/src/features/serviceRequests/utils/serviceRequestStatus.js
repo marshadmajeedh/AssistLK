@@ -17,6 +17,11 @@ export const CANCELLABLE_STATUSES = Object.freeze([
   "Analyzed",
 ]);
 
+export const ANALYZABLE_STATUSES = Object.freeze([
+  "Created",
+  "AwaitingInformation",
+]);
+
 /**
  * Checks whether a request can be edited in the UI.
  * @param {string} status - ServiceRequestStatus string
@@ -41,9 +46,23 @@ export function canCancelRequest(status) {
   return CANCELLABLE_STATUSES.includes(status);
 }
 
+/**
+ * Checks whether a request can be analyzed in the UI.
+ * @param {string} status - ServiceRequestStatus string
+ * @returns {boolean}
+ */
+export function canAnalyzeRequest(status) {
+  if (!status || typeof status !== "string") {
+    return false;
+  }
+  return ANALYZABLE_STATUSES.includes(status);
+}
+
 export default {
   EDITABLE_STATUSES,
   CANCELLABLE_STATUSES,
+  ANALYZABLE_STATUSES,
   canEditRequest,
   canCancelRequest,
+  canAnalyzeRequest,
 };

@@ -1,13 +1,19 @@
 import { useEffect, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import serviceRequestService from "../services/serviceRequestService";
-import { canCancelRequest, canEditRequest } from "../utils/serviceRequestStatus";
+import {
+  canCancelRequest,
+  canEditRequest,
+  canAnalyzeRequest,
+} from "../utils/serviceRequestStatus";
 import getApiErrorMessage from "../utils/getApiErrorMessage";
 import AppButton from "../../../shared/components/AppButton";
 import AppCard from "../../../shared/components/AppCard";
 import StatusBadge from "../../../shared/components/StatusBadge";
 import ErrorMessage from "../../../shared/components/ErrorMessage";
 import LoadingSpinner from "../../../shared/components/LoadingSpinner";
+import AnalysisResultCard from "../components/AnalysisResultCard";
+import ClarificationSection from "../components/ClarificationSection";
 import { colors, radius, spacing, typography } from "../../../shared/theme";
 
 function formatDateTime(dateString) {
@@ -52,6 +58,15 @@ function ServiceRequestDetailPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
 
+  // Transient session analysis state
+  // Architectural limitation note: GET /api/service-requests/{id} returns ServiceRequestResponse,
+  // which persists status, category, and urgency, but does not expose transient ProblemAnalysis
+  // properties (problemSummary, confidence, followUpQuestions). Transient fields are retained
+  // in analysisResult for the current session and never override newer persisted status.
+  const [analysisResult, setAnalysisResult] = useState(null);
+  const [isAnalyzing, setIsAnalyzing] = useState(false);
+  const [analysisError, setAnalysisError] = useState(null);
+
   // Cancellation states
   const [showCancelConfirm, setShowCancelConfirm] = useState(false);
   const [isCancelling, setIsCancelling] = useState(false);
@@ -92,6 +107,33 @@ function ServiceRequestDetailPage() {
       isMounted = false;
     };
   }, [id]);
+
+  const handleAnalyze = async () => {
+    if (isAnalyzing || !request) return;
+
+    setIsAnalyzing(true);
+    setAnalysisError(null);
+
+    try {
+      const requestId = request.serviceRequestId ?? request.id ?? id;
+      const result = await serviceRequestService.analyze(requestId);
+
+      // Retain returned ProblemUnderstandingResponseDto in transient state
+      setAnalysisResult(result);
+
+      // Refresh persisted ServiceRequest as authoritative lifecycle state
+      const refreshed = await serviceRequestService.getById(requestId);
+      setRequest(refreshed);
+    } catch (err) {
+      const message = getApiErrorMessage(
+        err,
+        "Failed to analyze problem. Please check your information and try again."
+      );
+      setAnalysisError(message);
+    } finally {
+      setIsAnalyzing(false);
+    }
+  };
 
   const handleCancel = async () => {
     if (isCancelling || !request) return;
@@ -171,18 +213,12 @@ function ServiceRequestDetailPage() {
   const latDisplay = hasGps ? formatCoordinate(request.latitude) : null;
   const lngDisplay = hasGps ? formatCoordinate(request.longitude) : null;
 
-  // Deriving persisted analysis display values directly from the actual API response
-  const categoryDisplay = request.category || "Unclassified";
-  const urgencyDisplay = request.urgency || "Unknown";
-  const problemSummaryDisplay =
-    request.problemSummary ||
-    request.detectedProblem ||
-    (Array.isArray(request.problemAnalyses) &&
-      request.problemAnalyses[0]?.detectedProblem) ||
-    null;
-
-  const editable = canEditRequest(request.status);
-  const cancellable = canCancelRequest(request.status);
+  // Persisted lifecycle status is authoritative
+  const currentStatus = request.status;
+  const isCancelled = currentStatus === "Cancelled";
+  const editable = canEditRequest(currentStatus);
+  const cancellable = canCancelRequest(currentStatus);
+  const analyzable = canAnalyzeRequest(currentStatus);
 
   return (
     <div
@@ -196,7 +232,7 @@ function ServiceRequestDetailPage() {
         gap: spacing.lg,
       }}
     >
-      {/* Top Navigation & Back Action */}
+      {/* 1. Top Navigation & Back Action */}
       <div
         style={{
           display: "flex",
@@ -220,7 +256,7 @@ function ServiceRequestDetailPage() {
         </AppButton>
       </div>
 
-      {/* Details Page Header Card */}
+      {/* 2. Details Page Header Card */}
       <AppCard>
         <div
           style={{
@@ -253,7 +289,7 @@ function ServiceRequestDetailPage() {
             </div>
           </div>
 
-          <StatusBadge status={request.status} />
+          <StatusBadge status={currentStatus} />
         </div>
 
         {/* Timestamp metadata */}
@@ -287,7 +323,7 @@ function ServiceRequestDetailPage() {
         </div>
       </AppCard>
 
-      {/* Request Information Card */}
+      {/* 3. Request Information Card */}
       <AppCard>
         <h2
           style={{
@@ -390,7 +426,8 @@ function ServiceRequestDetailPage() {
                   <span style={{ fontWeight: 600 }}>Latitude:</span> {latDisplay}
                 </div>
                 <div>
-                  <span style={{ fontWeight: 600 }}>Longitude:</span> {lngDisplay}
+                  <span style={{ fontWeight: 600 }}>Longitude:</span>{" "}
+                  {lngDisplay}
                 </div>
               </div>
             </div>
@@ -398,120 +435,156 @@ function ServiceRequestDetailPage() {
         </div>
       </AppCard>
 
-      {/* Analysis Information Card */}
-      <AppCard>
-        <h2
-          style={{
-            ...typography.cardHeading,
-            margin: `0 0 ${spacing.md}px 0`,
-            color: colors.textPrimary,
-          }}
-        >
-          Analysis Information
-        </h2>
+      {/* 4. Analysis Section - Organized primarily around authoritative request.status */}
+      {!isCancelled && (
+        <div style={{ display: "flex", flexDirection: "column", gap: spacing.md }}>
+          {/* Analysis Error Notification */}
+          {analysisError && <ErrorMessage message={analysisError} />}
 
-        <div
-          style={{
-            display: "grid",
-            gridTemplateColumns: "repeat(auto-fit, minmax(200px, 1fr))",
-            gap: spacing.md,
-            padding: spacing.md,
-            backgroundColor: colors.background,
-            borderRadius: radius.medium,
-            border: `1px solid ${colors.border}`,
-          }}
-        >
-          <div>
-            <span
-              style={{
-                ...typography.small,
-                fontWeight: 600,
-                color: colors.textSecondary,
-                display: "block",
-                marginBottom: spacing.xs,
-              }}
-            >
-              Category
-            </span>
-            <span
-              style={{
-                ...typography.body,
-                fontWeight: 500,
-                color: colors.textPrimary,
-              }}
-            >
-              {categoryDisplay}
-            </span>
-          </div>
+          {/* State A: Created - Prompt to Analyze */}
+          {currentStatus === "Created" && (
+            <AppCard>
+              <div
+                style={{
+                  display: "flex",
+                  justifyContent: "space-between",
+                  alignItems: "center",
+                  flexWrap: "wrap",
+                  gap: spacing.sm,
+                  marginBottom: spacing.sm,
+                }}
+              >
+                <h2
+                  style={{
+                    ...typography.cardHeading,
+                    margin: 0,
+                    color: colors.textPrimary,
+                  }}
+                >
+                  Problem Analysis
+                </h2>
+                <StatusBadge status={currentStatus} />
+              </div>
 
-          <div>
-            <span
-              style={{
-                ...typography.small,
-                fontWeight: 600,
-                color: colors.textSecondary,
-                display: "block",
-                marginBottom: spacing.xs,
-              }}
-            >
-              Urgency
-            </span>
-            <span
-              style={{
-                ...typography.body,
-                fontWeight: 500,
-                color: colors.textPrimary,
-              }}
-            >
-              {urgencyDisplay}
-            </span>
-          </div>
+              <p
+                style={{
+                  ...typography.body,
+                  color: colors.textSecondary,
+                  margin: `0 0 ${spacing.md}px 0`,
+                }}
+              >
+                AssistLK will analyze your description to identify the likely
+                service category and urgency.
+              </p>
 
-          <div>
-            <span
-              style={{
-                ...typography.small,
-                fontWeight: 600,
-                color: colors.textSecondary,
-                display: "block",
-                marginBottom: spacing.xs,
-              }}
-            >
-              Status
-            </span>
-            <StatusBadge status={request.status} />
-          </div>
+              <div>
+                <AppButton
+                  type="button"
+                  variant="primary"
+                  onClick={handleAnalyze}
+                  disabled={isAnalyzing || !analyzable}
+                >
+                  {isAnalyzing ? "Analyzing problem..." : "Analyze Problem"}
+                </AppButton>
+              </div>
+            </AppCard>
+          )}
+
+          {/* State B: Analyzing - Informational State */}
+          {currentStatus === "Analyzing" && (
+            <AppCard>
+              <div
+                style={{
+                  display: "flex",
+                  justifyContent: "space-between",
+                  alignItems: "center",
+                  flexWrap: "wrap",
+                  gap: spacing.sm,
+                  marginBottom: spacing.sm,
+                }}
+              >
+                <h2
+                  style={{
+                    ...typography.cardHeading,
+                    margin: 0,
+                    color: colors.textPrimary,
+                  }}
+                >
+                  Problem Analysis
+                </h2>
+                <StatusBadge status="Analyzing" />
+              </div>
+
+              <div
+                style={{
+                  padding: spacing.md,
+                  backgroundColor: colors.secondaryLight,
+                  borderRadius: radius.medium,
+                  border: `1px solid ${colors.border}`,
+                }}
+              >
+                <p
+                  style={{
+                    ...typography.body,
+                    color: colors.secondary,
+                    margin: 0,
+                    fontWeight: 500,
+                  }}
+                >
+                  Your request is currently being analyzed.
+                </p>
+              </div>
+            </AppCard>
+          )}
+
+          {/* State C: AwaitingInformation - ClarificationSection */}
+          {currentStatus === "AwaitingInformation" && (
+            <ClarificationSection
+              followUpQuestions={
+                analysisResult &&
+                (analysisResult.status === "AwaitingInformation" ||
+                  analysisResult.needsMoreInformation)
+                  ? analysisResult.followUpQuestions
+                  : []
+              }
+              onEdit={() => navigate(`/service-requests/${requestId}/edit`)}
+              onAnalyzeAgain={handleAnalyze}
+              isAnalyzing={isAnalyzing}
+              status={currentStatus}
+            />
+          )}
+
+          {/* State D: Analyzed - AnalysisResultCard */}
+          {currentStatus === "Analyzed" && (
+            <AnalysisResultCard
+              category={
+                (analysisResult?.status === "Analyzed"
+                  ? analysisResult.category
+                  : null) || request.category
+              }
+              urgency={
+                (analysisResult?.status === "Analyzed"
+                  ? analysisResult.urgency
+                  : null) || request.urgency
+              }
+              problemSummary={
+                analysisResult?.status === "Analyzed"
+                  ? analysisResult.problemSummary
+                  : null
+              }
+              confidence={
+                analysisResult?.status === "Analyzed"
+                  ? analysisResult.confidence
+                  : null
+              }
+              status={currentStatus}
+            />
+          )}
         </div>
+      )}
 
-        {/* Display Problem Summary if available from prior analysis */}
-        {problemSummaryDisplay && (
-          <div style={{ marginTop: spacing.md }}>
-            <span
-              style={{
-                ...typography.small,
-                fontWeight: 600,
-                color: colors.textSecondary,
-                display: "block",
-                marginBottom: spacing.xs,
-              }}
-            >
-              Problem Summary
-            </span>
-            <p
-              style={{
-                ...typography.body,
-                color: colors.textPrimary,
-                margin: 0,
-              }}
-            >
-              {problemSummaryDisplay}
-            </p>
-          </div>
-        )}
-      </AppCard>
-
-      {/* Actions & Cancellation Card */}
-      {(editable || cancellable || showCancelConfirm) && (
+      {/* 5. Actions & Cancellation Card - Hidden when Cancelled */}
+      {!isCancelled && (editable || cancellable || showCancelConfirm) && (
         <AppCard>
           <h2
             style={{
@@ -600,7 +673,8 @@ function ServiceRequestDetailPage() {
                 gap: spacing.md,
               }}
             >
-              {editable && (
+              {/* Only show Edit Request here for Created status; AwaitingInformation already has Edit Request in ClarificationSection to avoid duplication */}
+              {editable && currentStatus === "Created" && (
                 <AppButton
                   type="button"
                   variant="primary"

@@ -6,10 +6,35 @@ import {
 } from "react-router-dom";
 
 import LoginPage from "../../features/auth/pages/LoginPage";
+import ServiceRequestListPage from "../../features/serviceRequests/pages/ServiceRequestListPage";
+import CreateServiceRequestPage from "../../features/serviceRequests/pages/CreateServiceRequestPage";
+import ServiceRequestDetailPage from "../../features/serviceRequests/pages/ServiceRequestDetailPage";
+import EditServiceRequestPage from "../../features/serviceRequests/pages/EditServiceRequestPage";
 
 import ProtectedRoute from "../../shared/auth/ProtectedRoute";
+import { useAuthStore } from "../../shared/auth/authStore";
 import AdminLayout from "../../shared/layouts/AdminLayout";
+import CustomerLayout from "../../shared/layouts/CustomerLayout";
 import PlaceholderPage from "../../shared/components/PlaceholderPage";
+
+function RootRedirect() {
+	const user = useAuthStore((state) => state.user);
+	const token = useAuthStore((state) => state.token);
+
+	if (!token || !user) {
+		return <Navigate to="/login" replace />;
+	}
+
+	if (user.role === "Customer") {
+		return <Navigate to="/service-requests" replace />;
+	}
+
+	if (user.role === "Admin") {
+		return <Navigate to="/dashboard" replace />;
+	}
+
+	return <Navigate to="/login" replace />;
+}
 
 function AppRouter() {
 	return (
@@ -20,6 +45,7 @@ function AppRouter() {
 					element={<LoginPage />}
 				/>
 
+				{/* Admin Protected Routes */}
 				<Route
 					element={
 						<ProtectedRoute
@@ -36,9 +62,9 @@ function AppRouter() {
 						/>
 
 						<Route
-							path="/service-requests"
+							path="/admin/service-requests"
 							element={
-								<PlaceholderPage title="Service Requests" />
+								<PlaceholderPage title="Admin Service Requests" />
 							}
 						/>
 
@@ -72,6 +98,37 @@ function AppRouter() {
 					</Route>
 				</Route>
 
+				{/* Customer Protected Routes */}
+				<Route
+					element={
+						<ProtectedRoute
+							allowedRoles={["Customer"]}
+						/>
+					}
+				>
+					<Route element={<CustomerLayout />}>
+						<Route
+							path="/service-requests"
+							element={<ServiceRequestListPage />}
+						/>
+
+						<Route
+							path="/service-requests/new"
+							element={<CreateServiceRequestPage />}
+						/>
+
+						<Route
+							path="/service-requests/:id"
+							element={<ServiceRequestDetailPage />}
+						/>
+
+						<Route
+							path="/service-requests/:id/edit"
+							element={<EditServiceRequestPage />}
+						/>
+					</Route>
+				</Route>
+
 				<Route
 					path="/unauthorized"
 					element={<PlaceholderPage title="Unauthorized" />}
@@ -79,7 +136,7 @@ function AppRouter() {
 
 				<Route
 					path="/"
-					element={<Navigate to="/dashboard" replace />}
+					element={<RootRedirect />}
 				/>
 
 				<Route

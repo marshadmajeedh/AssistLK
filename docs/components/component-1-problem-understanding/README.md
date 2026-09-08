@@ -390,3 +390,78 @@ To prevent accidental data loss in development or production environments, `Post
      RESTART IDENTITY CASCADE;
      ```
 3. **Migration History Preservation**: The `__EFMigrationsHistory` table is strictly protected from truncation to maintain EF Core migration tracking integrity.
+
+---
+
+## 15. Component 1 Frontend Implementation & Automated Testing (Phase F4)
+
+### 15.1 React Architecture & Routes
+The customer-facing interface for Component 1 is built with React 19, Vite 8, and Vanilla CSS design tokens (`web/src/shared/theme.js`). It is housed within `CustomerLayout` under role-protected routes:
+- `/service-requests`: My Requests dashboard (`ServiceRequestListPage`) with status indicators, responsive cards, and create CTA.
+- `/service-requests/new`: Create Service Request page (`CreateServiceRequestPage`) with description, location, and GPS capture.
+- `/service-requests/:id`: Service Request Details page (`ServiceRequestDetailPage`) managing the full Problem Understanding lifecycle.
+- `/service-requests/:id/edit`: Edit Request page (`EditServiceRequestPage`) enabled for `Created` and `AwaitingInformation` states.
+
+### 15.2 Shared & Custom Component Reuse
+- **`AppInput` & `AppTextArea`**: Accessible form controls with `aria-invalid`, `aria-describedby`, label-input association via `useId`, error container alerts, and character counters.
+- **`AppButton`**: Token-styled button supporting `primary`, `secondary`, `outline`, `danger` variants with accessible `type` definitions and disabled states.
+- **`StatusBadge`**: Semantic status rendering supporting all lifecycle states (`Created`, `Analyzing`, `AwaitingInformation`, `Analyzed`, `ReadyForMatching`, `Cancelled`) with textual meaning fallbacks.
+- **`ErrorMessage` & `LoadingSpinner`**: Accessible status announcements with `role="alert"` and `role="status"` / `aria-live="polite"`.
+- **`AnalysisResultCard`**: Structured presentation of analyzed category, urgency, problem summary, and confidence, with safe fallbacks when transient analysis fields are omitted.
+- **`ClarificationSection`**: Renders follow-up questions from the Problem Understanding Agent without fabricating synthetic inquiries, enabling re-analysis and edit loops.
+- **`ReadyForMatchingSection`**: Represents the final Component 1 customer boundary, summarizing confirmed request attributes before handoff.
+
+### 15.3 Geolocation Architecture
+Browser GPS integration is managed via the `useGeolocation` custom hook:
+- **Opt-in Only**: GPS coordinates are never automatically requested on initial render.
+- **Non-blocking Failure**: Geolocation permission denial or timeouts display friendly guidance while manual location text entry remains fully usable.
+- **Exact Coordinate Transmission**: Captured coordinates (`latitude`, `longitude`) are transmitted as numbers or `null`, completely omitting client-side metadata (`customerId`, `category`, `urgency`, `status`).
+
+### 15.4 API Service & Error Normalization
+All HTTP communications are mediated through `serviceRequestService` backed by `apiClient`:
+- `create(data)`: `POST /api/service-requests`
+- `getMyRequests()`: `GET /api/service-requests/my`
+- `getById(id)`: `GET /api/service-requests/{id}`
+- `update(id, data)`: `PUT /api/service-requests/{id}`
+- `cancel(id)`: `POST /api/service-requests/{id}/cancel`
+- `analyze(id)`: `POST /api/service-requests/{id}/analyze`
+- `markReadyForMatching(id)`: `POST /api/service-requests/{id}/ready-for-matching`
+- **`getApiErrorMessage`**: Sanitizes errors, formats ASP.NET Core `ValidationProblemDetails` dictionaries, handles HTTP 409 state conflicts gracefully, and prevents server stack trace leaks.
+
+### 15.5 Problem Understanding Lifecycle UI & Handoff Boundary
+1. **`Created`**: Customer submits request. UI displays "Analyze Problem", "Edit Request", and "Cancel Request".
+2. **`Analyzing`**: Temporary transitional state while the AI agent processes the request.
+3. **`AwaitingInformation`**: Agent requires additional details. UI displays specific follow-up questions, preventing generic AI failure alerts and offering "Edit Request" and "Analyze Again".
+4. **`Analyzed`**: Analysis results presented for customer review. Customer has authoritative control to cancel or click "Confirm for Provider Matching".
+5. **`ReadyForMatching`**: Irreversible handoff boundary for Component 1. Persisted status is authoritative; edit, cancel, and analysis actions are completely removed. Ready for Component 2 (Provider Matching).
+6. **`Cancelled`**: Terminal cancelled state. Read-only view with all action triggers deactivated.
+
+### 15.6 Automated Testing Suite & Verification
+The testing infrastructure is configured with Vitest, React Testing Library, JSDOM, User Event, and Jest-DOM matchers (`@testing-library/jest-dom/vitest`).
+
+**Testing Command**:
+```powershell
+# In web directory:
+npm test
+```
+
+**Actual Observed Test Results (Phase F4 Complete)**:
+- **Test Files**: 16 passed (16 total)
+- **Tests**: 86 passed (86 total, 0 failed, 0 skipped)
+- **Test Suites Covered**:
+  1. `AppInput.test.jsx` (5 tests)
+  2. `AppTextArea.test.jsx` (4 tests)
+  3. `StatusBadge.test.jsx` (4 tests)
+  4. `ProtectedRoute.test.jsx` (3 tests)
+  5. `CustomerLayout.test.jsx` (2 tests)
+  6. `AppRouter.test.jsx` (6 tests - guest, customer, admin role boundaries)
+  7. `serviceRequestService.test.js` (7 tests - API service methods & endpoints)
+  8. `getApiErrorMessage.test.js` (9 tests - status errors, 400 validation, 409 conflict)
+  9. `ServiceRequestCard.test.jsx` (4 tests - metadata rendering, navigation, fallbacks)
+  10. `AnalysisResultCard.test.jsx` (3 tests - transient fields, confidence format, fallbacks)
+  11. `ClarificationSection.test.jsx` (4 tests - questions display, callbacks, busy state)
+  12. `ReadyForMatchingSection.test.jsx` (3 tests - handoff boundary, navigation, fallbacks)
+  13. `ServiceRequestListPage.test.jsx` (6 tests - loading, empty, cards, error, array safety)
+  14. `CreateServiceRequestPage.test.jsx` (7 tests - validation, GPS capture, denial, manual location)
+  15. `EditServiceRequestPage.test.jsx` (6 tests - prepopulation, status guards, payload safety)
+  16. `ServiceRequestDetailPage.test.jsx` (13 tests - full lifecycle, analysis, confirmation, cancel, 409)

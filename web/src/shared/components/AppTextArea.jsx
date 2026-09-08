@@ -6,21 +6,21 @@ import {
   typography,
 } from "../theme";
 
-function AppInput({
+function AppTextArea({
   label,
   error,
   id,
-  ...inputProps
+  ...textAreaProps
 }) {
   const generatedId = useId();
-  const inputId = id ?? inputProps.id ?? generatedId;
-  const errorId = error ? `${inputId}-error` : undefined;
+  const textareaId = id ?? textAreaProps.id ?? generatedId;
+  const errorId = error ? `${textareaId}-error` : undefined;
 
   return (
     <div>
       {label && (
         <label
-          htmlFor={inputId}
+          htmlFor={textareaId}
           style={{
             ...typography.body,
             display: "block",
@@ -32,14 +32,18 @@ function AppInput({
         </label>
       )}
 
-      <input
-        id={inputId}
+      <textarea
+        id={textareaId}
         aria-invalid={Boolean(error)}
         aria-describedby={errorId}
-        {...inputProps}
+        {...textAreaProps}
         style={{
           ...inputStyles,
-          ...(inputProps.style ?? {}),
+          minHeight: 120,
+          resize: "vertical",
+          paddingTop: spacing.sm,
+          paddingBottom: spacing.sm,
+          ...(textAreaProps.style ?? {}),
         }}
       />
 
@@ -60,4 +64,4 @@ function AppInput({
   );
 }
 
-export default AppInput;
+export default AppTextArea;

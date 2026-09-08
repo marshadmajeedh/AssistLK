@@ -31,15 +31,16 @@ function LoginPage() {
     try {
       const user = await login(email, password);
 
-      if (user.role !== "Admin") {
+      if (user.role === "Admin") {
+        navigate("/dashboard");
+      } else if (user.role === "Customer") {
+        navigate("/service-requests");
+      } else {
         useAuthStore.getState().logout();
         setError(
-          "This web portal is available to administrators only."
+          `Role '${user.role}' is not authorized to access this portal.`
         );
-        return;
       }
-
-      navigate("/dashboard");
     } catch {
       // Error is already stored in authStore.
     }
@@ -72,7 +73,7 @@ function LoginPage() {
               color: colors.textPrimary,
             }}
           >
-            AssistLK Admin
+            AssistLK
           </h1>
 
           <p

@@ -91,3 +91,52 @@ export const pageStyles = {
 
   fontFamily: typography.fontFamily,
 };
+
+export const badgeStyles = {
+  base: {
+    display: "inline-flex",
+    alignItems: "center",
+    padding: `${spacing.xs}px ${spacing.sm}px`,
+    borderRadius: radius.pill,
+    fontFamily: typography.fontFamily,
+    fontSize: typography.small.fontSize,
+    fontWeight: 600,
+    lineHeight: typography.small.lineHeight,
+    whiteSpace: "nowrap",
+  },
+
+  Created: {
+    backgroundColor: colors.neutralLight,
+    color: colors.textPrimary,
+  },
+
+  Analyzing: {
+    backgroundColor: colors.secondaryLight,
+    color: colors.secondary,
+  },
+
+  AwaitingInformation: {
+    backgroundColor: colors.warningLight,
+    color: colors.warning,
+  },
+
+  Analyzed: {
+    backgroundColor: colors.successLight,
+    color: colors.success,
+  },
+
+  ReadyForMatching: {
+    backgroundColor: colors.primaryLight,
+    color: colors.primary,
+  },
+
+  Cancelled: {
+    backgroundColor: colors.errorLight,
+    color: colors.error,
+  },
+
+  default: {
+    backgroundColor: colors.neutralLight,
+    color: colors.textSecondary,
+  },
+};

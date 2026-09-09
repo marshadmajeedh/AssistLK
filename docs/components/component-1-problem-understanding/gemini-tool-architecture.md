@@ -2,7 +2,7 @@
 
 **Component:** Component 1 — Problem Understanding Agent  
 **Agent:** `ProblemUnderstandingAgent`  
-**LLM:** Google Gemini (`gemini-2.5-flash`)  
+**LLM:** Google Gemini (`gemini-3.6-flash`)  
 **Updated:** 2026-09-09
 
 ---
@@ -70,7 +70,7 @@ ProblemUnderstandingAgent
       ├─ Step 1: LocationExtractionTool   (optional enrichment — failure is non-fatal)
       │
       ├─ Step 2: GeminiService            ← PRIMARY reasoning engine
-      │          gemini-2.5-flash
+      │          gemini-3.6-flash
       │          Produces: category, summary, urgency, confidence,
       │                    needsMoreInformation, followUpQuestions
       │          ↓

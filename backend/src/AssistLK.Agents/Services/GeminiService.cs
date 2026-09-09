@@ -8,26 +8,36 @@ using Microsoft.Extensions.Logging;
 namespace AssistLK.Agents.Services;
 
 /// <summary>
-/// Service that interacts with Google Gemini API (gemini-2.5-flash) for reasoning.
+/// Service that interacts with Google Gemini API (gemini-3.6-flash) for reasoning.
 /// Safely reads credentials, makes HTTP requests, and handles failures without exposing secrets.
 /// </summary>
 public class GeminiService : IGeminiService
 {
+    public const string DefaultModel = "gemini-3.6-flash";
+    private const string BaseEndpoint = "https://generativelanguage.googleapis.com/v1beta/models";
+    private const int MaxAttempts = 3;
+
     private readonly HttpClient _httpClient;
     private readonly IConfiguration? _configuration;
     private readonly ILogger<GeminiService>? _logger;
     private readonly string _model;
-    private const string BaseEndpoint = "https://generativelanguage.googleapis.com/v1beta/models";
+    private readonly TimeSpan? _customRetryDelay;
+
+    public string Model => _model;
 
     public GeminiService(
         HttpClient? httpClient = null,
         IConfiguration? configuration = null,
-        ILogger<GeminiService>? logger = null)
+        ILogger<GeminiService>? logger = null,
+        TimeSpan? retryDelay = null)
     {
         _httpClient = httpClient ?? new HttpClient();
         _configuration = configuration;
         _logger = logger;
-        _model = configuration?["Gemini:Model"] ?? "gemini-2.5-flash";
+        _customRetryDelay = retryDelay;
+
+        var configuredModel = configuration?["Gemini:Model"];
+        _model = !string.IsNullOrWhiteSpace(configuredModel) ? configuredModel.Trim() : DefaultModel;
     }
 
     public async Task<string?> GenerateContentAsync(
@@ -39,8 +49,8 @@ public class GeminiService : IGeminiService
 
         // Diagnostic: log whether API key resolved — never log the key value itself
         _logger?.LogInformation(
-            "Gemini API key loaded: {Loaded}",
-            !string.IsNullOrWhiteSpace(apiKey));
+            "Gemini API key configured: {Configured}",
+            !string.IsNullOrWhiteSpace(apiKey) ? "true" : "false");
 
         if (string.IsNullOrWhiteSpace(apiKey))
         {
@@ -58,7 +68,7 @@ public class GeminiService : IGeminiService
             }
 
             _logger?.LogWarning(
-                "Gemini unavailable reason: API key not configured. Offline simulation disabled — returning null for safe degradation.");
+                "Gemini fallback triggered: reason - API key not configured and offline simulation disabled");
             return null;
         }
 
@@ -97,36 +107,60 @@ public class GeminiService : IGeminiService
                 };
             }
 
-            using var content = new StringContent(
-                payload.ToJsonString(),
-                Encoding.UTF8,
-                "application/json");
+            var payloadJson = payload.ToJsonString();
 
-            // Diagnostic: signal API call start — never log requestUrl or apiKey
-            _logger?.LogInformation("Calling Gemini model: {Model}", _model);
-
-            using var response = await _httpClient.PostAsync(requestUrl, content, cancellationToken);
-
-            if (!response.IsSuccessStatusCode)
+            for (var attempt = 1; attempt <= MaxAttempts; attempt++)
             {
-                // Never log requestUrl or apiKey
+                using var content = new StringContent(
+                    payloadJson,
+                    Encoding.UTF8,
+                    "application/json");
+
+                // Diagnostic: signal API call start — never log requestUrl or apiKey
+                _logger?.LogInformation("Calling Gemini model: {Model}", _model);
+                _logger?.LogInformation("Gemini execution started");
+
+                using var response = await _httpClient.PostAsync(requestUrl, content, cancellationToken);
+
+                if (response.IsSuccessStatusCode)
+                {
+                    var responseJson = await response.Content.ReadAsStringAsync(cancellationToken);
+
+                    // Diagnostic: log receipt — never log the raw JSON body
+                    _logger?.LogInformation("Gemini response received: true");
+
+                    return ExtractTextFromResponse(responseJson);
+                }
+
+                var statusCode = (int)response.StatusCode;
+
+                // Transient errors to retry: HTTP 429 (TooManyRequests), HTTP 503 (ServiceUnavailable)
+                var isTransient = response.StatusCode == System.Net.HttpStatusCode.TooManyRequests ||
+                                  response.StatusCode == System.Net.HttpStatusCode.ServiceUnavailable;
+
+                if (isTransient && attempt < MaxAttempts)
+                {
+                    _logger?.LogWarning(
+                        "Gemini transient failure: HTTP {StatusCode}. Retrying attempt {Attempt} of {MaxAttempts}...",
+                        statusCode, attempt, MaxAttempts);
+
+                    var delay = _customRetryDelay ?? TimeSpan.FromMilliseconds(500 * attempt);
+                    if (delay > TimeSpan.Zero)
+                    {
+                        await Task.Delay(delay, cancellationToken);
+                    }
+                    continue;
+                }
+
+                // Non-retriable (400, 401, 403, 404, etc.) or max retries exhausted
                 _logger?.LogWarning(
-                    "Gemini API returned non-success HTTP status code: {StatusCode}",
-                    (int)response.StatusCode);
-                _logger?.LogInformation(
-                    "Gemini response received: {Received}", false);
+                    "Gemini fallback triggered: reason - non-success HTTP status code {StatusCode}",
+                    statusCode);
+                _logger?.LogInformation("Gemini response received: false");
                 return null;
             }
 
-            var responseJson = await response.Content.ReadAsStringAsync(cancellationToken);
-
-            // Diagnostic: log receipt and length — never log the raw JSON body
-            _logger?.LogInformation(
-                "Gemini response received: {Received}, response length: {Length}",
-                !string.IsNullOrWhiteSpace(responseJson),
-                responseJson.Length);
-
-            return ExtractTextFromResponse(responseJson);
+            return null;
         }
         catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
         {
@@ -136,7 +170,7 @@ public class GeminiService : IGeminiService
         {
             // Never log secrets or URLs with secrets
             _logger?.LogError(
-                "Gemini API call encountered an unexpected failure: {Message}",
+                "Gemini fallback triggered: reason - {Message}",
                 ex.Message);
             return null;
         }

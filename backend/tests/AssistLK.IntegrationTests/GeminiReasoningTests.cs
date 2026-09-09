@@ -2,6 +2,7 @@ using AssistLK.Agents.Abstractions;
 using AssistLK.Agents.Agents;
 using AssistLK.Agents.Core;
 using AssistLK.Agents.Models;
+using AssistLK.Agents.Services;
 using AssistLK.Agents.Tools;
 using AssistLK.Application.Interfaces;
 using AssistLK.Application.Services;
@@ -9,6 +10,7 @@ using AssistLK.Domain.Entities;
 using AssistLK.Domain.Enums;
 using AssistLK.Infrastructure.Data;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Logging.Abstractions;
 
 namespace AssistLK.IntegrationTests;
 
@@ -57,7 +59,7 @@ public class GeminiReasoningTests
         var toolExecutor = new ToolExecutor(toolRegistry);
 
         var fakeGemini = new FakeGeminiService();
-        var agent = new ProblemUnderstandingAgent(toolExecutor, fakeGemini);
+        var agent = new ProblemUnderstandingAgent(toolExecutor, fakeGemini, NullLogger<ProblemUnderstandingAgent>.Instance);
 
         return (agent, fakeGemini);
     }
@@ -132,7 +134,7 @@ public class GeminiReasoningTests
         toolRegistry.Register(new ServiceKnowledgeTool());
         var toolExecutor = new ToolExecutor(toolRegistry);
 
-        var agent = new ProblemUnderstandingAgent(toolExecutor);
+        var agent = new ProblemUnderstandingAgent(toolExecutor, new GeminiService(), NullLogger<ProblemUnderstandingAgent>.Instance);
         var context = BuildContext("Water leaking heavily from kitchen sink pipe");
 
         var result = await agent.ExecuteAsync(context);
@@ -370,7 +372,7 @@ public class GeminiReasoningTests
 
             ToolExec = new ToolExecutor(ToolReg);
             FakeGemini = new FakeGeminiService();
-            Agent = new ProblemUnderstandingAgent(ToolExec, FakeGemini);
+            Agent = new ProblemUnderstandingAgent(ToolExec, FakeGemini, NullLogger<ProblemUnderstandingAgent>.Instance);
 
             Registry = new AgentRegistry();
             Registry.Register(Agent);

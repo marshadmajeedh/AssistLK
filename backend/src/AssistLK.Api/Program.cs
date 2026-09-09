@@ -80,8 +80,15 @@ builder.Services.AddScoped<
     AgentContextService>();
 builder.Services.AddScoped<
     AgentSafetyService>();
-builder.Services.AddSingleton<
-    AgentRegistry>();
+// AgentRegistry is Scoped so that each request gets fresh Scoped agent instances.
+// Registering as Singleton with Scoped dependencies would create a captive dependency.
+builder.Services.AddScoped<AgentRegistry>(sp =>
+{
+    var registry = new AgentRegistry();
+    registry.Register(sp.GetRequiredService<DemoProblemAgent>());
+    registry.Register(sp.GetRequiredService<ProblemUnderstandingAgent>());
+    return registry;
+});
 builder.Services.AddSingleton<
     AgentSafetyPolicyEngine>();
 builder.Services.AddScoped<
@@ -93,8 +100,16 @@ builder.Services.AddScoped<
     DemoProblemAgent>();
 builder.Services.AddScoped<
     ProblemUnderstandingAgent>();
-builder.Services.AddSingleton<
-    ToolRegistry>();
+// ToolRegistry is Scoped so that each request gets fresh Scoped tool instances.
+builder.Services.AddScoped<ToolRegistry>(sp =>
+{
+    var registry = new ToolRegistry();
+    registry.Register(sp.GetRequiredService<DemoProviderSearchTool>());
+    registry.Register(sp.GetRequiredService<ProblemClassificationTool>());
+    registry.Register(sp.GetRequiredService<LocationExtractionTool>());
+    registry.Register(sp.GetRequiredService<ServiceKnowledgeTool>());
+    return registry;
+});
 builder.Services.AddScoped<
     ToolExecutor>();
 builder.Services.AddScoped<
@@ -194,49 +209,9 @@ builder.Services.AddCors(options =>
 
 var app = builder.Build();
 
-using (var scope = app.Services.CreateScope())
-{
-    var registry =
-        scope.ServiceProvider
-        .GetRequiredService<AgentRegistry>();
-
-    var demoAgent =
-        scope.ServiceProvider
-        .GetRequiredService<DemoProblemAgent>();
-
-    registry.Register(demoAgent);
-
-    var problemUnderstandingAgent =
-        scope.ServiceProvider
-        .GetRequiredService<ProblemUnderstandingAgent>();
-
-    registry.Register(problemUnderstandingAgent);
-}
-
-using (var scope = app.Services.CreateScope())
-{
-    var registry =
-        scope.ServiceProvider
-        .GetRequiredService<ToolRegistry>();
-
-    var providerTool =
-        scope.ServiceProvider
-        .GetRequiredService<DemoProviderSearchTool>();
-
-    registry.Register(providerTool);
-
-    registry.Register(
-        scope.ServiceProvider
-        .GetRequiredService<ProblemClassificationTool>());
-
-    registry.Register(
-        scope.ServiceProvider
-        .GetRequiredService<LocationExtractionTool>());
-
-    registry.Register(
-        scope.ServiceProvider
-        .GetRequiredService<ServiceKnowledgeTool>());
-}
+// Note: AgentRegistry and ToolRegistry are now Scoped and populated via factory
+// delegates above. The previous post-build scope blocks that caused captive
+// dependency (Singleton holding Scoped services) have been removed.
 
 // -------------------------------------------------------
 // Middleware pipeline

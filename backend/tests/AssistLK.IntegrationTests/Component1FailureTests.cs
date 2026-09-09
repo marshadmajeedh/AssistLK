@@ -1,6 +1,7 @@
 using AssistLK.Agents.Agents;
 using AssistLK.Agents.Core;
 using AssistLK.Agents.Models;
+using AssistLK.Agents.Services;
 using AssistLK.Agents.Tools;
 using AssistLK.Application.Interfaces;
 using AssistLK.Application.Services;
@@ -8,6 +9,7 @@ using AssistLK.Domain.Entities;
 using AssistLK.Domain.Enums;
 using AssistLK.Infrastructure.Data;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Logging.Abstractions;
 
 namespace AssistLK.IntegrationTests;
 
@@ -189,7 +191,7 @@ public class Component1FailureTests
         var toolRegistry = new ToolRegistry();
         var toolExecutor = new ToolExecutor(toolRegistry);
         var registry = new AgentRegistry();
-        registry.Register(new ProblemUnderstandingAgent(toolExecutor));
+        registry.Register(new ProblemUnderstandingAgent(toolExecutor, new GeminiService(), NullLogger<ProblemUnderstandingAgent>.Instance));
         var orchestrator = new AgentOrchestrator(registry);
 
         var workflow = new ProblemUnderstandingWorkflowService(
@@ -217,16 +219,21 @@ public class Component1FailureTests
     }
 
     [Fact]
-    public async Task Agent_DegradesSafelyToUnclassifiedWhenClassificationToolFails()
+    public async Task Agent_ContinuesWithGeminiWhenClassificationToolMissing()
     {
-        // Tool executor where classification tool is NOT registered (will fail with TOOL_NOT_FOUND)
+        // Fixed pipeline: classification tool is NOT registered (returns TOOL_NOT_FOUND),
+        // but Gemini is now the primary engine and runs regardless of tool outcome.
         var toolRegistry = new ToolRegistry();
         // Register location and service knowledge, but intentionally omit ProblemClassificationTool
         toolRegistry.Register(new LocationExtractionTool());
         toolRegistry.Register(new ServiceKnowledgeTool());
 
         var toolExecutor = new ToolExecutor(toolRegistry);
-        var agent = new ProblemUnderstandingAgent(toolExecutor);
+        // GeminiService uses offline simulation (no API key in test env)
+        var agent = new ProblemUnderstandingAgent(
+            toolExecutor,
+            new GeminiService(),
+            NullLogger<ProblemUnderstandingAgent>.Instance);
 
         var context = new AgentContext
         {
@@ -248,11 +255,11 @@ public class Component1FailureTests
         Assert.True(result.Success);
         var output = Assert.IsType<ProblemUnderstandingOutput>(result.Data);
 
-        // Safe degradation: must NOT fabricate a category
-        Assert.Equal("Unclassified", output.Category);
-        Assert.True(output.NeedsMoreInformation);
-        Assert.Equal(ServiceRequestUrgency.Unknown, output.Urgency);
-        Assert.NotEmpty(output.FollowUpQuestions);
+        // Gemini runs as primary engine: offline simulation identifies burst pipe as Plumbing.
+        // The classification tool being missing is non-fatal — Gemini output is authoritative.
+        Assert.Equal("Plumbing", output.Category);
+        Assert.Equal("Analysed", result.NextAction);
+        Assert.False(output.NeedsMoreInformation);
     }
 
     private sealed class FaultyAgent : AssistLK.Agents.Abstractions.IAgent

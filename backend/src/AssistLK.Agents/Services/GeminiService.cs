@@ -37,6 +37,11 @@ public class GeminiService : IGeminiService
     {
         var apiKey = ResolveApiKey(_configuration);
 
+        // Diagnostic: log whether API key resolved — never log the key value itself
+        _logger?.LogInformation(
+            "Gemini API key loaded: {Loaded}",
+            !string.IsNullOrWhiteSpace(apiKey));
+
         if (string.IsNullOrWhiteSpace(apiKey))
         {
             var allowOffline = true;
@@ -47,11 +52,13 @@ public class GeminiService : IGeminiService
 
             if (allowOffline)
             {
-                _logger?.LogInformation("No GOOGLE_API_KEY configured. Utilizing offline simulation for test/dev environment.");
+                _logger?.LogInformation(
+                    "Gemini unavailable reason: API key not configured. Engaging offline simulation (test/dev environment).");
                 return SimulateOfflineReasoning(prompt);
             }
 
-            _logger?.LogWarning("Gemini API key is not configured. Returning null for safe degradation.");
+            _logger?.LogWarning(
+                "Gemini unavailable reason: API key not configured. Offline simulation disabled — returning null for safe degradation.");
             return null;
         }
 
@@ -95,6 +102,9 @@ public class GeminiService : IGeminiService
                 Encoding.UTF8,
                 "application/json");
 
+            // Diagnostic: signal API call start — never log requestUrl or apiKey
+            _logger?.LogInformation("Calling Gemini model: {Model}", _model);
+
             using var response = await _httpClient.PostAsync(requestUrl, content, cancellationToken);
 
             if (!response.IsSuccessStatusCode)
@@ -103,10 +113,19 @@ public class GeminiService : IGeminiService
                 _logger?.LogWarning(
                     "Gemini API returned non-success HTTP status code: {StatusCode}",
                     (int)response.StatusCode);
+                _logger?.LogInformation(
+                    "Gemini response received: {Received}", false);
                 return null;
             }
 
             var responseJson = await response.Content.ReadAsStringAsync(cancellationToken);
+
+            // Diagnostic: log receipt and length — never log the raw JSON body
+            _logger?.LogInformation(
+                "Gemini response received: {Received}, response length: {Length}",
+                !string.IsNullOrWhiteSpace(responseJson),
+                responseJson.Length);
+
             return ExtractTextFromResponse(responseJson);
         }
         catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)

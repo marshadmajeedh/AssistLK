@@ -13,7 +13,7 @@ namespace AssistLK.Agents.Agents;
 /// <summary>
 /// Component 1 – Problem Understanding Agent.
 ///
-/// Upgraded to LLM-powered reasoning using Google Gemini API (gemini-2.5-flash).
+/// Upgraded to LLM-powered reasoning using Google Gemini API (gemini-3.6-flash).
 /// Responsibility: Determine what kind of help the customer actually needs
 /// by analysing their natural-language service request using Gemini reasoning
 /// and producing a structured classification result.
@@ -188,6 +188,8 @@ public sealed class ProblemUnderstandingAgent : IAgent
         var prompt = BuildPrompt(description, locationText);
         string? rawGeminiResponse = null;
 
+        _logger.LogInformation("Gemini execution started");
+
         try
         {
             rawGeminiResponse = await _geminiService.GenerateContentAsync(
@@ -199,17 +201,24 @@ public sealed class ProblemUnderstandingAgent : IAgent
         {
             // Log the failure (never log prompt, response, or secrets).
             _logger.LogWarning(
-                "Agent tool execution failed: {Message}",
+                "Gemini fallback triggered: reason - {Message}",
                 ex.Message);
             rawGeminiResponse = null;
         }
 
         // Safe degradation — only when Gemini itself fails or returns unparseable output
-        if (string.IsNullOrWhiteSpace(rawGeminiResponse) ||
-            !TryParseGeminiResponse(rawGeminiResponse, out var parsedOutput))
+        if (string.IsNullOrWhiteSpace(rawGeminiResponse))
         {
             _logger.LogWarning(
-                "Gemini reasoning produced no usable output. Returning degraded response.");
+                "Gemini fallback triggered: reason - Gemini reasoning returned null or empty response. Returning degraded response.");
+            var degraded = CreateDegradedOutput(locationText);
+            return (degraded, toolCalls);
+        }
+
+        if (!TryParseGeminiResponse(rawGeminiResponse, out var parsedOutput))
+        {
+            _logger.LogWarning(
+                "Gemini fallback triggered: reason - Gemini reasoning produced unparseable JSON. Returning degraded response.");
             var degraded = CreateDegradedOutput(locationText);
             return (degraded, toolCalls);
         }

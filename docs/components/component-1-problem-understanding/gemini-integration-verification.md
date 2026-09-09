@@ -3,7 +3,7 @@
 **Branch:** `feature/component-1-gemini-agent-integration`  
 **Baseline Branch:** `feature/component-1-problem-understanding-agent` (via PR #28 / PR #29)  
 **Component:** Component 1 – Problem Understanding Agent  
-**Model:** Google Gemini (`gemini-2.5-flash`)  
+**Model:** Google Gemini (`gemini-3.6-flash`)  
 **Status:** RELEASE READY (Ready for Pull Request Review)
 
 ---
@@ -59,7 +59,7 @@ ProblemUnderstandingAgent
        │
        ├──► 1. ToolExecutor: LocationExtractionTool (Deterministic Normalization)
        ├──► 2. ToolExecutor: ProblemClassificationTool (Deterministic Baseline Validation)
-       ├──► 3. IGeminiService / GeminiService (gemini-2.5-flash LLM Reasoning)
+       ├──► 3. IGeminiService / GeminiService (gemini-3.6-flash LLM Reasoning)
        ├──► 4. ToolExecutor: ServiceKnowledgeTool (Domain Knowledge & Safe Terminology)
        └──► 5. Safety Policy Engine & Memory Enforcement
                    │
@@ -94,7 +94,7 @@ public interface IGeminiService
 ```
 
 ### Key Design Highlights:
-1. **Model:** Google Gemini `gemini-2.5-flash` endpoint (`v1beta`).
+1. **Model:** Google Gemini `gemini-3.6-flash` endpoint (`v1beta`).
 2. **Configuration Resolution Order:**
    - `builder.Configuration["GOOGLE_API_KEY"]`
    - `builder.Configuration["Gemini:ApiKey"]`

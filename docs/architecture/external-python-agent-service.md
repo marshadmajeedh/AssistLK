@@ -33,21 +33,23 @@ graph TD
 - **Location:** `backend/src/AssistLK.Agents`
 - **Language:** C# (.NET 8)
 - **Used when:**
-  - Agent requires tight, low-latency integration with .NET application workflows.
-  - Agent directly uses existing domain services, EF Core repositories, and in-memory caches.
+  - Agent requires tight, low-latency in-process integration with .NET application workflows.
+  - Agent uses type-safe .NET abstractions, ToolExecutor, and shared agent infrastructure without out-of-process network overhead.
   - Agent needs shared application services and direct dependency injection.
 - **Example:** `ProblemUnderstandingAgent` (Component 1)
 
 ```text
 Customer Request
        ↓
-.NET Workflow
+.NET Workflow (Application Layer)
        ↓
 .NET Agent (IAgent)
        ↓
 Tools (IAgentTool)
        ↓
-Domain Services
+Reasoning Output (DTO)
+       ↓
+Application Service Persists to Database
 ```
 
 ---

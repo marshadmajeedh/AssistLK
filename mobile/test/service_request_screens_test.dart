@@ -287,6 +287,39 @@ void main() {
       await tester.pumpAndSettle();
       expect(tester.takeException(), isNull);
     });
+
+    testWidgets(
+        'handles mouse hover and pointer movement across header action button and list without hit test layout errors',
+        (tester) async {
+      mockService.mockRequests = [
+        ServiceRequestModel(
+          serviceRequestId: 'req-1',
+          customerId: 'cust-1',
+          category: 'Plumbing',
+          description: 'Bathroom tap is dripping continuously',
+          locationText: 'Colombo 03',
+          urgency: ServiceRequestUrgency.low,
+          status: ServiceRequestStatus.created,
+          createdAt: DateTime(2026, 9, 9),
+          updatedAt: DateTime(2026, 9, 9),
+        ),
+      ];
+
+      await tester.pumpWidget(buildApp(const CustomerHomeScreen()));
+      await tester.pumpAndSettle();
+
+      final gesture = await tester.createGesture(kind: PointerDeviceKind.mouse);
+      await gesture.addPointer(location: Offset.zero);
+      addTearDown(gesture.removePointer);
+
+      // Hover over header action button and request cards
+      await gesture.moveTo(tester.getCenter(find.text('Create Request').first));
+      await tester.pump();
+      await gesture.moveTo(tester.getCenter(find.text('My Service Requests')));
+      await tester.pump();
+      await gesture.moveTo(tester.getCenter(find.text('Bathroom tap is dripping continuously')));
+      await tester.pump();
+    });
   });
 
   group('CreateServiceRequestScreen', () {

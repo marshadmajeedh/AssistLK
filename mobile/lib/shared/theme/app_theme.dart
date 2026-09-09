@@ -40,7 +40,7 @@ class AppTheme {
           backgroundColor: AppColors.primary,
           foregroundColor: AppColors.surface,
 
-          minimumSize: const Size.fromHeight(48),
+          minimumSize: const Size(0, 48),
 
           padding: const EdgeInsets.symmetric(
             horizontal: AppSpacing.md,
@@ -60,7 +60,7 @@ class AppTheme {
         style: OutlinedButton.styleFrom(
           foregroundColor: AppColors.primary,
 
-          minimumSize: const Size.fromHeight(48),
+          minimumSize: const Size(0, 48),
 
           side: const BorderSide(color: AppColors.primary),
 

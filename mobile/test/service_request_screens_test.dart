@@ -1,3 +1,4 @@
+import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:mobile/core/api/api_client.dart';
@@ -20,6 +21,7 @@ import 'package:mobile/features/service_requests/services/service_request_servic
 import 'package:mobile/features/service_requests/widgets/analysis_result_card.dart';
 import 'package:mobile/features/service_requests/widgets/clarification_section.dart';
 import 'package:mobile/features/service_requests/widgets/ready_for_matching_section.dart';
+import 'package:mobile/shared/theme/app_theme.dart';
 import 'package:provider/provider.dart';
 
 class MockServiceRequestService extends ServiceRequestService {
@@ -121,6 +123,7 @@ void main() {
         ),
       ],
       child: MaterialApp(
+        theme: AppTheme.lightTheme,
         home: child,
       ),
     );
@@ -167,6 +170,39 @@ void main() {
       expect(find.text('Bathroom tap is dripping continuously'), findsOneWidget);
       expect(find.text('Created'), findsOneWidget);
       expect(find.text('Low'), findsOneWidget);
+    });
+
+    testWidgets(
+        'handles mouse hover and pointer movement across header action button and list without hit test layout errors',
+        (tester) async {
+      mockService.mockRequests = [
+        ServiceRequestModel(
+          serviceRequestId: 'req-1',
+          customerId: 'cust-1',
+          category: 'Plumbing',
+          description: 'Bathroom tap is dripping continuously',
+          locationText: 'Colombo 03',
+          urgency: ServiceRequestUrgency.low,
+          status: ServiceRequestStatus.created,
+          createdAt: DateTime(2026, 9, 9),
+          updatedAt: DateTime(2026, 9, 9),
+        ),
+      ];
+
+      await tester.pumpWidget(buildApp(const CustomerHomeScreen()));
+      await tester.pumpAndSettle();
+
+      final gesture = await tester.createGesture(kind: PointerDeviceKind.mouse);
+      await gesture.addPointer(location: Offset.zero);
+      addTearDown(gesture.removePointer);
+
+      // Hover over header action button and request cards
+      await gesture.moveTo(tester.getCenter(find.text('Create Request').first));
+      await tester.pump();
+      await gesture.moveTo(tester.getCenter(find.text('My Service Requests')));
+      await tester.pump();
+      await gesture.moveTo(tester.getCenter(find.text('Bathroom tap is dripping continuously')));
+      await tester.pump();
     });
   });
 

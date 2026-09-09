@@ -1,16 +1,54 @@
-# React + Vite
+# AssistLK Web Frontend (`web/`)
 
-This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
+React 18 + Vite frontend for AssistLK emergency and skilled service coordination.
 
-Currently, two official plugins are available:
+---
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Oxc](https://oxc.rs)
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/)
+## Quick Start
 
-## React Compiler
+### 1. Install Dependencies
+```bash
+cd web
+npm install
+```
 
-The React Compiler is not enabled on this template because of its impact on dev & build performances. To add it, see [this documentation](https://react.dev/learn/react-compiler/installation).
+### 2. Environment Configuration
+Copy `.env.example` to `.env`:
+```bash
+cp .env.example .env
+```
+Default configuration:
+```env
+VITE_API_BASE_URL=http://localhost:5012
+```
 
-## Expanding the ESLint configuration
+### 3. Run Development Server
+```bash
+npm run dev
+```
 
-If you are developing a production application, we recommend using TypeScript with type-aware lint rules enabled. Check out the [TS template](https://github.com/vitejs/vite/tree/main/packages/create-vite/template-react-ts) for information on how to integrate TypeScript and [`typescript-eslint`](https://typescript-eslint.io) in your project.
+### 4. Run Tests & Linter
+```bash
+npm test          # Run Vitest test suite
+npm run lint      # Run ESLint checks
+npm run build     # Validate production build
+```
+
+---
+
+## Directory Conventions for Teammates
+
+```text
+web/src/
+├── app/                  # Application routing (AppRouter.jsx)
+├── features/             # Vertical component feature modules
+│   ├── serviceRequests/  # Component 1 (Problem Understanding)
+│   ├── providers/        # Component 2 (Provider Management & Matching)
+│   ├── quotations/       # Component 3 (Quotations & Bookings)
+│   ├── tracking/         # Component 4 (Service Tracking & Feedback)
+│   └── auth/             # Login & Authentication
+└── shared/               # Shared Design System, API client & Layouts
+```
+
+For complete team conventions, theme tokens, and component patterns, read:
+👉 **[React Development Guide](../docs/development/react-development-guide.md)**

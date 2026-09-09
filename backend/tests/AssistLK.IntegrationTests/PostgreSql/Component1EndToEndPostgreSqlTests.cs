@@ -1,5 +1,6 @@
 using AssistLK.Agents.Agents;
 using AssistLK.Agents.Core;
+using AssistLK.Agents.Services;
 using AssistLK.Agents.Tools;
 using AssistLK.Application.Interfaces;
 using AssistLK.Application.Services;
@@ -8,6 +9,7 @@ using AssistLK.Domain.Enums;
 using AssistLK.Infrastructure.Data;
 using AssistLK.Infrastructure.Repositories;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Logging.Abstractions;
 
 namespace AssistLK.IntegrationTests.PostgreSql;
 
@@ -32,7 +34,10 @@ public class Component1EndToEndPostgreSqlTests : PostgreSqlIntegrationTestBase
         toolRegistry.Register(new ServiceKnowledgeTool());
 
         var toolExecutor = new ToolExecutor(toolRegistry);
-        var agent = new ProblemUnderstandingAgent(toolExecutor);
+        var agent = new ProblemUnderstandingAgent(
+            toolExecutor,
+            new GeminiService(),
+            NullLogger<ProblemUnderstandingAgent>.Instance);
 
         var registry = new AgentRegistry();
         registry.Register(agent);

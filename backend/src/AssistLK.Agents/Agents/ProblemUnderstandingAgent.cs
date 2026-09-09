@@ -6,6 +6,7 @@ using AssistLK.Agents.Models;
 using AssistLK.Agents.Services;
 using AssistLK.Agents.Tools;
 using AssistLK.Domain.Enums;
+using Microsoft.Extensions.Logging;
 
 namespace AssistLK.Agents.Agents;
 
@@ -16,6 +17,16 @@ namespace AssistLK.Agents.Agents;
 /// Responsibility: Determine what kind of help the customer actually needs
 /// by analysing their natural-language service request using Gemini reasoning
 /// and producing a structured classification result.
+///
+/// Pipeline (fixed):
+///   1. LocationExtractionTool  — optional enrichment
+///   2. Gemini LLM              — PRIMARY reasoning engine
+///   3. ProblemClassificationTool — optional validation/alignment
+///   4. ServiceKnowledgeTool    — optional enrichment
+///   5. Safety validation       — mandatory sanitization
+///
+/// Tool failure NEVER prevents Gemini execution.
+/// Degraded output is produced ONLY when Gemini itself fails.
 ///
 /// The agent does NOT:
 /// - Access the database or any repository
@@ -32,13 +43,16 @@ public sealed class ProblemUnderstandingAgent : IAgent
 {
     private readonly ToolExecutor _toolExecutor;
     private readonly IGeminiService _geminiService;
+    private readonly ILogger<ProblemUnderstandingAgent> _logger;
 
     public ProblemUnderstandingAgent(
         ToolExecutor toolExecutor,
-        IGeminiService? geminiService = null)
+        IGeminiService geminiService,
+        ILogger<ProblemUnderstandingAgent> logger)
     {
         _toolExecutor = toolExecutor ?? throw new ArgumentNullException(nameof(toolExecutor));
-        _geminiService = geminiService ?? new GeminiService();
+        _geminiService = geminiService ?? throw new ArgumentNullException(nameof(geminiService));
+        _logger = logger ?? throw new ArgumentNullException(nameof(logger));
     }
 
     public string Name => "ProblemUnderstandingAgent";
@@ -133,7 +147,10 @@ public sealed class ProblemUnderstandingAgent : IAgent
     {
         int toolCalls = 0;
 
-        // 1. Tool: Location extraction
+        // ----------------------------------------------------------------
+        // Step 1: LocationExtractionTool — optional enrichment
+        // Failure degrades safely: retain un-normalized location text.
+        // ----------------------------------------------------------------
         string? locationText = input?.LocationText;
         decimal? latitude = input?.Latitude;
         decimal? longitude = input?.Longitude;
@@ -155,13 +172,52 @@ public sealed class ProblemUnderstandingAgent : IAgent
                 longitude = locData.Longitude;
             }
         }
-        catch
+        catch (Exception ex)
         {
-            // Location tool failure degrades safely: retain unnormalized location text
+            // Location tool failure is non-fatal; continue with un-normalized location.
+            _logger.LogWarning(
+                "Agent tool execution failed: {Message}",
+                ex.Message);
         }
 
-        // 2. Tool: Problem classification validation
-        bool classificationToolSucceeded = false;
+        // ----------------------------------------------------------------
+        // Step 2: Gemini LLM — PRIMARY reasoning engine
+        // Degraded output is produced ONLY when Gemini fails or is unavailable.
+        // Tool failures earlier or later NEVER reach this degradation path.
+        // ----------------------------------------------------------------
+        var prompt = BuildPrompt(description, locationText);
+        string? rawGeminiResponse = null;
+
+        try
+        {
+            rawGeminiResponse = await _geminiService.GenerateContentAsync(
+                prompt,
+                SystemInstruction,
+                cancellationToken);
+        }
+        catch (Exception ex)
+        {
+            // Log the failure (never log prompt, response, or secrets).
+            _logger.LogWarning(
+                "Agent tool execution failed: {Message}",
+                ex.Message);
+            rawGeminiResponse = null;
+        }
+
+        // Safe degradation — only when Gemini itself fails or returns unparseable output
+        if (string.IsNullOrWhiteSpace(rawGeminiResponse) ||
+            !TryParseGeminiResponse(rawGeminiResponse, out var parsedOutput))
+        {
+            _logger.LogWarning(
+                "Gemini reasoning produced no usable output. Returning degraded response.");
+            var degraded = CreateDegradedOutput(locationText);
+            return (degraded, toolCalls);
+        }
+
+        // ----------------------------------------------------------------
+        // Step 3: ProblemClassificationTool — optional validation/alignment
+        // Failure is non-fatal: Gemini output stands as authoritative.
+        // ----------------------------------------------------------------
         ProblemClassificationData? classData = null;
         try
         {
@@ -174,48 +230,21 @@ public sealed class ProblemUnderstandingAgent : IAgent
 
             if (classResult.Success && classResult.Data is ProblemClassificationData cd)
             {
-                classificationToolSucceeded = true;
                 classData = cd;
             }
         }
-        catch
+        catch (Exception ex)
         {
-            classificationToolSucceeded = false;
+            // Classification tool failure is non-fatal; Gemini output is authoritative.
+            _logger.LogWarning(
+                "Agent tool execution failed: {Message}",
+                ex.Message);
         }
 
-        // Safe degradation: if classification tool fails or is unavailable, degrade safely to Unclassified
-        if (!classificationToolSucceeded || classData is null)
-        {
-            var degradedOutput = CreateDegradedOutput(locationText);
-            return (degradedOutput, toolCalls);
-        }
-
-        // 3. Gemini LLM Reasoning
-        var prompt = BuildPrompt(description, locationText);
-        string? rawGeminiResponse = null;
-
-        try
-        {
-            rawGeminiResponse = await _geminiService.GenerateContentAsync(
-                prompt,
-                SystemInstruction,
-                cancellationToken);
-        }
-        catch
-        {
-            rawGeminiResponse = null;
-        }
-
-        // Safe degradation if Gemini call failed or returned empty
-        if (string.IsNullOrWhiteSpace(rawGeminiResponse) ||
-            !TryParseGeminiResponse(rawGeminiResponse, out var parsedOutput))
-        {
-            var degraded = CreateDegradedOutput(locationText);
-            return (degraded, toolCalls);
-        }
-
-        // Align with classification tool if Gemini returned Unclassified but tool determined a canonical category
-        if (string.Equals(parsedOutput.Category, "Unclassified", StringComparison.OrdinalIgnoreCase) &&
+        // Optional alignment: if Gemini returned Unclassified but the deterministic tool
+        // found a canonical category with higher confidence, promote it.
+        if (classData is not null &&
+            string.Equals(parsedOutput.Category, "Unclassified", StringComparison.OrdinalIgnoreCase) &&
             !string.Equals(classData.Category, "Unclassified", StringComparison.OrdinalIgnoreCase))
         {
             parsedOutput.Category = classData.Category;
@@ -248,7 +277,10 @@ public sealed class ProblemUnderstandingAgent : IAgent
             parsedOutput.Urgency = ServiceRequestUrgency.Unknown;
         }
 
-        // 4. Tool: Service knowledge
+        // ----------------------------------------------------------------
+        // Step 4: ServiceKnowledgeTool — optional enrichment
+        // Failure is non-fatal; Gemini output stands.
+        // ----------------------------------------------------------------
         var additionalInfo = new Dictionary<string, string>(parsedOutput.AdditionalInformation);
         try
         {
@@ -270,12 +302,17 @@ public sealed class ProblemUnderstandingAgent : IAgent
                 }
             }
         }
-        catch
+        catch (Exception ex)
         {
-            // Knowledge tool failure degrades safely
+            // Knowledge tool failure is non-fatal; continue without enrichment.
+            _logger.LogWarning(
+                "Agent tool execution failed: {Message}",
+                ex.Message);
         }
 
-        // 5. Safety validation and sanitization
+        // ----------------------------------------------------------------
+        // Step 5: Safety validation — mandatory sanitization
+        // ----------------------------------------------------------------
         ApplySafetyPolicies(parsedOutput, additionalInfo, locationText);
 
         return (parsedOutput, toolCalls);
@@ -378,8 +415,11 @@ public sealed class ProblemUnderstandingAgent : IAgent
 
             return true;
         }
-        catch
+        catch (JsonException)
         {
+            // Only malformed/unparseable Gemini JSON is suppressed here.
+            // Unexpected programming errors (NullReferenceException, etc.) are intentionally not caught
+            // so they surface for diagnosis rather than silently producing a degraded output.
             return false;
         }
     }

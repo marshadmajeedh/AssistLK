@@ -2,8 +2,11 @@ using AssistLK.Agents.Abstractions;
 using AssistLK.Agents.Agents;
 using AssistLK.Agents.Core;
 using AssistLK.Agents.Models;
+using AssistLK.Agents.Services;
 using AssistLK.Agents.Tools;
 using AssistLK.Domain.Enums;
+using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Logging.Abstractions;
 
 namespace AssistLK.IntegrationTests;
 
@@ -28,7 +31,10 @@ public class ProblemUnderstandingAgentTests
         toolRegistry.Register(new LocationExtractionTool());
         toolRegistry.Register(new ServiceKnowledgeTool());
         var toolExecutor = new ToolExecutor(toolRegistry);
-        return new ProblemUnderstandingAgent(toolExecutor);
+        return new ProblemUnderstandingAgent(
+            toolExecutor,
+            new GeminiService(),
+            NullLogger<ProblemUnderstandingAgent>.Instance);
     }
 
     private static AgentContext BuildContext(
@@ -392,18 +398,22 @@ public class ProblemUnderstandingAgentTests
     {
         var toolRegistry = new ToolRegistry();
         var toolExecutor = new ToolExecutor(toolRegistry);
-        var agent = new ProblemUnderstandingAgent(toolExecutor);
+        var agent = new ProblemUnderstandingAgent(
+            toolExecutor,
+            new GeminiService(),
+            NullLogger<ProblemUnderstandingAgent>.Instance);
 
         Assert.NotNull(agent);
 
-        // ToolExecutor is now an expected dependency.
+        // ToolExecutor, IGeminiService, and ILogger are the expected dependencies.
         var ctors = typeof(ProblemUnderstandingAgent).GetConstructors();
         Assert.Single(ctors);
 
         var parameters = ctors[0].GetParameters();
-        Assert.Equal(2, parameters.Length);
+        Assert.Equal(3, parameters.Length);
         Assert.Equal(typeof(ToolExecutor), parameters[0].ParameterType);
         Assert.Equal(typeof(IGeminiService), parameters[1].ParameterType);
+        Assert.Equal(typeof(ILogger<ProblemUnderstandingAgent>), parameters[2].ParameterType);
 
         var forbiddenTypeNames = new[]
         {

@@ -1,6 +1,7 @@
 using AssistLK.Agents.Agents;
 using AssistLK.Agents.Core;
 using AssistLK.Agents.Models;
+using AssistLK.Agents.Services;
 using AssistLK.Agents.Tools;
 using AssistLK.Application.Interfaces;
 using AssistLK.Application.Services;
@@ -8,6 +9,7 @@ using AssistLK.Domain.Entities;
 using AssistLK.Domain.Enums;
 using AssistLK.Infrastructure.Data;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Logging.Abstractions;
 
 namespace AssistLK.IntegrationTests;
 
@@ -51,7 +53,7 @@ public class Component1WorkflowTests
             ToolReg.Register(new ServiceKnowledgeTool());
 
             ToolExec = new ToolExecutor(ToolReg);
-            Agent = new ProblemUnderstandingAgent(ToolExec);
+            Agent = new ProblemUnderstandingAgent(ToolExec, new GeminiService(), NullLogger<ProblemUnderstandingAgent>.Instance);
 
             Registry = new AgentRegistry();
             Registry.Register(Agent);

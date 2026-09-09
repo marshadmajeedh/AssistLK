@@ -67,6 +67,10 @@ class ServiceRequestService {
   Future<ProblemUnderstandingResultModel> analyze(String id) async {
     final response = await apiClient.client.post(
       '/service-requests/$id/analyze',
+      options: Options(
+        receiveTimeout: const Duration(seconds: 90),
+        sendTimeout: const Duration(seconds: 30),
+      ),
     );
 
     return ProblemUnderstandingResultModel.fromJson(
@@ -96,6 +100,11 @@ class ServiceRequestService {
         return 'Connection timed out.';
       }
 
+      if (error.type == DioExceptionType.receiveTimeout ||
+          error.type == DioExceptionType.sendTimeout) {
+        return 'Request timed out. Please try again.';
+      }
+
       if (error.type == DioExceptionType.connectionError) {
         return 'Unable to connect to AssistLK server.';
       }
@@ -108,11 +117,55 @@ class ServiceRequestService {
         return 'Service request not found.';
       }
 
+      if (error.response?.statusCode == 409) {
+        return 'The request could not be completed due to a conflict.';
+      }
+
       if (error.response?.statusCode == 403) {
         return 'You do not have permission to perform this action.';
       }
     }
 
     return 'Something went wrong. Please try again.';
+  }
+
+  String getAnalysisErrorMessage(Object error) {
+    if (error is DioException) {
+      if (error.type == DioExceptionType.receiveTimeout ||
+          error.type == DioExceptionType.sendTimeout) {
+        return 'Analysis is taking longer than expected. The request status has been refreshed.';
+      }
+
+      if (error.response?.statusCode == 409) {
+        return 'Service request is currently being analyzed or in an updated status. The request status has been refreshed.';
+      }
+
+      final data = error.response?.data;
+      if (data is Map && data['message'] != null) {
+        return data['message'].toString();
+      }
+
+      if (error.type == DioExceptionType.connectionTimeout) {
+        return 'Connection timed out while contacting analysis service.';
+      }
+
+      if (error.type == DioExceptionType.connectionError) {
+        return 'Unable to connect to AssistLK server.';
+      }
+
+      if (error.response?.statusCode == 400) {
+        return 'Invalid analysis request details.';
+      }
+
+      if (error.response?.statusCode == 404) {
+        return 'Service request not found.';
+      }
+
+      if (error.response?.statusCode == 403) {
+        return 'You do not have permission to analyze this request.';
+      }
+    }
+
+    return 'Analysis could not be completed. Please try again.';
   }
 }

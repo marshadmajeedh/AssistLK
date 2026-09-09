@@ -60,11 +60,10 @@ class _ServiceRequestDetailScreenState
               : AppColors.success,
         ),
       );
-    } else {
-      final error = provider.error ?? 'Analysis failed. Please try again.';
+    } else if (provider.error != null) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text(error),
+          content: Text(provider.error!),
           backgroundColor: AppColors.error,
         ),
       );
@@ -201,7 +200,10 @@ class _ServiceRequestDetailScreenState
         title: const Text('Request Details'),
         actions: [
           if (request.status != ServiceRequestStatus.cancelled &&
-              request.status != ServiceRequestStatus.readyForMatching)
+              request.status != ServiceRequestStatus.readyForMatching &&
+              request.status != ServiceRequestStatus.analyzing &&
+              !provider.isAnalyzing &&
+              !provider.analysisStateNeedsRefresh)
             IconButton(
               icon: const Icon(Icons.cancel_outlined, color: AppColors.error),
               tooltip: 'Cancel Request',
@@ -316,6 +318,66 @@ class _ServiceRequestDetailScreenState
     ProblemUnderstandingResultModel? analysis,
     ServiceRequestProvider provider,
   ) {
+    if (provider.analysisStateNeedsRefresh) {
+      return AppCard(
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Row(
+              children: [
+                Icon(
+                  Icons.sync_problem_rounded,
+                  color: AppColors.warning,
+                  size: 24,
+                ),
+                SizedBox(width: AppSpacing.sm),
+                Expanded(
+                  child: Text(
+                    'Unable to confirm the latest analysis status.',
+                    style: AppTextStyles.cardHeading,
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: AppSpacing.xs),
+            Text(
+              'A network interruption occurred after analysis was requested. Please refresh status to synchronize with the backend.',
+              style: AppTextStyles.body.copyWith(
+                color: AppColors.textSecondary,
+              ),
+            ),
+            const SizedBox(height: AppSpacing.md),
+            AppButton(
+              text: 'Refresh Status',
+              isLoading: provider.isLoading,
+              onPressed: () => provider.loadRequestById(request.serviceRequestId),
+            ),
+          ],
+        ),
+      );
+    }
+
+    if (provider.isAnalyzing ||
+        request.status == ServiceRequestStatus.analyzing) {
+      return const AppCard(
+        child: Row(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            SizedBox(
+              width: 20,
+              height: 20,
+              child: CircularProgressIndicator(strokeWidth: 2),
+            ),
+            SizedBox(width: AppSpacing.md),
+            Text(
+              'AI analysis in progress',
+              style: AppTextStyles.body,
+            ),
+          ],
+        ),
+      );
+    }
+
     switch (request.status) {
       case ServiceRequestStatus.created:
         return Column(
@@ -353,7 +415,7 @@ class _ServiceRequestDetailScreenState
               ),
               SizedBox(width: AppSpacing.md),
               Text(
-                'Gemini AI is analyzing your request...',
+                'AI analysis in progress',
                 style: AppTextStyles.body,
               ),
             ],

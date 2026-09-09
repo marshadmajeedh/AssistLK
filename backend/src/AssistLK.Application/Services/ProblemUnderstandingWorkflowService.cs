@@ -9,6 +9,8 @@ using AssistLK.Application.Interfaces;
 using AssistLK.Application.ServiceRequests.DTOs;
 using AssistLK.Domain.Entities;
 using AssistLK.Domain.Enums;
+using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Logging.Abstractions;
 
 namespace AssistLK.Application.Services;
 
@@ -27,6 +29,7 @@ public class ProblemUnderstandingWorkflowService
     private readonly AgentOrchestrator _orchestrator;
     private readonly AgentRegistry _registry;
     private readonly IServiceRequestService _serviceRequestService;
+    private readonly ILogger<ProblemUnderstandingWorkflowService> _logger;
 
     public ProblemUnderstandingWorkflowService(
         AgentWorkflowService workflowService,
@@ -36,7 +39,8 @@ public class ProblemUnderstandingWorkflowService
         AgentSafetyService safetyService,
         AgentOrchestrator orchestrator,
         AgentRegistry registry,
-        IServiceRequestService serviceRequestService)
+        IServiceRequestService serviceRequestService,
+        ILogger<ProblemUnderstandingWorkflowService>? logger = null)
     {
         _workflowService = workflowService;
         _contextService = contextService;
@@ -46,6 +50,7 @@ public class ProblemUnderstandingWorkflowService
         _orchestrator = orchestrator;
         _registry = registry;
         _serviceRequestService = serviceRequestService;
+        _logger = logger ?? NullLogger<ProblemUnderstandingWorkflowService>.Instance;
     }
 
     public async Task<ProblemUnderstandingWorkflowResult> AnalyzeAsync(
@@ -102,19 +107,27 @@ public class ProblemUnderstandingWorkflowService
         }
 
         AgentExecution? execution = null;
+        ServiceRequestStatus? preAnalysisStatus = null;
+        bool analysisBegun = false;
 
         try
         {
-            // 2. Domain state transition: Created/AwaitingInformation -> Analyzing
-            await _serviceRequestService.BeginAnalysisAsync(input.ServiceRequestId, cancellationToken);
+            // 2. Preserve valid pre-analysis status (Created / AwaitingInformation)
+            preAnalysisStatus = await _serviceRequestService.GetPreAnalysisStatusAsync(
+                input.ServiceRequestId,
+                cancellationToken);
 
-            // 3. Start agent execution
+            // 3. Domain state transition: Created/AwaitingInformation -> Analyzing
+            await _serviceRequestService.BeginAnalysisAsync(input.ServiceRequestId, cancellationToken);
+            analysisBegun = true;
+
+            // 4. Start agent execution
             execution = await _workflowService.StartExecutionAsync(
                 workflow.Id,
                 "ProblemUnderstandingAgent",
                 input);
 
-            // 4. Setup AgentContext and load prior memory if any
+            // 5. Setup AgentContext and load prior memory if any
             var context = new AgentContext
             {
                 WorkflowId = workflow.Id,
@@ -128,8 +141,11 @@ public class ProblemUnderstandingWorkflowService
 
             await _contextService.LoadMemoryAsync(context);
 
-            // 5. Execute agent via orchestrator
-            var agentResult = await _orchestrator.ExecuteAsync("ProblemUnderstandingAgent", context);
+            // 6. Execute agent via orchestrator
+            var agentResult = await _orchestrator.ExecuteAsync(
+                "ProblemUnderstandingAgent",
+                context,
+                cancellationToken);
 
             if (!agentResult.Success || agentResult.Data is not ProblemUnderstandingOutput output)
             {
@@ -137,7 +153,7 @@ public class ProblemUnderstandingWorkflowService
                     agentResult.Message ?? "Problem understanding agent execution failed.");
             }
 
-            // 6. Validate output semantics
+            // 7. Validate output semantics
             if (output.Confidence < 0m || output.Confidence > 1m)
             {
                 throw new InvalidOperationException("Agent produced invalid confidence score outside 0-1 range.");
@@ -148,10 +164,13 @@ public class ProblemUnderstandingWorkflowService
                 throw new InvalidOperationException("Agent produced an empty problem summary.");
             }
 
-            // 7. Store semantic memory (concise structured facts only)
+            // 8. Store semantic memory (concise structured facts only)
             await StoreMemoryAsync(workflow.Id, output);
 
-            // 8. Apply analysis result to domain
+            // 9. Apply analysis result to domain
+            // Persist using CancellationToken.None so that if Gemini/agent execution successfully
+            // completes but the HTTP client disconnects before final persistence, the completed
+            // analysis is safely preserved rather than discarded solely because RequestAborted is cancelled.
             var applyResult = new ApplyProblemAnalysisResult
             {
                 ServiceRequestId = input.ServiceRequestId,
@@ -163,15 +182,15 @@ public class ProblemUnderstandingWorkflowService
                 AgentName = "ProblemUnderstandingAgent"
             };
 
-            await _serviceRequestService.ApplyProblemAnalysisResultAsync(applyResult, cancellationToken);
+            await _serviceRequestService.ApplyProblemAnalysisResultAsync(applyResult, CancellationToken.None);
 
-            // 9. Complete workflow & execution
+            // 10. Complete workflow & execution
             await _workflowService.CompleteExecutionAsync(execution!.Id, true, output);
             await _workflowService.SetStatusAsync(workflow.Id, "Completed");
 
             stopwatch.Stop();
 
-            // 10. Record monitoring metrics (read from execution-scoped context data)
+            // 11. Record monitoring metrics (read from execution-scoped context data)
             int toolCalls = context.Data.TryGetValue("ToolCallCount", out var tc) && tc is int count ? count : 0;
 
             await _monitoringService.RecordAsync(
@@ -203,9 +222,36 @@ public class ProblemUnderstandingWorkflowService
         {
             stopwatch.Stop();
 
+            if (analysisBegun && preAnalysisStatus.HasValue)
+            {
+                try
+                {
+                    await _serviceRequestService.RecoverFailedAnalysisAsync(
+                        input.ServiceRequestId,
+                        preAnalysisStatus.Value,
+                        CancellationToken.None);
+                }
+                catch (Exception recoveryEx)
+                {
+                    _logger.LogError(
+                        recoveryEx,
+                        "Failed to recover service request {ServiceRequestId} back to pre-analysis status {PreAnalysisStatus}.",
+                        input.ServiceRequestId,
+                        preAnalysisStatus.Value);
+                }
+            }
+
             if (execution is not null)
             {
                 await _workflowService.CompleteExecutionAsync(execution.Id, false, null);
+
+                await _monitoringService.RecordAsync(
+                    workflow.Id,
+                    execution.Id,
+                    "ProblemUnderstandingAgent",
+                    "Failed",
+                    stopwatch.ElapsedMilliseconds,
+                    0);
             }
 
             await _workflowService.SetStatusAsync(workflow.Id, "Failed");
@@ -214,6 +260,25 @@ public class ProblemUnderstandingWorkflowService
         catch (Exception ex)
         {
             stopwatch.Stop();
+
+            if (analysisBegun && preAnalysisStatus.HasValue)
+            {
+                try
+                {
+                    await _serviceRequestService.RecoverFailedAnalysisAsync(
+                        input.ServiceRequestId,
+                        preAnalysisStatus.Value,
+                        CancellationToken.None);
+                }
+                catch (Exception recoveryEx)
+                {
+                    _logger.LogError(
+                        recoveryEx,
+                        "Failed to recover service request {ServiceRequestId} back to pre-analysis status {PreAnalysisStatus}.",
+                        input.ServiceRequestId,
+                        preAnalysisStatus.Value);
+                }
+            }
 
             if (execution is not null)
             {

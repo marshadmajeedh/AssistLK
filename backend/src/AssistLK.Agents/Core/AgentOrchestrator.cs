@@ -15,7 +15,8 @@ public class AgentOrchestrator
     public async Task<AgentResult>
         ExecuteAsync(
             string agentName,
-            AgentContext context)
+            AgentContext context,
+            CancellationToken cancellationToken = default)
     {
 
         var agent =
@@ -33,7 +34,8 @@ public class AgentOrchestrator
         }
 
         return await agent.ExecuteAsync(
-            context
+            context,
+            cancellationToken
         );
     }
 }

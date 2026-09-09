@@ -1,3 +1,4 @@
+using System.Net;
 using System.Text;
 using System.Text.Json;
 using System.Text.Json.Nodes;
@@ -14,6 +15,7 @@ namespace AssistLK.Agents.Services;
 public class GeminiService : IGeminiService
 {
     public const string DefaultModel = "gemini-3.6-flash";
+    public static readonly TimeSpan DefaultAttemptTimeout = TimeSpan.FromSeconds(20);
     private const string BaseEndpoint = "https://generativelanguage.googleapis.com/v1beta/models";
     private const int MaxAttempts = 3;
 
@@ -22,14 +24,17 @@ public class GeminiService : IGeminiService
     private readonly ILogger<GeminiService>? _logger;
     private readonly string _model;
     private readonly TimeSpan? _customRetryDelay;
+    private readonly TimeSpan _attemptTimeout;
 
     public string Model => _model;
+    public TimeSpan AttemptTimeout => _attemptTimeout;
 
     public GeminiService(
         HttpClient? httpClient = null,
         IConfiguration? configuration = null,
         ILogger<GeminiService>? logger = null,
-        TimeSpan? retryDelay = null)
+        TimeSpan? retryDelay = null,
+        TimeSpan? attemptTimeout = null)
     {
         _httpClient = httpClient ?? new HttpClient();
         _configuration = configuration;
@@ -38,6 +43,21 @@ public class GeminiService : IGeminiService
 
         var configuredModel = configuration?["Gemini:Model"];
         _model = !string.IsNullOrWhiteSpace(configuredModel) ? configuredModel.Trim() : DefaultModel;
+
+        if (attemptTimeout.HasValue)
+        {
+            _attemptTimeout = attemptTimeout.Value;
+        }
+        else if (configuration != null &&
+                 double.TryParse(configuration["Gemini:AttemptTimeoutSeconds"], out var timeoutSeconds) &&
+                 timeoutSeconds > 0)
+        {
+            _attemptTimeout = TimeSpan.FromSeconds(timeoutSeconds);
+        }
+        else
+        {
+            _attemptTimeout = DefaultAttemptTimeout;
+        }
     }
 
     public async Task<string?> GenerateContentAsync(
@@ -45,6 +65,8 @@ public class GeminiService : IGeminiService
         string? systemInstruction = null,
         CancellationToken cancellationToken = default)
     {
+        cancellationToken.ThrowIfCancellationRequested();
+
         var apiKey = ResolveApiKey(_configuration);
 
         // Diagnostic: log whether API key resolved — never log the key value itself
@@ -74,7 +96,7 @@ public class GeminiService : IGeminiService
 
         try
         {
-            var requestUrl = $"{BaseEndpoint}/{_model}:generateContent?key={Uri.EscapeDataString(apiKey)}";
+            var requestUrl = $"{BaseEndpoint}/{_model}:generateContent";
 
             var payload = new JsonObject
             {
@@ -116,48 +138,122 @@ public class GeminiService : IGeminiService
                     Encoding.UTF8,
                     "application/json");
 
+                using var attemptCts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+                attemptCts.CancelAfter(_attemptTimeout);
+
+                using var request = new HttpRequestMessage(HttpMethod.Post, requestUrl)
+                {
+                    Content = content
+                };
+                request.Headers.Add("x-goog-api-key", apiKey);
+
                 // Diagnostic: signal API call start — never log requestUrl or apiKey
                 _logger?.LogInformation("Calling Gemini model: {Model}", _model);
                 _logger?.LogInformation("Gemini execution started");
 
-                using var response = await _httpClient.PostAsync(requestUrl, content, cancellationToken);
-
-                if (response.IsSuccessStatusCode)
+                try
                 {
-                    var responseJson = await response.Content.ReadAsStringAsync(cancellationToken);
+                    using var response = await _httpClient.SendAsync(request, attemptCts.Token);
 
-                    // Diagnostic: log receipt — never log the raw JSON body
-                    _logger?.LogInformation("Gemini response received: true");
-
-                    return ExtractTextFromResponse(responseJson);
-                }
-
-                var statusCode = (int)response.StatusCode;
-
-                // Transient errors to retry: HTTP 429 (TooManyRequests), HTTP 503 (ServiceUnavailable)
-                var isTransient = response.StatusCode == System.Net.HttpStatusCode.TooManyRequests ||
-                                  response.StatusCode == System.Net.HttpStatusCode.ServiceUnavailable;
-
-                if (isTransient && attempt < MaxAttempts)
-                {
-                    _logger?.LogWarning(
-                        "Gemini transient failure: HTTP {StatusCode}. Retrying attempt {Attempt} of {MaxAttempts}...",
-                        statusCode, attempt, MaxAttempts);
-
-                    var delay = _customRetryDelay ?? TimeSpan.FromMilliseconds(500 * attempt);
-                    if (delay > TimeSpan.Zero)
+                    if (response.IsSuccessStatusCode)
                     {
-                        await Task.Delay(delay, cancellationToken);
-                    }
-                    continue;
-                }
+                        var responseJson = await response.Content.ReadAsStringAsync(attemptCts.Token);
 
-                // Non-retriable (400, 401, 403, 404, etc.) or max retries exhausted
-                _logger?.LogWarning(
-                    "Gemini fallback triggered: reason - non-success HTTP status code {StatusCode}",
-                    statusCode);
-                _logger?.LogInformation("Gemini response received: false");
-                return null;
+                        // Diagnostic: log receipt — never log the raw JSON body
+                        _logger?.LogInformation("Gemini response received: true");
+
+                        return ExtractTextFromResponse(responseJson);
+                    }
+
+                    var statusCode = (int)response.StatusCode;
+
+                    // Non-retriable client errors (all 4xx except 429 Too Many Requests, e.g. 400, 401, 403, 404, 422)
+                    // Fail fast immediately without wasting time on retries.
+                    var isNonRetriable = statusCode >= 400 && statusCode < 500 && response.StatusCode != HttpStatusCode.TooManyRequests;
+
+                    if (isNonRetriable)
+                    {
+                        _logger?.LogWarning(
+                            "Gemini fallback triggered: reason - non-success HTTP status code {StatusCode}",
+                            statusCode);
+                        _logger?.LogInformation("Gemini response received: false");
+                        return null;
+                    }
+
+                    // Transient errors to retry: HTTP 429 (TooManyRequests), HTTP 503 (ServiceUnavailable), or server error
+                    if (attempt < MaxAttempts)
+                    {
+                        _logger?.LogWarning(
+                            "Gemini transient failure: HTTP {StatusCode}. Retrying attempt {Attempt} of {MaxAttempts}...",
+                            statusCode, attempt, MaxAttempts);
+
+                        var delay = _customRetryDelay ?? TimeSpan.FromMilliseconds(500 * attempt);
+                        if (delay > TimeSpan.Zero)
+                        {
+                            await Task.Delay(delay, cancellationToken);
+                        }
+                        continue;
+                    }
+
+                    // Max retries exhausted
+                    _logger?.LogWarning(
+                        "Gemini fallback triggered: reason - non-success HTTP status code {StatusCode}",
+                        statusCode);
+                    _logger?.LogInformation("Gemini response received: false");
+                    return null;
+                }
+                catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+                {
+                    // Caller aborted request - propagate to workflow
+                    throw;
+                }
+                catch (OperationCanceledException) when (attemptCts.IsCancellationRequested)
+                {
+                    // Attempt timed out
+                    if (attempt < MaxAttempts)
+                    {
+                        _logger?.LogWarning(
+                            "Gemini attempt {Attempt} timed out after {Timeout}s. Retrying attempt {NextAttempt} of {MaxAttempts}...",
+                            attempt, _attemptTimeout.TotalSeconds, attempt + 1, MaxAttempts);
+
+                        var delay = _customRetryDelay ?? TimeSpan.FromMilliseconds(500 * attempt);
+                        if (delay > TimeSpan.Zero)
+                        {
+                            await Task.Delay(delay, cancellationToken);
+                        }
+                        continue;
+                    }
+
+                    _logger?.LogWarning(
+                        "Gemini fallback triggered: reason - attempt timeout exhausted after {MaxAttempts} attempts",
+                        MaxAttempts);
+                    _logger?.LogInformation("Gemini response received: false");
+                    return null;
+                }
+                catch (HttpRequestException ex)
+                {
+                    // Transient network error (DNS, connection reset, socket error)
+                    if (attempt < MaxAttempts)
+                    {
+                        _logger?.LogWarning(
+                            "Gemini transient network failure: {Message}. Retrying attempt {Attempt} of {MaxAttempts}...",
+                            ex.Message, attempt, MaxAttempts);
+
+                        var delay = _customRetryDelay ?? TimeSpan.FromMilliseconds(500 * attempt);
+                        if (delay > TimeSpan.Zero)
+                        {
+                            await Task.Delay(delay, cancellationToken);
+                        }
+                        continue;
+                    }
+
+                    _logger?.LogWarning(
+                        "Gemini fallback triggered: reason - network failure exhausted after {MaxAttempts} attempts: {Message}",
+                        MaxAttempts,
+                        ex.Message);
+                    _logger?.LogInformation("Gemini response received: false");
+                    return null;
+                }
             }
 
             return null;

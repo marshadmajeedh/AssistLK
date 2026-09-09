@@ -18,6 +18,7 @@ class ServiceRequestProvider extends ChangeNotifier {
   ProblemUnderstandingResultModel? _currentAnalysis;
   bool _isLoading = false;
   bool _isAnalyzing = false;
+  bool _analysisStateNeedsRefresh = false;
   String? _error;
 
   List<ServiceRequestModel> get requests => List.unmodifiable(_requests);
@@ -25,6 +26,7 @@ class ServiceRequestProvider extends ChangeNotifier {
   ProblemUnderstandingResultModel? get currentAnalysis => _currentAnalysis;
   bool get isLoading => _isLoading;
   bool get isAnalyzing => _isAnalyzing;
+  bool get analysisStateNeedsRefresh => _analysisStateNeedsRefresh;
   String? get error => _error;
 
   void clearError() {
@@ -34,6 +36,7 @@ class ServiceRequestProvider extends ChangeNotifier {
 
   void setCurrentRequest(ServiceRequestModel? request) {
     _currentRequest = request;
+    _analysisStateNeedsRefresh = false;
     notifyListeners();
   }
 
@@ -77,6 +80,7 @@ class ServiceRequestProvider extends ChangeNotifier {
       final request = await serviceRequestService.getById(id);
       _currentRequest = request;
       _updateRequestInList(request);
+      _analysisStateNeedsRefresh = false;
       return request;
     } catch (err) {
       _error = serviceRequestService.getErrorMessage(err);
@@ -160,12 +164,17 @@ class ServiceRequestProvider extends ChangeNotifier {
   }
 
   Future<ProblemUnderstandingResultModel?> analyzeRequest(String id) async {
+    if (_isAnalyzing || _analysisStateNeedsRefresh) {
+      return null;
+    }
+
     _setAnalyzing(true);
     _error = null;
 
     try {
       final result = await serviceRequestService.analyze(id);
       _currentAnalysis = result;
+      _analysisStateNeedsRefresh = false;
 
       // Update the current request's status, category, urgency if available
       if (_currentRequest?.serviceRequestId == id) {
@@ -175,11 +184,39 @@ class ServiceRequestProvider extends ChangeNotifier {
           urgency: result.urgency,
         );
         _updateRequestInList(_currentRequest!);
+      } else {
+        final index = _requests.indexWhere((r) => r.serviceRequestId == id);
+        if (index >= 0) {
+          final updated = _requests[index].copyWith(
+            status: result.status,
+            category: result.category,
+            urgency: result.urgency,
+          );
+          _requests[index] = updated;
+        }
       }
 
       return result;
     } catch (err) {
-      _error = serviceRequestService.getErrorMessage(err);
+      final analysisError = serviceRequestService.getAnalysisErrorMessage(err);
+
+      // Attempt authoritative state synchronization in its own try/catch
+      try {
+        final refreshed = await serviceRequestService.getById(id);
+        _currentRequest = refreshed;
+        _updateRequestInList(refreshed);
+        _analysisStateNeedsRefresh = false;
+      } catch (_) {
+        // If synchronization itself fails:
+        // - preserve the original analysis error
+        // - set analysisStateNeedsRefresh = true
+        // - do NOT assume Created
+        // - do NOT assume Analyzing
+        // - do NOT allow another Analyze request until authoritative state is refreshed
+        _analysisStateNeedsRefresh = true;
+      }
+
+      _error = analysisError;
       return null;
     } finally {
       _setAnalyzing(false);
@@ -211,6 +248,7 @@ class ServiceRequestProvider extends ChangeNotifier {
     _currentAnalysis = null;
     _isLoading = false;
     _isAnalyzing = false;
+    _analysisStateNeedsRefresh = false;
     _error = null;
     notifyListeners();
   }

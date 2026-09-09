@@ -121,6 +121,7 @@ class _CustomerHomeScreenState extends State<CustomerHomeScreen> {
                     child: Text(
                       'My Service Requests',
                       style: AppTextStyles.sectionHeading,
+                      overflow: TextOverflow.ellipsis,
                     ),
                   ),
                   const SizedBox(width: AppSpacing.sm),
@@ -129,7 +130,7 @@ class _CustomerHomeScreenState extends State<CustomerHomeScreen> {
                     icon: const Icon(Icons.add, size: 18),
                     label: const Text('Create Request'),
                     style: ElevatedButton.styleFrom(
-                      minimumSize: const Size(0, 36),
+                      minimumSize: const Size(0, 40),
                       padding: const EdgeInsets.symmetric(
                         horizontal: AppSpacing.md,
                         vertical: AppSpacing.sm,

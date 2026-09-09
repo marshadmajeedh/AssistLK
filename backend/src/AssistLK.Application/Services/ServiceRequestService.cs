@@ -272,6 +272,63 @@ public class ServiceRequestService : IServiceRequestService
         return MapResponse(serviceRequest);
     }
 
+    public virtual async Task<ServiceRequestStatus> GetPreAnalysisStatusAsync(
+        Guid serviceRequestId,
+        CancellationToken cancellationToken = default)
+    {
+        var serviceRequest = await _serviceRequestRepository.GetByIdAsync(
+            serviceRequestId,
+            cancellationToken: cancellationToken);
+
+        if (serviceRequest is null)
+        {
+            throw new KeyNotFoundException("Service request was not found.");
+        }
+
+        if (serviceRequest.Status is not ServiceRequestStatus.Created and
+            not ServiceRequestStatus.AwaitingInformation)
+        {
+            throw new ConflictException(
+                $"Service request cannot begin analysis from status '{serviceRequest.Status}'.");
+        }
+
+        return serviceRequest.Status;
+    }
+
+    public virtual async Task<ServiceRequestResponse> RecoverFailedAnalysisAsync(
+        Guid serviceRequestId,
+        ServiceRequestStatus previousStatus,
+        CancellationToken cancellationToken = default)
+    {
+        if (previousStatus is not ServiceRequestStatus.Created and
+            not ServiceRequestStatus.AwaitingInformation)
+        {
+            throw new ConflictException(
+                $"Invalid recovery target status '{previousStatus}'. Analysis can only be recovered to Created or AwaitingInformation.");
+        }
+
+        var serviceRequest = await _serviceRequestRepository.GetByIdAsync(
+            serviceRequestId,
+            cancellationToken: cancellationToken);
+
+        if (serviceRequest is null)
+        {
+            throw new KeyNotFoundException("Service request was not found.");
+        }
+
+        if (serviceRequest.Status != ServiceRequestStatus.Analyzing)
+        {
+            throw new ConflictException(
+                $"Service request cannot be recovered from status '{serviceRequest.Status}'. Recovery is only allowed when status is Analyzing.");
+        }
+
+        serviceRequest.Status = previousStatus;
+        _serviceRequestRepository.Update(serviceRequest);
+        await _serviceRequestRepository.SaveChangesAsync(cancellationToken);
+
+        return MapResponse(serviceRequest);
+    }
+
     public async Task<ServiceRequestResponse> MarkReadyForMatchingAsync(
         Guid serviceRequestId,
         Guid customerId,

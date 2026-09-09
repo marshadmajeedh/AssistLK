@@ -1,3 +1,6 @@
+import 'dart:async';
+
+import 'package:dio/dio.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:mobile/core/api/api_client.dart';
 import 'package:mobile/features/service_requests/models/create_service_request_dto.dart';
@@ -15,6 +18,12 @@ class FakeServiceRequestService extends ServiceRequestService {
   List<ServiceRequestModel> fakeRequests = [];
   ProblemUnderstandingResultModel? fakeAnalysis;
   bool shouldThrow = false;
+  bool shouldAnalyzeThrow = false;
+  Exception? analyzeException;
+  bool shouldGetByIdThrow = false;
+  int getByIdCallCount = 0;
+  int analyzeCallCount = 0;
+  Completer<ProblemUnderstandingResultModel>? analyzeCompleter;
 
   @override
   Future<List<ServiceRequestModel>> getMyRequests() async {
@@ -24,7 +33,9 @@ class FakeServiceRequestService extends ServiceRequestService {
 
   @override
   Future<ServiceRequestModel> getById(String id) async {
-    if (shouldThrow) throw Exception('Request not found');
+    getByIdCallCount++;
+    if (shouldGetByIdThrow) throw Exception('Failed to refresh');
+    if (shouldThrow && !shouldAnalyzeThrow) throw Exception('Request not found');
     return fakeRequests.firstWhere((r) => r.serviceRequestId == id);
   }
 
@@ -74,7 +85,12 @@ class FakeServiceRequestService extends ServiceRequestService {
 
   @override
   Future<ProblemUnderstandingResultModel> analyze(String id) async {
-    if (shouldThrow) throw Exception('Analysis failed');
+    analyzeCallCount++;
+    if (analyzeCompleter != null) {
+      return await analyzeCompleter!.future;
+    }
+    if (analyzeException != null) throw analyzeException!;
+    if (shouldThrow || shouldAnalyzeThrow) throw Exception('Analysis failed');
     return fakeAnalysis ??
         ProblemUnderstandingResultModel(
           workflowId: 'wf-1',
@@ -190,5 +206,247 @@ void main() {
     expect(success, false);
     expect(provider.error, isNotNull);
     expect(provider.isLoading, false);
+  });
+
+  test('analyzeRequest_WhenAlreadyAnalyzing_DoesNotStartSecondRequest', () async {
+    await provider.loadRequestById('req-1');
+    fakeService.analyzeCompleter = Completer<ProblemUnderstandingResultModel>();
+
+    // First call initiates analysis
+    final firstFuture = provider.analyzeRequest('req-1');
+    expect(provider.isAnalyzing, true);
+
+    // Second call while already analyzing should be dropped (returns null, does not re-invoke service)
+    final secondFuture = provider.analyzeRequest('req-1');
+    final secondResult = await secondFuture;
+
+    expect(secondResult, isNull);
+    expect(fakeService.analyzeCallCount, 1);
+
+    // Complete the first call
+    final resultModel = ProblemUnderstandingResultModel(
+      workflowId: 'wf-1',
+      executionId: 'ex-1',
+      serviceRequestId: 'req-1',
+      status: ServiceRequestStatus.analyzed,
+      category: 'Plumbing',
+      problemSummary: 'Pipe leakage in bathroom',
+      urgency: ServiceRequestUrgency.high,
+      confidence: 0.92,
+      needsMoreInformation: false,
+      followUpQuestions: const [],
+    );
+    fakeService.analyzeCompleter!.complete(resultModel);
+    final firstResult = await firstFuture;
+
+    expect(firstResult, isNotNull);
+    expect(provider.isAnalyzing, false);
+    expect(fakeService.analyzeCallCount, 1);
+  });
+
+  test('Rapid double invocation results in only one service.analyze call', () async {
+    await provider.loadRequestById('req-1');
+    fakeService.analyzeCompleter = Completer<ProblemUnderstandingResultModel>();
+
+    final future1 = provider.analyzeRequest('req-1');
+    final future2 = provider.analyzeRequest('req-1');
+
+    expect(fakeService.analyzeCallCount, 1);
+
+    fakeService.analyzeCompleter!.complete(ProblemUnderstandingResultModel(
+      workflowId: 'wf-1',
+      executionId: 'ex-1',
+      serviceRequestId: 'req-1',
+      status: ServiceRequestStatus.analyzed,
+      category: 'Plumbing',
+      problemSummary: 'Pipe leakage in bathroom',
+      urgency: ServiceRequestUrgency.high,
+      confidence: 0.92,
+      needsMoreInformation: false,
+      followUpQuestions: const [],
+    ));
+
+    final results = await Future.wait([future1, future2]);
+    expect(results[0], isNotNull);
+    expect(results[1], isNull);
+    expect(fakeService.analyzeCallCount, 1);
+  });
+
+  test('analyzeRequest_WhenTimeoutOccurs_RefreshesRequestFromBackend', () async {
+    await provider.loadRequestById('req-1');
+    fakeService.analyzeException = DioException(
+      requestOptions: RequestOptions(path: '/service-requests/req-1/analyze'),
+      type: DioExceptionType.receiveTimeout,
+    );
+    final initialGetCount = fakeService.getByIdCallCount;
+
+    final result = await provider.analyzeRequest('req-1');
+
+    expect(result, isNull);
+    expect(fakeService.getByIdCallCount, greaterThan(initialGetCount));
+    expect(provider.error, 'Analysis is taking longer than expected. The request status has been refreshed.');
+    expect(provider.isAnalyzing, false);
+  });
+
+  test('analyzeRequest_When409Occurs_RefreshesRequestFromBackend', () async {
+    await provider.loadRequestById('req-1');
+    fakeService.analyzeException = DioException(
+      requestOptions: RequestOptions(path: '/service-requests/req-1/analyze'),
+      response: Response(
+        requestOptions: RequestOptions(path: '/service-requests/req-1/analyze'),
+        statusCode: 409,
+      ),
+    );
+    final initialGetCount = fakeService.getByIdCallCount;
+
+    final result = await provider.analyzeRequest('req-1');
+
+    expect(result, isNull);
+    expect(fakeService.getByIdCallCount, greaterThan(initialGetCount));
+    expect(provider.error, 'Service request is currently being analyzed or in an updated status. The request status has been refreshed.');
+    expect(provider.isAnalyzing, false);
+  });
+
+  test('Refreshed backend status Analyzing updates currentRequest', () async {
+    await provider.loadRequestById('req-1');
+    fakeService.fakeRequests = [
+      sampleRequest.copyWith(status: ServiceRequestStatus.analyzing),
+    ];
+    fakeService.analyzeException = DioException(
+      requestOptions: RequestOptions(path: '/service-requests/req-1/analyze'),
+      type: DioExceptionType.receiveTimeout,
+    );
+
+    await provider.analyzeRequest('req-1');
+
+    expect(provider.currentRequest?.status, ServiceRequestStatus.analyzing);
+    expect(provider.requests.first.status, ServiceRequestStatus.analyzing);
+    expect(provider.isAnalyzing, false);
+  });
+
+  test('isAnalyzing always resets safely after success, timeout, 409, and failed synchronization', () async {
+    await provider.loadRequestById('req-1');
+
+    // 1. Success
+    await provider.analyzeRequest('req-1');
+    expect(provider.isAnalyzing, false);
+
+    // 2. Timeout
+    fakeService.analyzeException = DioException(
+      requestOptions: RequestOptions(path: '/service-requests/req-1/analyze'),
+      type: DioExceptionType.receiveTimeout,
+    );
+    await provider.analyzeRequest('req-1');
+    expect(provider.isAnalyzing, false);
+
+    // 3. 409 Conflict
+    fakeService.analyzeException = DioException(
+      requestOptions: RequestOptions(path: '/service-requests/req-1/analyze'),
+      response: Response(
+        requestOptions: RequestOptions(path: '/service-requests/req-1/analyze'),
+        statusCode: 409,
+      ),
+    );
+    await provider.analyzeRequest('req-1');
+    expect(provider.isAnalyzing, false);
+
+    // 4. Synchronization itself fails - original analysis error is preserved
+    fakeService.shouldGetByIdThrow = true;
+    fakeService.analyzeException = DioException(
+      requestOptions: RequestOptions(path: '/service-requests/req-1/analyze'),
+      type: DioExceptionType.receiveTimeout,
+    );
+    await provider.analyzeRequest('req-1');
+    expect(provider.isAnalyzing, false);
+    expect(provider.error, 'Analysis is taking longer than expected. The request status has been refreshed.');
+  });
+
+  test('serviceRequestService getErrorMessage formats generic CRUD errors properly', () {
+    final service = ServiceRequestService(apiClient: ApiClient());
+
+    final timeoutError = DioException(
+      requestOptions: RequestOptions(path: '/service-requests'),
+      type: DioExceptionType.receiveTimeout,
+    );
+    expect(service.getErrorMessage(timeoutError), 'Request timed out. Please try again.');
+
+    final conflictError = DioException(
+      requestOptions: RequestOptions(path: '/service-requests'),
+      response: Response(
+        requestOptions: RequestOptions(path: '/service-requests'),
+        statusCode: 409,
+      ),
+    );
+    expect(service.getErrorMessage(conflictError), 'The request could not be completed due to a conflict.');
+  });
+
+  test('serviceRequestService getAnalysisErrorMessage formats timeout and conflict errors properly', () {
+    final service = ServiceRequestService(apiClient: ApiClient());
+
+    final timeoutError = DioException(
+      requestOptions: RequestOptions(path: '/service-requests/1/analyze'),
+      type: DioExceptionType.receiveTimeout,
+    );
+    expect(service.getAnalysisErrorMessage(timeoutError), contains('taking longer than expected'));
+    expect(service.getAnalysisErrorMessage(timeoutError), contains('refreshed'));
+
+    final conflictError = DioException(
+      requestOptions: RequestOptions(path: '/service-requests/1/analyze'),
+      response: Response(
+        requestOptions: RequestOptions(path: '/service-requests/1/analyze'),
+        statusCode: 409,
+      ),
+    );
+    expect(service.getAnalysisErrorMessage(conflictError), contains('currently being analyzed'));
+    expect(service.getAnalysisErrorMessage(conflictError), contains('refreshed'));
+  });
+
+  test('analysis fails and synchronization fails sets analysisStateNeedsRefresh to true', () async {
+    await provider.loadRequestById('req-1');
+    expect(provider.analysisStateNeedsRefresh, false);
+
+    fakeService.shouldGetByIdThrow = true;
+    fakeService.analyzeException = DioException(
+      requestOptions: RequestOptions(path: '/service-requests/req-1/analyze'),
+      type: DioExceptionType.receiveTimeout,
+    );
+
+    final result = await provider.analyzeRequest('req-1');
+
+    expect(result, isNull);
+    expect(provider.isAnalyzing, false);
+    expect(provider.analysisStateNeedsRefresh, true);
+    expect(provider.error, 'Analysis is taking longer than expected. The request status has been refreshed.');
+
+    // While analysisStateNeedsRefresh == true, subsequent analyzeRequest calls are blocked
+    final callCountBefore = fakeService.analyzeCallCount;
+    final blockedResult = await provider.analyzeRequest('req-1');
+    expect(blockedResult, isNull);
+    expect(fakeService.analyzeCallCount, callCountBefore);
+  });
+
+  test('subsequent successful refresh clears analysisStateNeedsRefresh and updates currentRequest', () async {
+    await provider.loadRequestById('req-1');
+
+    // Cause synchronization failure
+    fakeService.shouldGetByIdThrow = true;
+    fakeService.analyzeException = DioException(
+      requestOptions: RequestOptions(path: '/service-requests/req-1/analyze'),
+      type: DioExceptionType.receiveTimeout,
+    );
+    await provider.analyzeRequest('req-1');
+    expect(provider.analysisStateNeedsRefresh, true);
+
+    // Backend is now reachable with updated status
+    fakeService.shouldGetByIdThrow = false;
+    fakeService.fakeRequests = [
+      sampleRequest.copyWith(status: ServiceRequestStatus.analyzing),
+    ];
+
+    final refreshed = await provider.loadRequestById('req-1');
+
+    expect(refreshed, isNotNull);
+    expect(provider.analysisStateNeedsRefresh, false);
+    expect(provider.currentRequest?.status, ServiceRequestStatus.analyzing);
   });
 }

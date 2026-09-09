@@ -84,6 +84,161 @@ public class Component1LifecycleTests
     }
 
     [Fact]
+    public async Task RecoverFailedAnalysisAsync_TransitionsFromAnalyzingToCreated()
+    {
+        var (service, requests, _) = CreateTestContext();
+        var id = Guid.NewGuid();
+        requests.Add(new ServiceRequest
+        {
+            Id = id,
+            CustomerId = Guid.NewGuid(),
+            Description = "Leaking pipe",
+            LocationText = "Colombo",
+            Status = ServiceRequestStatus.Analyzing
+        });
+
+        var response = await service.RecoverFailedAnalysisAsync(id, ServiceRequestStatus.Created);
+
+        Assert.Equal(ServiceRequestStatus.Created, response.Status);
+        Assert.Equal(ServiceRequestStatus.Created, requests.Single().Status);
+    }
+
+    [Fact]
+    public async Task RecoverFailedAnalysisAsync_TransitionsFromAnalyzingToAwaitingInformation()
+    {
+        var (service, requests, _) = CreateTestContext();
+        var id = Guid.NewGuid();
+        requests.Add(new ServiceRequest
+        {
+            Id = id,
+            CustomerId = Guid.NewGuid(),
+            Description = "Something broken",
+            LocationText = "Colombo",
+            Status = ServiceRequestStatus.Analyzing
+        });
+
+        var response = await service.RecoverFailedAnalysisAsync(id, ServiceRequestStatus.AwaitingInformation);
+
+        Assert.Equal(ServiceRequestStatus.AwaitingInformation, response.Status);
+        Assert.Equal(ServiceRequestStatus.AwaitingInformation, requests.Single().Status);
+    }
+
+    [Theory]
+    [InlineData(ServiceRequestStatus.Created)]
+    [InlineData(ServiceRequestStatus.AwaitingInformation)]
+    [InlineData(ServiceRequestStatus.Analyzed)]
+    [InlineData(ServiceRequestStatus.ReadyForMatching)]
+    [InlineData(ServiceRequestStatus.Cancelled)]
+    public async Task RecoverFailedAnalysisAsync_ThrowsWhenCurrentStatusIsNotAnalyzing(ServiceRequestStatus nonAnalyzingStatus)
+    {
+        var (service, requests, _) = CreateTestContext();
+        var id = Guid.NewGuid();
+        requests.Add(new ServiceRequest
+        {
+            Id = id,
+            CustomerId = Guid.NewGuid(),
+            Description = "Test description",
+            LocationText = "Colombo",
+            Status = nonAnalyzingStatus
+        });
+
+        var ex = await Assert.ThrowsAsync<ConflictException>(() =>
+            service.RecoverFailedAnalysisAsync(id, ServiceRequestStatus.Created));
+
+        Assert.Contains("Recovery is only allowed when status is Analyzing", ex.Message);
+        Assert.Equal(nonAnalyzingStatus, requests.Single().Status);
+    }
+
+    [Theory]
+    [InlineData(ServiceRequestStatus.Analyzing)]
+    [InlineData(ServiceRequestStatus.Analyzed)]
+    [InlineData(ServiceRequestStatus.ReadyForMatching)]
+    [InlineData(ServiceRequestStatus.Cancelled)]
+    [InlineData((ServiceRequestStatus)999)]
+    public async Task RecoverFailedAnalysisAsync_ThrowsWhenTargetStatusIsInvalid(ServiceRequestStatus invalidTarget)
+    {
+        var (service, requests, _) = CreateTestContext();
+        var id = Guid.NewGuid();
+        requests.Add(new ServiceRequest
+        {
+            Id = id,
+            CustomerId = Guid.NewGuid(),
+            Description = "Test description",
+            LocationText = "Colombo",
+            Status = ServiceRequestStatus.Analyzing
+        });
+
+        var ex = await Assert.ThrowsAsync<ConflictException>(() =>
+            service.RecoverFailedAnalysisAsync(id, invalidTarget));
+
+        Assert.Contains("Invalid recovery target status", ex.Message);
+        Assert.Equal(ServiceRequestStatus.Analyzing, requests.Single().Status);
+    }
+
+    [Fact]
+    public async Task RecoverFailedAnalysisAsync_ThrowsKeyNotFound_WhenRequestDoesNotExist()
+    {
+        var (service, _, _) = CreateTestContext();
+        var id = Guid.NewGuid();
+
+        await Assert.ThrowsAsync<KeyNotFoundException>(() =>
+            service.RecoverFailedAnalysisAsync(id, ServiceRequestStatus.Created));
+    }
+
+    [Theory]
+    [InlineData(ServiceRequestStatus.Created)]
+    [InlineData(ServiceRequestStatus.AwaitingInformation)]
+    public async Task GetPreAnalysisStatusAsync_ReturnsStatus_WhenValid(ServiceRequestStatus validStatus)
+    {
+        var (service, requests, _) = CreateTestContext();
+        var id = Guid.NewGuid();
+        requests.Add(new ServiceRequest
+        {
+            Id = id,
+            CustomerId = Guid.NewGuid(),
+            Description = "Test description",
+            LocationText = "Colombo",
+            Status = validStatus
+        });
+
+        var status = await service.GetPreAnalysisStatusAsync(id);
+
+        Assert.Equal(validStatus, status);
+    }
+
+    [Theory]
+    [InlineData(ServiceRequestStatus.Analyzing)]
+    [InlineData(ServiceRequestStatus.Analyzed)]
+    [InlineData(ServiceRequestStatus.ReadyForMatching)]
+    [InlineData(ServiceRequestStatus.Cancelled)]
+    public async Task GetPreAnalysisStatusAsync_ThrowsConflict_WhenInvalidStatus(ServiceRequestStatus invalidStatus)
+    {
+        var (service, requests, _) = CreateTestContext();
+        var id = Guid.NewGuid();
+        requests.Add(new ServiceRequest
+        {
+            Id = id,
+            CustomerId = Guid.NewGuid(),
+            Description = "Test description",
+            LocationText = "Colombo",
+            Status = invalidStatus
+        });
+
+        await Assert.ThrowsAsync<ConflictException>(() =>
+            service.GetPreAnalysisStatusAsync(id));
+    }
+
+    [Fact]
+    public async Task GetPreAnalysisStatusAsync_ThrowsKeyNotFound_WhenRequestDoesNotExist()
+    {
+        var (service, _, _) = CreateTestContext();
+        var id = Guid.NewGuid();
+
+        await Assert.ThrowsAsync<KeyNotFoundException>(() =>
+            service.GetPreAnalysisStatusAsync(id));
+    }
+
+    [Fact]
     public async Task ApplyProblemAnalysisResult_TransitionsAnalyzingToAnalyzedWhenComplete()
     {
         var (service, requests, analyses) = CreateTestContext();

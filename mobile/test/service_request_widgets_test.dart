@@ -10,10 +10,12 @@ import 'package:mobile/features/service_requests/widgets/ready_for_matching_sect
 import 'package:mobile/features/service_requests/widgets/service_request_card.dart';
 import 'package:mobile/features/service_requests/widgets/status_badge.dart';
 import 'package:mobile/features/service_requests/widgets/urgency_chip.dart';
+import 'package:mobile/shared/theme/app_theme.dart';
 
 void main() {
   Widget buildTestable(Widget child) {
     return MaterialApp(
+      theme: AppTheme.lightTheme,
       home: Scaffold(
         body: SingleChildScrollView(child: child),
       ),

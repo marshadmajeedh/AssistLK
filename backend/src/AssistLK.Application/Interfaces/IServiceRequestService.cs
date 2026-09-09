@@ -1,4 +1,5 @@
 using AssistLK.Application.ServiceRequests.DTOs;
+using AssistLK.Domain.Enums;
 
 namespace AssistLK.Application.Interfaces;
 
@@ -45,8 +46,18 @@ public interface IServiceRequestService
         Guid serviceRequestId,
         CancellationToken cancellationToken = default);
 
+    Task<ServiceRequestStatus> GetPreAnalysisStatusAsync(
+        Guid serviceRequestId,
+        CancellationToken cancellationToken = default);
+
+    Task<ServiceRequestResponse> RecoverFailedAnalysisAsync(
+        Guid serviceRequestId,
+        ServiceRequestStatus previousStatus,
+        CancellationToken cancellationToken = default);
+
     Task<ServiceRequestResponse> MarkReadyForMatchingAsync(
         Guid serviceRequestId,
         Guid customerId,
         CancellationToken cancellationToken = default);
 }
+

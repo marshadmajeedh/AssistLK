@@ -106,6 +106,8 @@ public sealed class ProblemUnderstandingAgent : IAgent
         AgentContext context,
         CancellationToken cancellationToken = default)
     {
+        cancellationToken.ThrowIfCancellationRequested();
+
         var input = ResolveInput(context);
         var description = input?.Description ?? context.Input ?? string.Empty;
 
@@ -196,6 +198,10 @@ public sealed class ProblemUnderstandingAgent : IAgent
                 prompt,
                 SystemInstruction,
                 cancellationToken);
+        }
+        catch (OperationCanceledException)
+        {
+            throw;
         }
         catch (Exception ex)
         {

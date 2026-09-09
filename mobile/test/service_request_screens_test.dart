@@ -1,4 +1,5 @@
-import 'package:flutter/gestures.dart';
+import 'dart:async';
+import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:mobile/core/api/api_client.dart';
@@ -29,13 +30,18 @@ class MockServiceRequestService extends ServiceRequestService {
 
   List<ServiceRequestModel> mockRequests = [];
   ProblemUnderstandingResultModel? mockAnalysis;
+  Completer<ProblemUnderstandingResultModel>? analyzeCompleter;
+  bool shouldAnalyzeThrow = false;
+  bool shouldGetByIdThrow = false;
 
   @override
   Future<List<ServiceRequestModel>> getMyRequests() async => List.of(mockRequests);
 
   @override
-  Future<ServiceRequestModel> getById(String id) async =>
-      mockRequests.firstWhere((r) => r.serviceRequestId == id);
+  Future<ServiceRequestModel> getById(String id) async {
+    if (shouldGetByIdThrow) throw Exception('GetById failed');
+    return mockRequests.firstWhere((r) => r.serviceRequestId == id);
+  }
 
   @override
   Future<ServiceRequestModel> create(CreateServiceRequestDto dto) async {
@@ -67,6 +73,10 @@ class MockServiceRequestService extends ServiceRequestService {
 
   @override
   Future<ProblemUnderstandingResultModel> analyze(String id) async {
+    if (shouldAnalyzeThrow) throw Exception('Analysis failed');
+    if (analyzeCompleter != null) {
+      return await analyzeCompleter!.future;
+    }
     return mockAnalysis ??
         ProblemUnderstandingResultModel(
           workflowId: 'wf-1',
@@ -141,6 +151,7 @@ void main() {
       await tester.pumpWidget(buildApp(const CustomerHomeScreen()));
       await tester.pumpAndSettle();
 
+      expect(tester.takeException(), isNull);
       expect(find.text('Welcome, Kamal Perera'), findsOneWidget);
       expect(find.text('kamal@assistlk.com'), findsOneWidget);
       expect(find.text('No Service Requests Yet'), findsOneWidget);
@@ -166,10 +177,115 @@ void main() {
       await tester.pumpWidget(buildApp(const CustomerHomeScreen()));
       await tester.pumpAndSettle();
 
+      expect(tester.takeException(), isNull);
       expect(find.text('Plumbing'), findsOneWidget);
       expect(find.text('Bathroom tap is dripping continuously'), findsOneWidget);
       expect(find.text('Created'), findsOneWidget);
       expect(find.text('Low'), findsOneWidget);
+    });
+
+    testWidgets('header Create Request button has finite content-safe constraints and survives mouse hover on desktop viewport',
+        (tester) async {
+      tester.view.physicalSize = const Size(1280, 800);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(() {
+        tester.view.resetPhysicalSize();
+        tester.view.resetDevicePixelRatio();
+      });
+
+      await tester.pumpWidget(buildApp(const CustomerHomeScreen()));
+      await tester.pumpAndSettle();
+
+      expect(tester.takeException(), isNull);
+
+      final headerButtonFinder = find.widgetWithText(ElevatedButton, 'Create Request').first;
+      expect(headerButtonFinder, findsOneWidget);
+
+      // Verify the header button RenderBox has finite, content-safe dimensions
+      final RenderBox renderBox = tester.renderObject(headerButtonFinder);
+      expect(renderBox.hasSize, isTrue);
+      expect(renderBox.size.width.isFinite, isTrue);
+      expect(renderBox.size.height.isFinite, isTrue);
+      expect(renderBox.size.width, greaterThan(0));
+      expect(renderBox.size.width, lessThan(1280));
+      expect(renderBox.constraints.hasBoundedWidth, isFalse); // Parent Row provides unbounded max width
+      expect(renderBox.constraints.minWidth, 0.0); // Never infinite minimum width!
+
+      // Simulate mouse hover and movement over the button
+      final gesture = await tester.createGesture(kind: PointerDeviceKind.mouse);
+      await gesture.addPointer(location: Offset.zero);
+      await gesture.moveTo(tester.getCenter(headerButtonFinder));
+      await tester.pumpAndSettle();
+
+      expect(tester.takeException(), isNull);
+
+      await gesture.removePointer();
+      await tester.pumpAndSettle();
+      expect(tester.takeException(), isNull);
+    });
+
+    testWidgets('renders cleanly on narrow viewport without overflow or layout exceptions',
+        (tester) async {
+      tester.view.physicalSize = const Size(360, 640);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(() {
+        tester.view.resetPhysicalSize();
+        tester.view.resetDevicePixelRatio();
+      });
+
+      await tester.pumpWidget(buildApp(const CustomerHomeScreen()));
+      await tester.pumpAndSettle();
+
+      expect(tester.takeException(), isNull);
+      expect(find.text('My Service Requests'), findsOneWidget);
+      expect(find.widgetWithText(ElevatedButton, 'Create Request').first, findsOneWidget);
+    });
+
+    testWidgets('populated state renders cleanly on desktop viewport with pointer movement',
+        (tester) async {
+      tester.view.physicalSize = const Size(1280, 800);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(() {
+        tester.view.resetPhysicalSize();
+        tester.view.resetDevicePixelRatio();
+      });
+
+      mockService.mockRequests = [
+        ServiceRequestModel(
+          serviceRequestId: 'req-1',
+          customerId: 'cust-1',
+          category: 'Plumbing',
+          description: 'Bathroom tap is dripping continuously',
+          locationText: 'Colombo 03',
+          urgency: ServiceRequestUrgency.low,
+          status: ServiceRequestStatus.created,
+          createdAt: DateTime(2026, 9, 9),
+          updatedAt: DateTime(2026, 9, 9),
+        ),
+      ];
+
+      await tester.pumpWidget(buildApp(const CustomerHomeScreen()));
+      await tester.pumpAndSettle();
+
+      expect(tester.takeException(), isNull);
+
+      final headerButtonFinder = find.widgetWithText(ElevatedButton, 'Create Request').first;
+      final gesture = await tester.createGesture(kind: PointerDeviceKind.mouse);
+      await gesture.addPointer(location: Offset.zero);
+      await gesture.moveTo(tester.getCenter(headerButtonFinder));
+      await tester.pumpAndSettle();
+
+      expect(tester.takeException(), isNull);
+
+      // Move over the card
+      await gesture.moveTo(tester.getCenter(find.text('Plumbing')));
+      await tester.pumpAndSettle();
+
+      expect(tester.takeException(), isNull);
+
+      await gesture.removePointer();
+      await tester.pumpAndSettle();
+      expect(tester.takeException(), isNull);
     });
 
     testWidgets(
@@ -271,6 +387,131 @@ void main() {
       expect(find.byType(AnalysisResultCard), findsOneWidget);
     });
 
+    testWidgets('ServiceRequestDetailScreen_WhenBackendStatusAnalyzing shows progress indicator and does not show Analyze button',
+        (tester) async {
+      final sample = ServiceRequestModel(
+        serviceRequestId: 'req-analyzing',
+        customerId: 'cust-1',
+        category: 'Electrical',
+        description: 'Breaker keeps tripping',
+        locationText: 'Colombo',
+        urgency: ServiceRequestUrgency.medium,
+        status: ServiceRequestStatus.analyzing,
+        createdAt: DateTime(2026, 9, 9),
+        updatedAt: DateTime(2026, 9, 9),
+      );
+      mockService.mockRequests = [sample];
+
+      await tester.pumpWidget(
+        buildApp(const ServiceRequestDetailScreen(requestId: 'req-analyzing')),
+      );
+      await tester.pump();
+      await tester.pump();
+
+      expect(find.text('AI analysis in progress'), findsOneWidget);
+      expect(find.byType(CircularProgressIndicator), findsOneWidget);
+      expect(find.text('Analyze with Gemini AI'), findsNothing);
+      expect(find.byIcon(Icons.cancel_outlined), findsNothing);
+    });
+
+    testWidgets('ServiceRequestDetailScreen_WhenProviderIsAnalyzing shows progress indicator and does not show Analyze button',
+        (tester) async {
+      final sample = ServiceRequestModel(
+        serviceRequestId: 'req-c-loading',
+        customerId: 'cust-1',
+        category: 'Electrical',
+        description: 'Breaker keeps tripping',
+        locationText: 'Colombo',
+        urgency: ServiceRequestUrgency.medium,
+        status: ServiceRequestStatus.created,
+        createdAt: DateTime(2026, 9, 9),
+        updatedAt: DateTime(2026, 9, 9),
+      );
+      mockService.mockRequests = [sample];
+      mockService.analyzeCompleter = Completer<ProblemUnderstandingResultModel>();
+
+      await tester.pumpWidget(
+        buildApp(const ServiceRequestDetailScreen(requestId: 'req-c-loading')),
+      );
+      await tester.pumpAndSettle();
+
+      expect(find.text('Analyze with Gemini AI'), findsOneWidget);
+
+      // Tap Analyze with Gemini AI
+      await tester.tap(find.text('Analyze with Gemini AI'));
+      await tester.pump();
+
+      // Should show in-progress indicator and hide Analyze button
+      expect(find.text('AI analysis in progress'), findsOneWidget);
+      expect(find.byType(CircularProgressIndicator), findsOneWidget);
+      expect(find.text('Analyze with Gemini AI'), findsNothing);
+      expect(find.byIcon(Icons.cancel_outlined), findsNothing);
+
+      // Complete analysis
+      mockService.analyzeCompleter!.complete(
+        ProblemUnderstandingResultModel(
+          workflowId: 'wf-1',
+          executionId: 'ex-1',
+          serviceRequestId: 'req-c-loading',
+          status: ServiceRequestStatus.analyzed,
+          category: 'Electrical',
+          problemSummary: 'Faulty circuit breaker detected',
+          urgency: ServiceRequestUrgency.high,
+          confidence: 0.96,
+          needsMoreInformation: false,
+          followUpQuestions: const [],
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      expect(find.byType(AnalysisResultCard), findsOneWidget);
+    });
+
+    testWidgets('Successful clarification result sets AwaitingInformation and displays clarification state',
+        (tester) async {
+      final sample = ServiceRequestModel(
+        serviceRequestId: 'req-clarify',
+        customerId: 'cust-1',
+        category: 'Plumbing',
+        description: 'Strange sounds from radiator',
+        locationText: 'Colombo',
+        urgency: ServiceRequestUrgency.medium,
+        status: ServiceRequestStatus.created,
+        createdAt: DateTime(2026, 9, 9),
+        updatedAt: DateTime(2026, 9, 9),
+      );
+      mockService.mockRequests = [sample];
+      mockService.mockAnalysis = ProblemUnderstandingResultModel(
+        workflowId: 'wf-clarify',
+        executionId: 'ex-clarify',
+        serviceRequestId: 'req-clarify',
+        status: ServiceRequestStatus.awaitingInformation,
+        category: 'Plumbing',
+        problemSummary: 'Radiator knocking noise',
+        urgency: ServiceRequestUrgency.medium,
+        confidence: 0.85,
+        needsMoreInformation: true,
+        followUpQuestions: const [
+          'Is the noise continuous or only when heat turns on?',
+        ],
+      );
+
+      await tester.pumpWidget(
+        buildApp(const ServiceRequestDetailScreen(requestId: 'req-clarify')),
+      );
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.text('Analyze with Gemini AI'));
+      await tester.pumpAndSettle();
+
+      expect(find.byType(ClarificationSection), findsOneWidget);
+      expect(find.text('Clarification Needed'), findsOneWidget);
+      expect(find.text('Is the noise continuous or only when heat turns on?'),
+          findsOneWidget);
+      expect(find.text('Edit Details'), findsOneWidget);
+      expect(find.text('Re-analyze'), findsOneWidget);
+    });
+
     testWidgets('Analyzed status shows AnalysisResultCard and Mark Ready button',
         (tester) async {
       final sample = ServiceRequestModel(
@@ -351,6 +592,162 @@ void main() {
       expect(find.byType(ReadyForMatchingSection), findsOneWidget);
       expect(find.text('Request Understood'), findsOneWidget);
       expect(find.text('Ready for provider matching'), findsOneWidget);
+    });
+
+    testWidgets('analysisStateNeedsRefresh true shows uncertain card, hides Analyze, Edit, Cancel',
+        (tester) async {
+      final sample = ServiceRequestModel(
+        serviceRequestId: 'req-uncertain',
+        customerId: 'cust-1',
+        category: 'General',
+        description: 'Need assistance with appliance',
+        locationText: 'Colombo',
+        urgency: ServiceRequestUrgency.low,
+        status: ServiceRequestStatus.created,
+        createdAt: DateTime(2026, 9, 9),
+        updatedAt: DateTime(2026, 9, 9),
+      );
+      mockService.mockRequests = [sample];
+
+      await tester.pumpWidget(
+        buildApp(const ServiceRequestDetailScreen(requestId: 'req-uncertain')),
+      );
+      await tester.pumpAndSettle();
+
+      expect(find.text('Analyze with Gemini AI'), findsOneWidget);
+
+      // Trigger analysis where both analyze and refresh fail
+      mockService.shouldAnalyzeThrow = true;
+      mockService.shouldGetByIdThrow = true;
+
+      await tester.tap(find.text('Analyze with Gemini AI'));
+      await tester.pumpAndSettle();
+
+      // State is now uncertain
+      expect(find.text('Unable to confirm the latest analysis status.'), findsOneWidget);
+      expect(find.text('Refresh Status'), findsOneWidget);
+      expect(find.text('Analyze with Gemini AI'), findsNothing);
+      expect(find.text('Edit Details'), findsNothing);
+      expect(find.byIcon(Icons.cancel_outlined), findsNothing);
+    });
+
+    testWidgets('manual Refresh Status restores Analyze button if backend returned Created',
+        (tester) async {
+      final sample = ServiceRequestModel(
+        serviceRequestId: 'req-ref-c',
+        customerId: 'cust-1',
+        category: 'General',
+        description: 'Need assistance with appliance',
+        locationText: 'Colombo',
+        urgency: ServiceRequestUrgency.low,
+        status: ServiceRequestStatus.created,
+        createdAt: DateTime(2026, 9, 9),
+        updatedAt: DateTime(2026, 9, 9),
+      );
+      mockService.mockRequests = [sample];
+
+      await tester.pumpWidget(
+        buildApp(const ServiceRequestDetailScreen(requestId: 'req-ref-c')),
+      );
+      await tester.pumpAndSettle();
+
+      mockService.shouldAnalyzeThrow = true;
+      mockService.shouldGetByIdThrow = true;
+
+      await tester.tap(find.text('Analyze with Gemini AI'));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Refresh Status'), findsOneWidget);
+
+      // Now network recovers and backend returns Created
+      mockService.shouldGetByIdThrow = false;
+
+      await tester.tap(find.text('Refresh Status'));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Analyze with Gemini AI'), findsOneWidget);
+      expect(find.text('Unable to confirm the latest analysis status.'), findsNothing);
+    });
+
+    testWidgets('manual Refresh Status shows progress state if backend returned Analyzing',
+        (tester) async {
+      final sample = ServiceRequestModel(
+        serviceRequestId: 'req-ref-a',
+        customerId: 'cust-1',
+        category: 'General',
+        description: 'Need assistance with appliance',
+        locationText: 'Colombo',
+        urgency: ServiceRequestUrgency.low,
+        status: ServiceRequestStatus.created,
+        createdAt: DateTime(2026, 9, 9),
+        updatedAt: DateTime(2026, 9, 9),
+      );
+      mockService.mockRequests = [sample];
+
+      await tester.pumpWidget(
+        buildApp(const ServiceRequestDetailScreen(requestId: 'req-ref-a')),
+      );
+      await tester.pumpAndSettle();
+
+      mockService.shouldAnalyzeThrow = true;
+      mockService.shouldGetByIdThrow = true;
+
+      await tester.tap(find.text('Analyze with Gemini AI'));
+      await tester.pumpAndSettle();
+
+      // Backend actually transitioned to Analyzing
+      mockService.shouldGetByIdThrow = false;
+      mockService.mockRequests = [
+        sample.copyWith(status: ServiceRequestStatus.analyzing),
+      ];
+
+      await tester.tap(find.text('Refresh Status'));
+      await tester.pump();
+      await tester.pump();
+
+      expect(find.text('AI analysis in progress'), findsOneWidget);
+      expect(find.byType(CircularProgressIndicator), findsOneWidget);
+      expect(find.text('Analyze with Gemini AI'), findsNothing);
+    });
+
+    testWidgets('manual Refresh Status shows clarification state if backend returned AwaitingInformation',
+        (tester) async {
+      final sample = ServiceRequestModel(
+        serviceRequestId: 'req-ref-ai',
+        customerId: 'cust-1',
+        category: 'General',
+        description: 'Need assistance with appliance',
+        locationText: 'Colombo',
+        urgency: ServiceRequestUrgency.low,
+        status: ServiceRequestStatus.created,
+        createdAt: DateTime(2026, 9, 9),
+        updatedAt: DateTime(2026, 9, 9),
+      );
+      mockService.mockRequests = [sample];
+
+      await tester.pumpWidget(
+        buildApp(const ServiceRequestDetailScreen(requestId: 'req-ref-ai')),
+      );
+      await tester.pumpAndSettle();
+
+      mockService.shouldAnalyzeThrow = true;
+      mockService.shouldGetByIdThrow = true;
+
+      await tester.tap(find.text('Analyze with Gemini AI'));
+      await tester.pumpAndSettle();
+
+      // Backend finished with AwaitingInformation
+      mockService.shouldGetByIdThrow = false;
+      mockService.mockRequests = [
+        sample.copyWith(status: ServiceRequestStatus.awaitingInformation),
+      ];
+
+      await tester.tap(find.text('Refresh Status'));
+      await tester.pumpAndSettle();
+
+      expect(find.byType(ClarificationSection), findsOneWidget);
+      expect(find.text('Clarification Needed'), findsOneWidget);
+      expect(find.text('Analyze with Gemini AI'), findsNothing);
     });
   });
 

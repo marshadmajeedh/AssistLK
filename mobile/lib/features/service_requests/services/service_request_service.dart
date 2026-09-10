@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:dio/dio.dart';
 
 import '../../../core/api/api_client.dart';
@@ -10,6 +12,20 @@ class ServiceRequestService {
   final ApiClient apiClient;
 
   ServiceRequestService({required this.apiClient});
+
+  bool isTimeoutOrUncertainTransport(Object error) {
+    if (error is DioException) {
+      if (error.response != null) {
+        return false;
+      }
+      return error.type == DioExceptionType.receiveTimeout ||
+          error.type == DioExceptionType.connectionTimeout ||
+          error.type == DioExceptionType.sendTimeout ||
+          error.type == DioExceptionType.connectionError ||
+          error.type == DioExceptionType.unknown;
+    }
+    return error is TimeoutException;
+  }
 
   Future<ServiceRequestModel> create(CreateServiceRequestDto dto) async {
     final response = await apiClient.client.post(

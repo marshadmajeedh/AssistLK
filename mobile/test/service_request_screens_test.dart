@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:ui';
+import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:mobile/core/api/api_client.dart';
@@ -34,7 +35,9 @@ class MockServiceRequestService extends ServiceRequestService {
   ProblemUnderstandingResultModel? mockAnalysis;
   Completer<ProblemUnderstandingResultModel>? analyzeCompleter;
   bool shouldAnalyzeThrow = false;
+  Exception? analyzeException;
   bool shouldGetByIdThrow = false;
+  List<ServiceRequestModel>? getByIdResponses;
   CreateServiceRequestDto? lastCreateDto;
   UpdateServiceRequestDto? lastUpdateDto;
 
@@ -44,6 +47,9 @@ class MockServiceRequestService extends ServiceRequestService {
   @override
   Future<ServiceRequestModel> getById(String id) async {
     if (shouldGetByIdThrow) throw Exception('GetById failed');
+    if (getByIdResponses != null && getByIdResponses!.isNotEmpty) {
+      return getByIdResponses!.removeAt(0);
+    }
     return mockRequests.firstWhere((r) => r.serviceRequestId == id);
   }
 
@@ -81,6 +87,7 @@ class MockServiceRequestService extends ServiceRequestService {
 
   @override
   Future<ProblemUnderstandingResultModel> analyze(String id) async {
+    if (analyzeException != null) throw analyzeException!;
     if (shouldAnalyzeThrow) throw Exception('Analysis failed');
     if (analyzeCompleter != null) {
       return await analyzeCompleter!.future;
@@ -149,7 +156,11 @@ void main() {
 
   setUp(() {
     mockService = MockServiceRequestService();
-    requestProvider = ServiceRequestProvider(serviceRequestService: mockService);
+    requestProvider = ServiceRequestProvider(
+      serviceRequestService: mockService,
+      reconciliationPollInterval: Duration.zero,
+      maxReconciliationPolls: 3,
+    );
     authProvider = FakeAuthProvider();
   });
 
@@ -960,6 +971,162 @@ void main() {
       expect(find.byType(ClarificationSection), findsOneWidget);
       expect(find.text('Clarification Needed'), findsOneWidget);
       expect(find.text('Analyze with Gemini AI'), findsNothing);
+    });
+
+    testWidgets('timeout followed by reconciliation reaching Analyzed shows AnalysisResultCard and mismatch banner',
+        (tester) async {
+      final sample = ServiceRequestModel(
+        serviceRequestId: 'req-rec-a',
+        customerId: 'cust-1',
+        category: 'Electrical',
+        categoryHint: 'Electrical',
+        description: 'Water is leaking heavily from the pipe under my kitchen sink.',
+        locationText: 'Colombo',
+        urgency: ServiceRequestUrgency.low,
+        status: ServiceRequestStatus.created,
+        createdAt: DateTime(2026, 9, 9),
+        updatedAt: DateTime(2026, 9, 9),
+      );
+      mockService.mockRequests = [sample];
+
+      await tester.pumpWidget(
+        buildApp(const ServiceRequestDetailScreen(requestId: 'req-rec-a')),
+      );
+      await tester.pumpAndSettle();
+
+      expect(find.text('Analyze with Gemini AI'), findsOneWidget);
+
+      mockService.analyzeException = DioException(
+        requestOptions: RequestOptions(path: '/service-requests/req-rec-a/analyze'),
+        type: DioExceptionType.receiveTimeout,
+      );
+      mockService.getByIdResponses = [
+        sample.copyWith(status: ServiceRequestStatus.analyzing),
+        sample.copyWith(
+          status: ServiceRequestStatus.analyzed,
+          category: 'Plumbing',
+          urgency: ServiceRequestUrgency.high,
+        ),
+      ];
+
+      await tester.tap(find.text('Analyze with Gemini AI'));
+      await tester.pumpAndSettle();
+
+      // Successfully transitioned to Analyzed via bounded reconciliation
+      expect(find.byType(AnalysisResultCard), findsOneWidget);
+      expect(find.text('Plumbing'), findsWidgets);
+      expect(find.text('Your preference:'), findsOneWidget);
+      expect(find.text('Electrical'), findsWidgets);
+      expect(find.text('AI identified a different service category based on your problem description.'), findsOneWidget);
+      expect(find.text('Mark Ready for Matching'), findsOneWidget);
+      expect(find.text('Analyze with Gemini AI'), findsNothing);
+      expect(find.byType(SnackBar), findsNothing);
+    });
+
+    testWidgets('timeout followed by grace-period expiry shows informational processing card, no red error, and Refresh Status button',
+        (tester) async {
+      final sample = ServiceRequestModel(
+        serviceRequestId: 'req-grace',
+        customerId: 'cust-1',
+        category: 'General',
+        description: 'Strange noise in pipes',
+        locationText: 'Colombo',
+        urgency: ServiceRequestUrgency.low,
+        status: ServiceRequestStatus.created,
+        createdAt: DateTime(2026, 9, 9),
+        updatedAt: DateTime(2026, 9, 9),
+      );
+      mockService.mockRequests = [sample];
+
+      await tester.pumpWidget(
+        buildApp(const ServiceRequestDetailScreen(requestId: 'req-grace')),
+      );
+      await tester.pumpAndSettle();
+
+      expect(find.text('Analyze with Gemini AI'), findsOneWidget);
+
+      mockService.mockRequests = [
+        sample.copyWith(status: ServiceRequestStatus.analyzing),
+      ];
+      mockService.analyzeException = DioException(
+        requestOptions: RequestOptions(path: '/service-requests/req-grace/analyze'),
+        type: DioExceptionType.receiveTimeout,
+      );
+
+      await tester.tap(find.text('Analyze with Gemini AI'));
+      await tester.pump();
+      await tester.pump();
+      await tester.pump();
+
+      // Grace period expired while still Analyzing: informational processing card with Refresh Status
+      expect(find.text('AI analysis in progress'), findsOneWidget);
+      expect(find.byType(CircularProgressIndicator), findsOneWidget);
+      expect(
+        find.text('Analysis is taking longer than expected. Your request is still being processed.'),
+        findsOneWidget,
+      );
+      expect(find.text('Refresh Status'), findsOneWidget);
+      expect(find.text('Analyze with Gemini AI'), findsNothing);
+      expect(find.byIcon(Icons.cancel_outlined), findsNothing);
+      expect(find.byType(SnackBar), findsNothing);
+    });
+
+    testWidgets('manual Refresh Status from grace-period expiry recovers to Analyzed status',
+        (tester) async {
+      final sample = ServiceRequestModel(
+        serviceRequestId: 'req-recover-a',
+        customerId: 'cust-1',
+        category: 'General',
+        description: 'Sink leak',
+        locationText: 'Colombo',
+        urgency: ServiceRequestUrgency.low,
+        status: ServiceRequestStatus.created,
+        createdAt: DateTime(2026, 9, 9),
+        updatedAt: DateTime(2026, 9, 9),
+      );
+      mockService.mockRequests = [sample];
+
+      await tester.pumpWidget(
+        buildApp(const ServiceRequestDetailScreen(requestId: 'req-recover-a')),
+      );
+      await tester.pumpAndSettle();
+
+      expect(find.text('Analyze with Gemini AI'), findsOneWidget);
+
+      mockService.mockRequests = [
+        sample.copyWith(status: ServiceRequestStatus.analyzing),
+      ];
+      mockService.analyzeException = DioException(
+        requestOptions: RequestOptions(path: '/service-requests/req-recover-a/analyze'),
+        type: DioExceptionType.receiveTimeout,
+      );
+
+      await tester.tap(find.text('Analyze with Gemini AI'));
+      await tester.pump();
+      await tester.pump();
+      await tester.pump();
+
+      expect(find.text('Refresh Status'), findsOneWidget);
+
+      // Backend completes analysis
+      mockService.analyzeException = null;
+      mockService.mockRequests = [
+        sample.copyWith(
+          status: ServiceRequestStatus.analyzed,
+          category: 'Plumbing',
+          urgency: ServiceRequestUrgency.high,
+        ),
+      ];
+
+      await tester.tap(find.text('Refresh Status'));
+      await tester.pumpAndSettle();
+
+      expect(find.byType(AnalysisResultCard), findsOneWidget);
+      expect(
+        find.text('Analysis is taking longer than expected. Your request is still being processed.'),
+        findsNothing,
+      );
+      expect(find.text('Mark Ready for Matching'), findsOneWidget);
     });
   });
 

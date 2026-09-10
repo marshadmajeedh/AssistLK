@@ -430,8 +430,7 @@ class _ServiceRequestDetailScreenState
       );
     }
 
-    if (provider.isAnalyzing ||
-        request.status == ServiceRequestStatus.analyzing) {
+    if (provider.isAnalyzing) {
       return const AppCard(
         child: Row(
           mainAxisAlignment: MainAxisAlignment.center,
@@ -445,6 +444,45 @@ class _ServiceRequestDetailScreenState
             Text(
               'AI analysis in progress',
               style: AppTextStyles.body,
+            ),
+          ],
+        ),
+      );
+    }
+
+    if (request.status == ServiceRequestStatus.analyzing) {
+      return AppCard(
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Row(
+              children: [
+                SizedBox(
+                  width: 20,
+                  height: 20,
+                  child: CircularProgressIndicator(strokeWidth: 2),
+                ),
+                SizedBox(width: AppSpacing.md),
+                Expanded(
+                  child: Text(
+                    'AI analysis in progress',
+                    style: AppTextStyles.cardHeading,
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: AppSpacing.xs),
+            Text(
+              'Analysis is taking longer than expected. Your request is still being processed.',
+              style: AppTextStyles.body.copyWith(
+                color: AppColors.textSecondary,
+              ),
+            ),
+            const SizedBox(height: AppSpacing.md),
+            AppButton(
+              text: 'Refresh Status',
+              isLoading: provider.isLoading,
+              onPressed: () => provider.loadRequestById(request.serviceRequestId),
             ),
           ],
         ),

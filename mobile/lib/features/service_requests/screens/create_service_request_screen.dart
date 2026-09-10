@@ -11,15 +11,18 @@ import '../../../../shared/widgets/app_text_field.dart';
 import '../models/canonical_service_category.dart';
 import '../models/create_service_request_dto.dart';
 import '../providers/service_request_provider.dart';
+import '../services/location_service.dart';
 import '../widgets/step_indicator.dart';
 import 'service_request_detail_screen.dart';
 
 class CreateServiceRequestScreen extends StatefulWidget {
   final String? initialCategoryPreference;
+  final LocationService? locationService;
 
   const CreateServiceRequestScreen({
     super.key,
     this.initialCategoryPreference,
+    this.locationService,
   });
 
   @override
@@ -31,6 +34,13 @@ class _CreateServiceRequestScreenState
     extends State<CreateServiceRequestScreen> {
   int _currentStep = 0;
   String? _selectedPreference;
+  late final LocationService _locationService;
+
+  double? _latitude;
+  double? _longitude;
+  bool _isObtainingLocation = false;
+  String? _locationFeedbackMessage;
+  bool _isLocationError = false;
 
   final _detailsFormKey = GlobalKey<FormState>();
   final _locationFormKey = GlobalKey<FormState>();
@@ -41,6 +51,7 @@ class _CreateServiceRequestScreenState
   void initState() {
     super.initState();
     _selectedPreference = widget.initialCategoryPreference;
+    _locationService = widget.locationService ?? GeolocatorLocationService();
   }
 
   @override
@@ -159,6 +170,56 @@ class _CreateServiceRequestScreenState
     });
   }
 
+  Future<void> _useCurrentLocation() async {
+    setState(() {
+      _isObtainingLocation = true;
+      _locationFeedbackMessage = null;
+      _isLocationError = false;
+    });
+
+    try {
+      final result = await _locationService.getCurrentLocation();
+      if (!mounted) return;
+
+      if (result.isSuccess) {
+        setState(() {
+          _latitude = result.coordinates!.latitude;
+          _longitude = result.coordinates!.longitude;
+          _locationFeedbackMessage = 'GPS location captured';
+          _isLocationError = false;
+        });
+      } else {
+        setState(() {
+          _locationFeedbackMessage = result.message ??
+              'Could not retrieve location. Please enter address manually.';
+          _isLocationError = true;
+        });
+      }
+    } catch (_) {
+      if (!mounted) return;
+      setState(() {
+        _locationFeedbackMessage =
+            'Could not retrieve your current location. Please enter the location manually.';
+        _isLocationError = true;
+      });
+    } finally {
+      if (mounted) {
+        setState(() {
+          _isObtainingLocation = false;
+        });
+      }
+    }
+  }
+
+  void _clearGpsLocation() {
+    setState(() {
+      _latitude = null;
+      _longitude = null;
+      _locationFeedbackMessage = null;
+      _isLocationError = false;
+    });
+  }
+
   Future<void> _submit() async {
     final provider = context.read<ServiceRequestProvider>();
     final canonicalHint =
@@ -166,6 +227,8 @@ class _CreateServiceRequestScreenState
     final dto = CreateServiceRequestDto(
       description: _descriptionController.text.trim(),
       locationText: _locationController.text.trim(),
+      latitude: _latitude,
+      longitude: _longitude,
       categoryHint: canonicalHint,
     );
 
@@ -360,6 +423,136 @@ class _CreateServiceRequestScreenState
           ),
           const SizedBox(height: AppSpacing.lg),
 
+          // GPS Location Action Button
+          SizedBox(
+            width: double.infinity,
+            child: OutlinedButton.icon(
+              key: const Key('use_current_location_button'),
+              onPressed: _isObtainingLocation ? null : _useCurrentLocation,
+              icon: _isObtainingLocation
+                  ? const SizedBox(
+                      width: 18,
+                      height: 18,
+                      child: CircularProgressIndicator(strokeWidth: 2),
+                    )
+                  : const Icon(Icons.my_location_rounded, size: 18),
+              label: Text(
+                _isObtainingLocation
+                    ? 'Acquiring GPS location...'
+                    : 'Use Current Location',
+              ),
+              style: OutlinedButton.styleFrom(
+                foregroundColor: AppColors.primary,
+                side: const BorderSide(color: AppColors.primary),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: AppSpacing.md,
+                  vertical: AppSpacing.sm + 4,
+                ),
+              ),
+            ),
+          ),
+
+          if (_latitude != null && _longitude != null) ...[
+            const SizedBox(height: AppSpacing.sm),
+            Container(
+              padding: const EdgeInsets.symmetric(
+                horizontal: AppSpacing.md,
+                vertical: AppSpacing.sm,
+              ),
+              decoration: BoxDecoration(
+                color: AppColors.success.withValues(alpha: 0.08),
+                borderRadius: BorderRadius.circular(AppRadius.medium),
+                border: Border.all(
+                  color: AppColors.success.withValues(alpha: 0.3),
+                ),
+              ),
+              child: Row(
+                children: [
+                  const Icon(
+                    Icons.check_circle_rounded,
+                    color: AppColors.success,
+                    size: 18,
+                  ),
+                  const SizedBox(width: AppSpacing.xs),
+                  Expanded(
+                    child: Text(
+                      'GPS location captured (${_latitude!.toStringAsFixed(4)}, ${_longitude!.toStringAsFixed(4)})',
+                      style: AppTextStyles.small.copyWith(
+                        color: AppColors.success,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                  ),
+                  TextButton(
+                    onPressed: _clearGpsLocation,
+                    child: const Text(
+                      'Remove GPS',
+                      style: TextStyle(
+                        color: AppColors.error,
+                        fontSize: 12,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ] else if (_locationFeedbackMessage != null) ...[
+            const SizedBox(height: AppSpacing.sm),
+            Container(
+              padding: const EdgeInsets.all(AppSpacing.sm),
+              decoration: BoxDecoration(
+                color: (_isLocationError ? AppColors.warning : AppColors.primary)
+                    .withValues(alpha: 0.08),
+                borderRadius: BorderRadius.circular(AppRadius.medium),
+                border: Border.all(
+                  color:
+                      (_isLocationError ? AppColors.warning : AppColors.primary)
+                          .withValues(alpha: 0.3),
+                ),
+              ),
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Icon(
+                    _isLocationError
+                        ? Icons.info_outline_rounded
+                        : Icons.check_circle_outline_rounded,
+                    color:
+                        _isLocationError ? AppColors.warning : AppColors.primary,
+                    size: 18,
+                  ),
+                  const SizedBox(width: AppSpacing.xs),
+                  Expanded(
+                    child: Text(
+                      _locationFeedbackMessage!,
+                      style: AppTextStyles.small.copyWith(
+                        color: AppColors.textPrimary,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
+          const SizedBox(height: AppSpacing.md),
+
+          // Divider
+          const Row(
+            children: [
+              Expanded(child: Divider(color: AppColors.border)),
+              Padding(
+                padding: EdgeInsets.symmetric(horizontal: AppSpacing.sm),
+                child: Text(
+                  'or enter address manually',
+                  style: AppTextStyles.small,
+                ),
+              ),
+              Expanded(child: Divider(color: AppColors.border)),
+            ],
+          ),
+          const SizedBox(height: AppSpacing.md),
+
           // Location Text Field
           AppTextField(
             controller: _locationController,
@@ -449,6 +642,26 @@ class _CreateServiceRequestScreenState
                 _locationController.text.trim(),
                 style: AppTextStyles.body,
               ),
+              if (_latitude != null && _longitude != null) ...[
+                const SizedBox(height: AppSpacing.xs),
+                Row(
+                  children: [
+                    const Icon(
+                      Icons.my_location_rounded,
+                      size: 14,
+                      color: AppColors.success,
+                    ),
+                    const SizedBox(width: AppSpacing.xs),
+                    Text(
+                      'GPS location captured (${_latitude!.toStringAsFixed(4)}, ${_longitude!.toStringAsFixed(4)})',
+                      style: AppTextStyles.small.copyWith(
+                        color: AppColors.success,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                  ],
+                ),
+              ],
             ],
           ),
         ),

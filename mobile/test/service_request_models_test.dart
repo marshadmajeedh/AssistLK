@@ -356,6 +356,89 @@ void main() {
       expect(json.containsKey('categoryHint'), isTrue);
       expect(json['categoryHint'], isNull);
     });
+
+    test('CreateServiceRequestDto validates and serializes coordinate pair', () {
+      const withCoords = CreateServiceRequestDto(
+        description: 'Leaking pipe under sink',
+        locationText: 'Colombo 03',
+        latitude: 6.9271,
+        longitude: 79.8612,
+      );
+      expect(withCoords.validate(), isNull);
+      final json = withCoords.toJson();
+      expect(json['latitude'], 6.9271);
+      expect(json['longitude'], 79.8612);
+
+      const noCoords = CreateServiceRequestDto(
+        description: 'Leaking pipe under sink',
+        locationText: 'Colombo 03',
+      );
+      expect(noCoords.validate(), isNull);
+      final noJson = noCoords.toJson();
+      expect(noJson.containsKey('latitude'), isFalse);
+      expect(noJson.containsKey('longitude'), isFalse);
+
+      const onlyLat = CreateServiceRequestDto(
+        description: 'Leaking pipe under sink',
+        locationText: 'Colombo 03',
+        latitude: 6.9271,
+      );
+      expect(onlyLat.validate(), 'Both latitude and longitude must be provided together.');
+
+      const onlyLng = CreateServiceRequestDto(
+        description: 'Leaking pipe under sink',
+        locationText: 'Colombo 03',
+        longitude: 79.8612,
+      );
+      expect(onlyLng.validate(), 'Both latitude and longitude must be provided together.');
+
+      const invalidLat = CreateServiceRequestDto(
+        description: 'Leaking pipe under sink',
+        locationText: 'Colombo 03',
+        latitude: 95.0,
+        longitude: 79.8612,
+      );
+      expect(invalidLat.validate(), 'Latitude must be between -90 and 90.');
+
+      const invalidLng = CreateServiceRequestDto(
+        description: 'Leaking pipe under sink',
+        locationText: 'Colombo 03',
+        latitude: 6.9271,
+        longitude: 195.0,
+      );
+      expect(invalidLng.validate(), 'Longitude must be between -180 and 180.');
+    });
+
+    test('UpdateServiceRequestDto validates and serializes coordinates', () {
+      const withCoords = UpdateServiceRequestDto(
+        description: 'Updated pipe leak',
+        locationText: 'Colombo 03',
+        latitude: 6.9271,
+        longitude: 79.8612,
+      );
+      expect(withCoords.validate(), isNull);
+      final json = withCoords.toJson();
+      expect(json['latitude'], 6.9271);
+      expect(json['longitude'], 79.8612);
+
+      const clearCoords = UpdateServiceRequestDto(
+        description: 'Updated pipe leak',
+        locationText: 'Colombo 03',
+        latitude: null,
+        longitude: null,
+      );
+      expect(clearCoords.validate(), isNull);
+      final clearJson = clearCoords.toJson();
+      expect(clearJson['latitude'], isNull);
+      expect(clearJson['longitude'], isNull);
+
+      const onlyLat = UpdateServiceRequestDto(
+        description: 'Updated pipe leak',
+        locationText: 'Colombo 03',
+        latitude: 6.9271,
+      );
+      expect(onlyLat.validate(), 'Both latitude and longitude must be provided together.');
+    });
   });
 
   group('CanonicalServiceCategory Mapping Safety', () {

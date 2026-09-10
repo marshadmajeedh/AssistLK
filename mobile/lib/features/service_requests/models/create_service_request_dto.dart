@@ -36,6 +36,9 @@ class CreateServiceRequestDto {
     if (locationText.trim().length > 255) {
       return 'Location cannot exceed 255 characters.';
     }
+    if ((latitude == null) != (longitude == null)) {
+      return 'Both latitude and longitude must be provided together.';
+    }
     if (latitude != null && (latitude! < -90 || latitude! > 90)) {
       return 'Latitude must be between -90 and 90.';
     }

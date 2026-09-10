@@ -2,8 +2,11 @@ import 'service_request_status.dart';
 import 'service_request_urgency.dart';
 
 class ServiceRequestModel {
+  static const Object _sentinel = Object();
+
   final String serviceRequestId;
   final String customerId;
+  final String? categoryHint;
   final String category;
   final String description;
   final String locationText;
@@ -17,6 +20,7 @@ class ServiceRequestModel {
   const ServiceRequestModel({
     required this.serviceRequestId,
     required this.customerId,
+    this.categoryHint,
     required this.category,
     required this.description,
     required this.locationText,
@@ -32,6 +36,7 @@ class ServiceRequestModel {
     return ServiceRequestModel(
       serviceRequestId: json['serviceRequestId']?.toString() ?? '',
       customerId: json['customerId']?.toString() ?? '',
+      categoryHint: json['categoryHint'] as String?,
       category: json['category'] as String? ?? 'Unclassified',
       description: json['description'] as String? ?? '',
       locationText: json['locationText'] as String? ?? '',
@@ -52,6 +57,7 @@ class ServiceRequestModel {
     return {
       'serviceRequestId': serviceRequestId,
       'customerId': customerId,
+      'categoryHint': categoryHint,
       'category': category,
       'description': description,
       'locationText': locationText,
@@ -67,6 +73,7 @@ class ServiceRequestModel {
   ServiceRequestModel copyWith({
     String? serviceRequestId,
     String? customerId,
+    Object? categoryHint = _sentinel,
     String? category,
     String? description,
     String? locationText,
@@ -80,6 +87,9 @@ class ServiceRequestModel {
     return ServiceRequestModel(
       serviceRequestId: serviceRequestId ?? this.serviceRequestId,
       customerId: customerId ?? this.customerId,
+      categoryHint: identical(categoryHint, _sentinel)
+          ? this.categoryHint
+          : categoryHint as String?,
       category: category ?? this.category,
       description: description ?? this.description,
       locationText: locationText ?? this.locationText,

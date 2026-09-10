@@ -2,10 +2,12 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
 import '../../../../shared/theme/app_colors.dart';
+import '../../../../shared/theme/app_radius.dart';
 import '../../../../shared/theme/app_spacing.dart';
 import '../../../../shared/theme/app_text_styles.dart';
 import '../../../../shared/widgets/app_button.dart';
 import '../../../../shared/widgets/app_text_field.dart';
+import '../models/canonical_service_category.dart';
 import '../models/service_request_model.dart';
 import '../models/update_service_request_dto.dart';
 import '../providers/service_request_provider.dart';
@@ -27,6 +29,7 @@ class _EditServiceRequestScreenState extends State<EditServiceRequestScreen> {
   final _formKey = GlobalKey<FormState>();
   late final TextEditingController _descriptionController;
   late final TextEditingController _locationController;
+  String? _selectedPreference;
 
   @override
   void initState() {
@@ -35,6 +38,7 @@ class _EditServiceRequestScreenState extends State<EditServiceRequestScreen> {
         TextEditingController(text: widget.request.description);
     _locationController =
         TextEditingController(text: widget.request.locationText);
+    _selectedPreference = widget.request.categoryHint;
   }
 
   @override
@@ -44,15 +48,97 @@ class _EditServiceRequestScreenState extends State<EditServiceRequestScreen> {
     super.dispose();
   }
 
+  void _showChangePreferenceSheet() {
+    showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(
+          top: Radius.circular(AppRadius.large),
+        ),
+      ),
+      builder: (sheetCtx) {
+        return SafeArea(
+          child: Padding(
+            padding: const EdgeInsets.symmetric(
+              horizontal: AppSpacing.lg,
+              vertical: AppSpacing.md,
+            ),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    const Text(
+                      'Select Service Preference',
+                      style: AppTextStyles.sectionHeading,
+                    ),
+                    IconButton(
+                      icon: const Icon(Icons.close),
+                      onPressed: () => Navigator.of(sheetCtx).pop(),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: AppSpacing.sm),
+                for (final cat in CanonicalServiceCategory.canonicalShortcuts) ...[
+                  ListTile(
+                    leading: Icon(cat.icon, color: AppColors.primary),
+                    title: Text(cat.displayName, style: AppTextStyles.cardHeading),
+                    subtitle: Text(cat.description, style: AppTextStyles.small),
+                    trailing: _selectedPreference == cat.canonicalName
+                        ? const Icon(Icons.check, color: AppColors.primary)
+                        : null,
+                    onTap: () {
+                      setState(() {
+                        _selectedPreference = cat.canonicalName;
+                      });
+                      Navigator.of(sheetCtx).pop();
+                    },
+                  ),
+                  const Divider(height: 1, color: AppColors.border),
+                ],
+                ListTile(
+                  leading: const Icon(
+                    Icons.auto_awesome_rounded,
+                    color: AppColors.primary,
+                  ),
+                  title: const Text('Let AI identify', style: AppTextStyles.cardHeading),
+                  subtitle: const Text(
+                    'AssistLK AI will determine the service category',
+                    style: AppTextStyles.small,
+                  ),
+                  trailing: _selectedPreference == null
+                      ? const Icon(Icons.check, color: AppColors.primary)
+                      : null,
+                  onTap: () {
+                    setState(() {
+                      _selectedPreference = null;
+                    });
+                    Navigator.of(sheetCtx).pop();
+                  },
+                ),
+              ],
+            ),
+          ),
+        );
+      },
+    );
+  }
+
   Future<void> _submit() async {
     if (!_formKey.currentState!.validate()) {
       return;
     }
 
     final provider = context.read<ServiceRequestProvider>();
+    final canonicalHint =
+        CanonicalServiceCategory.toCanonicalCategoryHint(_selectedPreference);
     final dto = UpdateServiceRequestDto(
       description: _descriptionController.text.trim(),
       locationText: _locationController.text.trim(),
+      categoryHint: canonicalHint,
     );
 
     final updated = await provider.updateRequest(
@@ -85,6 +171,8 @@ class _EditServiceRequestScreenState extends State<EditServiceRequestScreen> {
   @override
   Widget build(BuildContext context) {
     final provider = context.watch<ServiceRequestProvider>();
+    final selectedCategory =
+        CanonicalServiceCategory.fromCanonicalOrDisplayName(_selectedPreference);
 
     return Scaffold(
       appBar: AppBar(
@@ -98,6 +186,58 @@ class _EditServiceRequestScreenState extends State<EditServiceRequestScreen> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
+                // Service Preference Banner Card
+                Container(
+                  width: double.infinity,
+                  padding: const EdgeInsets.all(AppSpacing.md),
+                  decoration: BoxDecoration(
+                    color: AppColors.surface,
+                    borderRadius: BorderRadius.circular(AppRadius.large),
+                    border: Border.all(color: AppColors.border),
+                  ),
+                  child: Row(
+                    children: [
+                      Container(
+                        padding: const EdgeInsets.all(AppSpacing.sm),
+                        decoration: BoxDecoration(
+                          color: AppColors.primary.withValues(alpha: 0.08),
+                          borderRadius: BorderRadius.circular(AppRadius.medium),
+                        ),
+                        child: Icon(
+                          selectedCategory?.icon ?? Icons.auto_awesome_rounded,
+                          color: AppColors.primary,
+                          size: 22,
+                        ),
+                      ),
+                      const SizedBox(width: AppSpacing.md),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            const Text(
+                              'Service preference',
+                              style: AppTextStyles.small,
+                            ),
+                            const SizedBox(height: 2),
+                            Text(
+                              selectedCategory?.displayName ?? 'Let AI identify',
+                              style: AppTextStyles.cardHeading,
+                            ),
+                          ],
+                        ),
+                      ),
+                      TextButton(
+                        onPressed: _showChangePreferenceSheet,
+                        child: Text(
+                          selectedCategory != null ? 'Change' : 'Choose preference',
+                          style: const TextStyle(fontWeight: FontWeight.w600),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(height: AppSpacing.lg),
+
                 const Text(
                   'Update problem description',
                   style: AppTextStyles.sectionHeading,

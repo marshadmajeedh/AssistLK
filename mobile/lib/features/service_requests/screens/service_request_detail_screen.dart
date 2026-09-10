@@ -7,6 +7,7 @@ import '../../../../shared/theme/app_spacing.dart';
 import '../../../../shared/theme/app_text_styles.dart';
 import '../../../../shared/widgets/app_button.dart';
 import '../../../../shared/widgets/app_card.dart';
+import '../models/canonical_service_category.dart';
 import '../models/problem_understanding_result_model.dart';
 import '../models/service_request_model.dart';
 import '../models/service_request_status.dart';
@@ -39,6 +40,26 @@ class _ServiceRequestDetailScreenState
     WidgetsBinding.instance.addPostFrameCallback((_) {
       context.read<ServiceRequestProvider>().loadRequestById(widget.requestId);
     });
+  }
+
+  String _getAiClassificationText(ServiceRequestModel request) {
+    switch (request.status) {
+      case ServiceRequestStatus.created:
+        return 'Not analyzed yet';
+      case ServiceRequestStatus.analyzing:
+        return 'Analysis in progress';
+      case ServiceRequestStatus.awaitingInformation:
+        return 'Needs more information';
+      case ServiceRequestStatus.analyzed:
+      case ServiceRequestStatus.readyForMatching:
+        return CanonicalServiceCategory.fromCanonicalOrDisplayName(request.category)?.displayName ??
+            (request.category.isEmpty ? 'Unclassified' : request.category);
+      case ServiceRequestStatus.cancelled:
+        if (request.category.isNotEmpty && request.category != 'Unclassified') {
+          return CanonicalServiceCategory.fromCanonicalOrDisplayName(request.category)?.displayName ?? request.category;
+        }
+        return 'Not classified';
+    }
   }
 
   Future<void> _triggerAnalysis(String id) async {
@@ -219,7 +240,7 @@ class _ServiceRequestDetailScreenState
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              // Header Card: Category, Urgency, Status
+              // Header Card: Category, Urgency, Status, Service preference
               AppCard(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
@@ -232,7 +253,7 @@ class _ServiceRequestDetailScreenState
                           child: Text(
                             request.category.isEmpty
                                 ? 'Unclassified Request'
-                                : request.category,
+                                : (CanonicalServiceCategory.fromCanonicalOrDisplayName(request.category)?.displayName ?? request.category),
                             style: AppTextStyles.sectionHeading,
                           ),
                         ),
@@ -240,13 +261,65 @@ class _ServiceRequestDetailScreenState
                         StatusBadge(status: request.status),
                       ],
                     ),
-                    const SizedBox(height: AppSpacing.md),
+                    if (request.status != ServiceRequestStatus.analyzed &&
+                        request.status != ServiceRequestStatus.readyForMatching) ...[
+                      const SizedBox(height: AppSpacing.xs + 2),
+                      Row(
+                        children: [
+                          const Text(
+                            'Service preference: ',
+                            style: TextStyle(
+                              fontSize: 12,
+                              color: AppColors.textSecondary,
+                              fontWeight: FontWeight.w500,
+                            ),
+                          ),
+                          Expanded(
+                            child: Text(
+                              CanonicalServiceCategory.fromCanonicalOrDisplayName(request.categoryHint)?.displayName ??
+                                  (request.categoryHint == null ? 'Let AI identify' : request.categoryHint!),
+                              style: const TextStyle(
+                                fontSize: 12,
+                                fontWeight: FontWeight.w600,
+                                color: AppColors.textPrimary,
+                              ),
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: AppSpacing.xs),
+                      Row(
+                        children: [
+                          const Text(
+                            'AI classification: ',
+                            style: TextStyle(
+                              fontSize: 12,
+                              color: AppColors.textSecondary,
+                              fontWeight: FontWeight.w500,
+                            ),
+                          ),
+                          Expanded(
+                            child: Text(
+                              _getAiClassificationText(request),
+                              style: const TextStyle(
+                                fontSize: 12,
+                                fontWeight: FontWeight.w600,
+                                color: AppColors.textPrimary,
+                              ),
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ],
+                    const SizedBox(height: AppSpacing.xs + 2),
                     Row(
                       children: [
                         const Text(
                           'Urgency Level: ',
                           style: TextStyle(
-                            fontSize: 13,
+                            fontSize: 12,
                             color: AppColors.textSecondary,
                           ),
                         ),
@@ -256,7 +329,7 @@ class _ServiceRequestDetailScreenState
                   ],
                 ),
               ),
-              const SizedBox(height: AppSpacing.md),
+              const SizedBox(height: AppSpacing.sm),
 
               // Description Card
               AppCard(
@@ -267,14 +340,14 @@ class _ServiceRequestDetailScreenState
                       'Problem Description',
                       style: AppTextStyles.cardHeading,
                     ),
-                    const SizedBox(height: AppSpacing.sm),
+                    const SizedBox(height: AppSpacing.xs),
                     Text(
                       request.description,
                       style: AppTextStyles.body,
                     ),
-                    const SizedBox(height: AppSpacing.md),
+                    const SizedBox(height: AppSpacing.sm),
                     const Divider(color: AppColors.border, height: 1),
-                    const SizedBox(height: AppSpacing.md),
+                    const SizedBox(height: AppSpacing.sm),
 
                     // Location
                     Row(
@@ -301,7 +374,7 @@ class _ServiceRequestDetailScreenState
                   ],
                 ),
               ),
-              const SizedBox(height: AppSpacing.lg),
+              const SizedBox(height: AppSpacing.md),
 
               // Dynamic Workflow Section based on status
               _buildStatusWorkflowSection(context, request, analysis, provider),
@@ -357,8 +430,7 @@ class _ServiceRequestDetailScreenState
       );
     }
 
-    if (provider.isAnalyzing ||
-        request.status == ServiceRequestStatus.analyzing) {
+    if (provider.isAnalyzing) {
       return const AppCard(
         child: Row(
           mainAxisAlignment: MainAxisAlignment.center,
@@ -372,6 +444,45 @@ class _ServiceRequestDetailScreenState
             Text(
               'AI analysis in progress',
               style: AppTextStyles.body,
+            ),
+          ],
+        ),
+      );
+    }
+
+    if (request.status == ServiceRequestStatus.analyzing) {
+      return AppCard(
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Row(
+              children: [
+                SizedBox(
+                  width: 20,
+                  height: 20,
+                  child: CircularProgressIndicator(strokeWidth: 2),
+                ),
+                SizedBox(width: AppSpacing.md),
+                Expanded(
+                  child: Text(
+                    'AI analysis in progress',
+                    style: AppTextStyles.cardHeading,
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: AppSpacing.xs),
+            Text(
+              'Analysis is taking longer than expected. Your request is still being processed.',
+              style: AppTextStyles.body.copyWith(
+                color: AppColors.textSecondary,
+              ),
+            ),
+            const SizedBox(height: AppSpacing.md),
+            AppButton(
+              text: 'Refresh Status',
+              isLoading: provider.isLoading,
+              onPressed: () => provider.loadRequestById(request.serviceRequestId),
             ),
           ],
         ),
@@ -455,7 +566,11 @@ class _ServiceRequestDetailScreenState
 
         return Column(
           children: [
-            AnalysisResultCard(analysis: displayAnalysis),
+            AnalysisResultCard(
+              analysis: displayAnalysis,
+              categoryHint: request.categoryHint,
+              status: request.status,
+            ),
             const SizedBox(height: AppSpacing.md),
             AppButton(
               text: 'Mark Ready for Matching',
@@ -466,7 +581,31 @@ class _ServiceRequestDetailScreenState
         );
 
       case ServiceRequestStatus.readyForMatching:
-        return const ReadyForMatchingSection();
+        final displayAnalysis = analysis ??
+            ProblemUnderstandingResultModel(
+              workflowId: '',
+              executionId: '',
+              serviceRequestId: request.serviceRequestId,
+              status: request.status,
+              category: request.category,
+              problemSummary: request.description,
+              urgency: request.urgency,
+              confidence: 0.90,
+              needsMoreInformation: false,
+              followUpQuestions: const [],
+            );
+
+        return Column(
+          children: [
+            AnalysisResultCard(
+              analysis: displayAnalysis,
+              categoryHint: request.categoryHint,
+              status: request.status,
+            ),
+            const SizedBox(height: AppSpacing.md),
+            const ReadyForMatchingSection(),
+          ],
+        );
 
       case ServiceRequestStatus.cancelled:
         return Container(

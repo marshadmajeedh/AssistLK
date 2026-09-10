@@ -161,9 +161,12 @@ class _CreateServiceRequestScreenState
 
   Future<void> _submit() async {
     final provider = context.read<ServiceRequestProvider>();
+    final canonicalHint =
+        CanonicalServiceCategory.toCanonicalCategoryHint(_selectedPreference);
     final dto = CreateServiceRequestDto(
       description: _descriptionController.text.trim(),
       locationText: _locationController.text.trim(),
+      categoryHint: canonicalHint,
     );
 
     final created = await provider.createRequest(dto);

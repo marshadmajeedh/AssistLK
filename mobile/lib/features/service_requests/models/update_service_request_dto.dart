@@ -3,12 +3,14 @@ class UpdateServiceRequestDto {
   final String locationText;
   final double? latitude;
   final double? longitude;
+  final String? categoryHint;
 
   const UpdateServiceRequestDto({
     required this.description,
     required this.locationText,
     this.latitude,
     this.longitude,
+    this.categoryHint,
   });
 
   Map<String, dynamic> toJson() {
@@ -17,6 +19,7 @@ class UpdateServiceRequestDto {
       'locationText': locationText.trim(),
       if (latitude != null) 'latitude': latitude,
       if (longitude != null) 'longitude': longitude,
+      'categoryHint': categoryHint,
     };
   }
 

@@ -59,4 +59,34 @@ class CanonicalServiceCategory {
     }
     return null;
   }
+
+  /// Returns the canonical CategoryHint string for transport, or null if
+  /// 'Let AI identify', null, or empty.
+  ///
+  /// Mappings:
+  /// - Plumbing -> Plumbing
+  /// - Electrical -> Electrical
+  /// - Vehicle Assistance -> Vehicle Repair
+  /// - Vehicle Repair -> Vehicle Repair
+  /// - Appliance Repair -> Appliance Repair
+  /// - Let AI identify -> null
+  /// - null / empty -> null
+  ///
+  /// Throws [ArgumentError] for unsupported or invalid values (e.g. "Unclassified", "Cleaning", "AC Service").
+  static String? toCanonicalCategoryHint(String? input) {
+    if (input == null) return null;
+    final trimmed = input.trim();
+    if (trimmed.isEmpty || trimmed.toLowerCase() == 'let ai identify') {
+      return null;
+    }
+    final category = fromCanonicalOrDisplayName(trimmed);
+    if (category != null) {
+      return category.canonicalName;
+    }
+    throw ArgumentError.value(
+      input,
+      'input',
+      'Unsupported category preference: "$input". Expected one of: Plumbing, Electrical, Vehicle Assistance, Appliance Repair, or "Let AI identify".',
+    );
+  }
 }

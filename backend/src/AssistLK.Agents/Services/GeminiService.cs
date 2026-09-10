@@ -330,7 +330,8 @@ public class GeminiService : IGeminiService
     /// </summary>
     private static string SimulateOfflineReasoning(string prompt)
     {
-        var lower = prompt.ToLowerInvariant();
+        var textToAnalyze = ExtractCustomerDescription(prompt);
+        var lower = textToAnalyze.ToLowerInvariant();
 
         // Check for purely ambiguous / unclassifiable requests
         if (lower.Contains("broken please fix") || lower.Contains("it is broken please fix") ||
@@ -438,5 +439,25 @@ public class GeminiService : IGeminiService
                "  \"confidence\": 0.2,\n" +
                "  \"additionalInformation\": {}\n" +
                "}";
+    }
+
+    public static string ExtractCustomerDescription(string prompt)
+    {
+        const string openTag = "<customer_description>";
+        const string closeTag = "</customer_description>";
+
+        var startIdx = prompt.IndexOf(openTag, StringComparison.OrdinalIgnoreCase);
+        if (startIdx >= 0)
+        {
+            startIdx += openTag.Length;
+            var endIdx = prompt.IndexOf(closeTag, startIdx, StringComparison.OrdinalIgnoreCase);
+            if (endIdx > startIdx)
+            {
+                var content = prompt.Substring(startIdx, endIdx - startIdx).Trim();
+                return System.Net.WebUtility.HtmlDecode(content);
+            }
+        }
+
+        return prompt;
     }
 }

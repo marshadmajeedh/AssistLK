@@ -313,4 +313,144 @@ public class Component1WorkflowTests
 
         public Task SaveChangesAsync(CancellationToken cancellationToken = default) => Task.CompletedTask;
     }
+
+    // ---------------------------------------------------------------------------------
+    // Phase 3: CategoryHint Workflow Propagation & Domain Authority Tests
+    // ---------------------------------------------------------------------------------
+
+    [Theory]
+    [InlineData("Plumbing", "Plumbing")]
+    [InlineData("Electrical", "Electrical")]
+    [InlineData("Vehicle Repair", "Vehicle Repair")]
+    [InlineData("Appliance Repair", "Appliance Repair")]
+    public async Task Workflow_AnalyzeAsync_PropagatesPersistedCanonicalCategoryHints(string hint, string expectedCategory)
+    {
+        var fixture = new WorkflowTestFixture();
+        var requestId = Guid.NewGuid();
+        var customerId = Guid.NewGuid();
+
+        string description = hint switch
+        {
+            "Plumbing" => "Water pipe has burst and is flooding the entire kitchen floor badly",
+            "Electrical" => "Sparks are coming from the main switch circuit breaker",
+            "Vehicle Repair" => "My car engine has broken down and stopped completely on the road",
+            "Appliance Repair" => "The domestic refrigerator compressor is not cooling food",
+            _ => "Generic problem"
+        };
+
+        var request = new ServiceRequest
+        {
+            Id = requestId,
+            CustomerId = customerId,
+            Description = description,
+            LocationText = "Colombo",
+            Status = ServiceRequestStatus.Created,
+            Category = "Unclassified",
+            CategoryHint = hint
+        };
+        fixture.Requests.Add(request);
+
+        // Before analysis: Category remains Unclassified regardless of CategoryHint
+        Assert.Equal("Unclassified", request.Category);
+        Assert.Equal(hint, request.CategoryHint);
+
+        var result = await fixture.Workflow.AnalyzeAsync(requestId, customerId);
+
+        Assert.True(result.Success);
+        Assert.Equal(expectedCategory, result.Category);
+
+        // After analysis: Category comes from agent analysis, CategoryHint remains preserved
+        Assert.Equal(expectedCategory, request.Category);
+        Assert.Equal(hint, request.CategoryHint);
+    }
+
+    [Fact]
+    public async Task Workflow_AnalyzeAsync_PropagatesNullCategoryHint_Correctly()
+    {
+        var fixture = new WorkflowTestFixture();
+        var requestId = Guid.NewGuid();
+        var customerId = Guid.NewGuid();
+
+        var request = new ServiceRequest
+        {
+            Id = requestId,
+            CustomerId = customerId,
+            Description = "Water pipe has burst and is flooding the entire kitchen floor badly",
+            LocationText = "Colombo",
+            Status = ServiceRequestStatus.Created,
+            Category = "Unclassified",
+            CategoryHint = null
+        };
+        fixture.Requests.Add(request);
+
+        var result = await fixture.Workflow.AnalyzeAsync(requestId, customerId);
+
+        Assert.True(result.Success);
+        Assert.Equal("Plumbing", result.Category);
+        Assert.Null(request.CategoryHint);
+    }
+
+    [Fact]
+    public async Task Workflow_DomainAuthority_AgentCanDisagreeWithHint_CategoryComesOnlyFromAgent()
+    {
+        var fixture = new WorkflowTestFixture();
+        var requestId = Guid.NewGuid();
+        var customerId = Guid.NewGuid();
+
+        // Customer selected "Electrical" hint, but problem is distinctly Plumbing
+        var request = new ServiceRequest
+        {
+            Id = requestId,
+            CustomerId = customerId,
+            Description = "Water pipe has burst and is flooding the entire kitchen floor badly",
+            LocationText = "Colombo",
+            Status = ServiceRequestStatus.Created,
+            Category = "Unclassified",
+            CategoryHint = "Electrical"
+        };
+        fixture.Requests.Add(request);
+
+        // 1. Invariant before analysis: Category remains Unclassified
+        Assert.Equal("Unclassified", request.Category);
+        Assert.Equal("Electrical", request.CategoryHint);
+
+        var result = await fixture.Workflow.AnalyzeAsync(requestId, customerId);
+
+        // 2. Invariant after analysis: Agent classified Plumbing based on description
+        Assert.True(result.Success);
+        Assert.Equal("Plumbing", result.Category);
+        Assert.Equal("Plumbing", request.Category);
+        // CategoryHint remains the customer's unverified preference
+        Assert.Equal("Electrical", request.CategoryHint);
+    }
+
+    [Fact]
+    public async Task Workflow_DomainAuthority_CategoryHintNeverDirectlyUpdatesCategory_EvenWithAmbiguousDescription()
+    {
+        var fixture = new WorkflowTestFixture();
+        var requestId = Guid.NewGuid();
+        var customerId = Guid.NewGuid();
+
+        // Customer selected "Vehicle Repair" hint, but description is completely ambiguous
+        var request = new ServiceRequest
+        {
+            Id = requestId,
+            CustomerId = customerId,
+            Description = "Something is broken please fix it",
+            LocationText = "Colombo",
+            Status = ServiceRequestStatus.Created,
+            Category = "Unclassified",
+            CategoryHint = "Vehicle Repair"
+        };
+        fixture.Requests.Add(request);
+
+        var result = await fixture.Workflow.AnalyzeAsync(requestId, customerId);
+
+        Assert.True(result.Success);
+        // Must remain Unclassified, CategoryHint MUST NEVER directly populate Category
+        Assert.Equal("Unclassified", result.Category);
+        Assert.Equal("Unclassified", request.Category);
+        Assert.Equal(ServiceRequestStatus.AwaitingInformation, request.Status);
+        Assert.Equal("Vehicle Repair", request.CategoryHint);
+    }
 }

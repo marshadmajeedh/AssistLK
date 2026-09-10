@@ -16,6 +16,7 @@ appsettings.Development.json
 TestResults/
 coverage/
 coverage.cobertura.xml
+*.trx
 
 # ---------------- Node / React ----------------
 node_modules/
@@ -65,6 +66,8 @@ Thumbs.db
 logs/
 tmp/
 temp/
+*_structure.txt
+*.txt.tmp
 
 # ---------------- Local uploads ----------------
 uploads/

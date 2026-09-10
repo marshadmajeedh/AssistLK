@@ -1,42 +1,31 @@
-# Git Workflow
+# Git Workflow & Standards
 
-## Start a task
+> **Authoritative Specification:** For complete team branching rules, conventional commit examples, and PR quality gates across all 4 team members, see **[Team Git Workflow](development/git-workflow.md)**.
 
+## Quick Reference
+
+### 1. Start Feature
 ```bash
 git checkout develop
 git pull origin develop
-git checkout -b feature/c1-short-task
+git checkout -b feature/component-X-short-task
 ```
 
-## Commit
-
+### 2. Commit With Conventional Format
 ```bash
 git add .
-git commit -m "feat(c1): short meaningful description"
+git commit -m "feat(cX): short meaningful description"
 ```
 
-## Push
-
+### 3. Local Verification Before PR
 ```bash
-git push -u origin feature/c1-short-task
+dotnet test backend/AssistLK.sln
+cd web && npm test && npm run lint && npm run build
+cd mobile && flutter test
 ```
 
-## Pull Request
-
-Open:
-
-```text
-feature/c1-short-task → develop
-```
-
-After review and successful tests, merge.
-
-## After merge
-
+### 4. Push & Open PR
 ```bash
-git checkout develop
-git pull origin develop
-git branch -d feature/c1-short-task
+git push -u origin feature/component-X-short-task
 ```
-
-Create a new branch for the next task.
+Target `develop` for all component feature PRs.

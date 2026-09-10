@@ -18,6 +18,7 @@ public class ServiceRequestModelConfigurationTests
         Assert.Equal("ServiceRequests", EntityType.GetTableName());
 
         var customerId = EntityType.FindProperty(nameof(ServiceRequest.CustomerId))!;
+        var categoryHint = EntityType.FindProperty(nameof(ServiceRequest.CategoryHint))!;
         var category = EntityType.FindProperty(nameof(ServiceRequest.Category))!;
         var description = EntityType.FindProperty(nameof(ServiceRequest.Description))!;
         var locationText = EntityType.FindProperty(nameof(ServiceRequest.LocationText))!;
@@ -27,6 +28,9 @@ public class ServiceRequestModelConfigurationTests
         var status = EntityType.FindProperty(nameof(ServiceRequest.Status))!;
 
         Assert.False(customerId.IsNullable);
+        Assert.True(categoryHint.IsNullable);
+        Assert.Equal(100, categoryHint.GetMaxLength());
+        Assert.False(category.IsNullable);
         Assert.Equal(100, category.GetMaxLength());
         Assert.Equal("text", description.GetColumnType());
         Assert.Equal(255, locationText.GetMaxLength());
@@ -36,6 +40,23 @@ public class ServiceRequestModelConfigurationTests
         Assert.Equal(6, longitude.GetScale());
         Assert.Equal(typeof(string), urgency.GetTypeMapping().Converter!.ProviderClrType);
         Assert.Equal(typeof(string), status.GetTypeMapping().Converter!.ProviderClrType);
+    }
+
+    [Fact]
+    public void ServiceRequest_CategoryHint_IsConfiguredAsOptionalWithExpectedMaxLength()
+    {
+        var categoryHint = EntityType.FindProperty(nameof(ServiceRequest.CategoryHint))!;
+
+        Assert.NotNull(categoryHint);
+        Assert.True(categoryHint.IsNullable);
+        Assert.Equal(100, categoryHint.GetMaxLength());
+        Assert.Null(categoryHint.GetDefaultValue());
+
+        // Category remains distinct and required
+        var category = EntityType.FindProperty(nameof(ServiceRequest.Category))!;
+        Assert.NotNull(category);
+        Assert.False(category.IsNullable);
+        Assert.Equal(100, category.GetMaxLength());
     }
 
     [Fact]

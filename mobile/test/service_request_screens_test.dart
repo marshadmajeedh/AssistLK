@@ -19,7 +19,9 @@ import 'package:mobile/features/service_requests/screens/create_service_request_
 import 'package:mobile/features/service_requests/screens/customer_home_screen.dart';
 import 'package:mobile/features/service_requests/screens/edit_service_request_screen.dart';
 import 'package:mobile/features/service_requests/screens/service_request_detail_screen.dart';
+import 'package:mobile/features/service_requests/services/location_service.dart';
 import 'package:mobile/features/service_requests/services/service_request_service.dart';
+import 'mocks/mock_location_service.dart';
 import 'package:mobile/features/service_requests/widgets/analysis_result_card.dart';
 import 'package:mobile/features/service_requests/widgets/clarification_section.dart';
 import 'package:mobile/features/service_requests/widgets/ready_for_matching_section.dart';
@@ -63,6 +65,8 @@ class MockServiceRequestService extends ServiceRequestService {
       categoryHint: dto.categoryHint,
       description: dto.description,
       locationText: dto.locationText,
+      latitude: dto.latitude,
+      longitude: dto.longitude,
       urgency: ServiceRequestUrgency.low,
       status: ServiceRequestStatus.created,
       createdAt: DateTime(2026, 9, 9),
@@ -80,6 +84,8 @@ class MockServiceRequestService extends ServiceRequestService {
       categoryHint: dto.categoryHint,
       description: dto.description,
       locationText: dto.locationText,
+      latitude: dto.latitude,
+      longitude: dto.longitude,
     );
     mockRequests[idx] = updated;
     return updated;
@@ -1983,4 +1989,591 @@ void main() {
       }
     });
   });
+
+  group('Real GPS Service Location Feature 2', () {
+    late MockLocationService mockLocationService;
+
+    setUp(() {
+      mockLocationService = MockLocationService();
+    });
+
+    testWidgets('1. Manual location flow works without GPS (coordinates remain null, zero GPS calls)',
+        (tester) async {
+      await tester.pumpWidget(
+        buildApp(CreateServiceRequestScreen(locationService: mockLocationService)),
+      );
+      await tester.pumpAndSettle();
+
+      // Step 1: Description
+      await tester.enterText(
+        find.widgetWithText(TextFormField, 'Problem Description'),
+        'Major ceiling leak in the living room after heavy rain',
+      );
+      await tester.tap(find.text('Next: Location'));
+      await tester.pumpAndSettle();
+
+      // Step 2: Location (manual only, do not tap GPS)
+      expect(find.byKey(const Key('use_current_location_button')), findsOneWidget);
+      await tester.enterText(
+        find.widgetWithText(TextFormField, 'Location / Address'),
+        '123 Galle Road, Colombo 03',
+      );
+      await tester.tap(find.text('Next: Review'));
+      await tester.pumpAndSettle();
+
+      // Step 3: Review & Submit
+      expect(find.text('Review Service Request'), findsOneWidget);
+      expect(find.text('123 Galle Road, Colombo 03'), findsOneWidget);
+      expect(find.textContaining('GPS location captured'), findsNothing);
+
+      final submitBtn = find.text('Submit Request');
+      await tester.ensureVisible(submitBtn);
+      await tester.tap(submitBtn);
+      await tester.pumpAndSettle();
+
+      expect(mockService.lastCreateDto, isNotNull);
+      expect(mockService.lastCreateDto!.locationText, '123 Galle Road, Colombo 03');
+      expect(mockService.lastCreateDto!.latitude, isNull);
+      expect(mockService.lastCreateDto!.longitude, isNull);
+      expect(mockLocationService.getCurrentLocationCallCount, 0);
+    });
+
+    testWidgets('2. GPS success populates latitude and longitude into DTO and displays in review',
+        (tester) async {
+      await tester.pumpWidget(
+        buildApp(CreateServiceRequestScreen(locationService: mockLocationService)),
+      );
+      await tester.pumpAndSettle();
+
+      // Step 1: Description
+      await tester.enterText(
+        find.widgetWithText(TextFormField, 'Problem Description'),
+        'Water leaking under bathroom sink pipe heavily',
+      );
+      await tester.tap(find.text('Next: Location'));
+      await tester.pumpAndSettle();
+
+      // Step 2: Location -> Tap Use Current Location
+      await tester.tap(find.byKey(const Key('use_current_location_button')));
+      await tester.pumpAndSettle();
+
+      expect(find.textContaining('GPS location captured (6.9271, 79.8612)'), findsOneWidget);
+      expect(mockLocationService.getCurrentLocationCallCount, 1);
+
+      // Provide human-readable address
+      await tester.enterText(
+        find.widgetWithText(TextFormField, 'Location / Address'),
+        'Colombo 03, Havelock Road',
+      );
+      await tester.tap(find.text('Next: Review'));
+      await tester.pumpAndSettle();
+
+      // Step 3: Review displays GPS location captured
+      expect(find.text('Review Service Request'), findsOneWidget);
+      expect(find.text('Colombo 03, Havelock Road'), findsOneWidget);
+      expect(find.textContaining('GPS location captured (6.9271, 79.8612)'), findsOneWidget);
+
+      final submitBtn = find.text('Submit Request');
+      await tester.ensureVisible(submitBtn);
+      await tester.tap(submitBtn);
+      await tester.pumpAndSettle();
+
+      expect(mockService.lastCreateDto, isNotNull);
+      expect(mockService.lastCreateDto!.locationText, 'Colombo 03, Havelock Road');
+      expect(mockService.lastCreateDto!.latitude, 6.9271);
+      expect(mockService.lastCreateDto!.longitude, 79.8612);
+    });
+
+    testWidgets('3. Remove GPS button clears captured coordinates', (tester) async {
+      await tester.pumpWidget(
+        buildApp(CreateServiceRequestScreen(locationService: mockLocationService)),
+      );
+      await tester.pumpAndSettle();
+
+      await tester.enterText(
+        find.widgetWithText(TextFormField, 'Problem Description'),
+        'Water leaking under bathroom sink pipe heavily',
+      );
+      await tester.tap(find.text('Next: Location'));
+      await tester.pumpAndSettle();
+
+      // Capture GPS
+      await tester.tap(find.byKey(const Key('use_current_location_button')));
+      await tester.pumpAndSettle();
+      expect(find.textContaining('GPS location captured (6.9271, 79.8612)'), findsOneWidget);
+
+      // Remove GPS
+      await tester.tap(find.text('Remove GPS'));
+      await tester.pumpAndSettle();
+
+      expect(find.textContaining('GPS location captured'), findsNothing);
+
+      // Enter manual address & submit
+      await tester.enterText(
+        find.widgetWithText(TextFormField, 'Location / Address'),
+        'Manual address without GPS',
+      );
+      await tester.tap(find.text('Next: Review'));
+      await tester.pumpAndSettle();
+
+      expect(find.textContaining('GPS location captured'), findsNothing);
+
+      final submitBtn = find.text('Submit Request');
+      await tester.ensureVisible(submitBtn);
+      await tester.tap(submitBtn);
+      await tester.pumpAndSettle();
+
+      expect(mockService.lastCreateDto!.latitude, isNull);
+      expect(mockService.lastCreateDto!.longitude, isNull);
+    });
+
+    testWidgets('4. Permission denied shows explanation and allows manual fallback',
+        (tester) async {
+      mockLocationService.permissionStatus = LocationAccessStatus.denied;
+
+      await tester.pumpWidget(
+        buildApp(CreateServiceRequestScreen(locationService: mockLocationService)),
+      );
+      await tester.pumpAndSettle();
+
+      await tester.enterText(
+        find.widgetWithText(TextFormField, 'Problem Description'),
+        'Water leaking under bathroom sink pipe heavily',
+      );
+      await tester.tap(find.text('Next: Location'));
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.byKey(const Key('use_current_location_button')));
+      await tester.pumpAndSettle();
+
+      expect(
+        find.text('Location permission was denied. You can enter the service location manually.'),
+        findsOneWidget,
+      );
+
+      // Manual fallback works
+      await tester.enterText(
+        find.widgetWithText(TextFormField, 'Location / Address'),
+        '45 Havelock Road, Colombo 05',
+      );
+      await tester.tap(find.text('Next: Review'));
+      await tester.pumpAndSettle();
+
+      final submitBtn = find.text('Submit Request');
+      await tester.ensureVisible(submitBtn);
+      await tester.tap(submitBtn);
+      await tester.pumpAndSettle();
+
+      expect(mockService.lastCreateDto!.latitude, isNull);
+      expect(mockService.lastCreateDto!.longitude, isNull);
+    });
+
+    testWidgets('5. Permission permanently denied shows settings guidance and manual fallback',
+        (tester) async {
+      mockLocationService.permissionStatus = LocationAccessStatus.deniedForever;
+
+      await tester.pumpWidget(
+        buildApp(CreateServiceRequestScreen(locationService: mockLocationService)),
+      );
+      await tester.pumpAndSettle();
+
+      await tester.enterText(
+        find.widgetWithText(TextFormField, 'Problem Description'),
+        'Main switchboard power trip continuously',
+      );
+      await tester.tap(find.text('Next: Location'));
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.byKey(const Key('use_current_location_button')));
+      await tester.pumpAndSettle();
+
+      expect(
+        find.text(
+          'Location access is disabled for AssistLK. Enable it in device settings or enter the location manually.',
+        ),
+        findsOneWidget,
+      );
+    });
+
+    testWidgets('6. Location services disabled shows turn-on guidance and manual fallback',
+        (tester) async {
+      mockLocationService.serviceEnabled = false;
+
+      await tester.pumpWidget(
+        buildApp(CreateServiceRequestScreen(locationService: mockLocationService)),
+      );
+      await tester.pumpAndSettle();
+
+      await tester.enterText(
+        find.widgetWithText(TextFormField, 'Problem Description'),
+        'Main switchboard power trip continuously',
+      );
+      await tester.tap(find.text('Next: Location'));
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.byKey(const Key('use_current_location_button')));
+      await tester.pumpAndSettle();
+
+      expect(
+        find.text('Location services are turned off. You can enter the address manually.'),
+        findsOneWidget,
+      );
+    });
+
+    testWidgets('7. GPS timeout shows timeout message without blocking manual entry',
+        (tester) async {
+      mockLocationService.customResult = const LocationResult(
+        status: LocationAccessStatus.timeout,
+        message:
+            'Could not get your current location in time. Please enter the location manually.',
+      );
+
+      await tester.pumpWidget(
+        buildApp(CreateServiceRequestScreen(locationService: mockLocationService)),
+      );
+      await tester.pumpAndSettle();
+
+      await tester.enterText(
+        find.widgetWithText(TextFormField, 'Problem Description'),
+        'Main switchboard power trip continuously',
+      );
+      await tester.tap(find.text('Next: Location'));
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.byKey(const Key('use_current_location_button')));
+      await tester.pumpAndSettle();
+
+      expect(
+        find.text('Could not get your current location in time. Please enter the location manually.'),
+        findsOneWidget,
+      );
+    });
+
+    testWidgets('8. GPS exception handled safely without crashing UI', (tester) async {
+      mockLocationService.shouldThrow = true;
+
+      await tester.pumpWidget(
+        buildApp(CreateServiceRequestScreen(locationService: mockLocationService)),
+      );
+      await tester.pumpAndSettle();
+
+      await tester.enterText(
+        find.widgetWithText(TextFormField, 'Problem Description'),
+        'Main switchboard power trip continuously',
+      );
+      await tester.tap(find.text('Next: Location'));
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.byKey(const Key('use_current_location_button')));
+      await tester.pumpAndSettle();
+
+      expect(
+        find.text('Could not retrieve your current location. Please enter the location manually.'),
+        findsOneWidget,
+      );
+    });
+
+    testWidgets('9. CategoryHint and GPS coordinates submitted together', (tester) async {
+      await tester.pumpWidget(
+        buildApp(
+          CreateServiceRequestScreen(
+            initialCategoryPreference: 'Vehicle Assistance',
+            locationService: mockLocationService,
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      await tester.enterText(
+        find.widgetWithText(TextFormField, 'Problem Description'),
+        'Vehicle radiator overheating on roadside',
+      );
+      await tester.tap(find.text('Next: Location'));
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.byKey(const Key('use_current_location_button')));
+      await tester.pumpAndSettle();
+
+      await tester.enterText(
+        find.widgetWithText(TextFormField, 'Location / Address'),
+        'Baseline Road, Dematagoda',
+      );
+      await tester.tap(find.text('Next: Review'));
+      await tester.pumpAndSettle();
+
+      final submitBtn = find.text('Submit Request');
+      await tester.ensureVisible(submitBtn);
+      await tester.tap(submitBtn);
+      await tester.pumpAndSettle();
+
+      expect(mockService.lastCreateDto!.categoryHint, 'Vehicle Repair');
+      expect(mockService.lastCreateDto!.latitude, 6.9271);
+      expect(mockService.lastCreateDto!.longitude, 79.8612);
+    });
+
+    testWidgets('10. EditServiceRequestScreen preserves coordinates when locationText is unchanged',
+        (tester) async {
+      final existingReq = ServiceRequestModel(
+        serviceRequestId: 'req-edit-1',
+        customerId: 'cust-1',
+        category: 'Plumbing',
+        categoryHint: 'Plumbing',
+        description: 'Original description',
+        locationText: '123 Galle Road, Colombo 03',
+        latitude: 6.9000,
+        longitude: 79.8500,
+        urgency: ServiceRequestUrgency.low,
+        status: ServiceRequestStatus.created,
+        createdAt: DateTime(2026, 9, 9),
+        updatedAt: DateTime(2026, 9, 9),
+      );
+      mockService.mockRequests = [existingReq];
+
+      await tester.pumpWidget(
+        buildApp(EditServiceRequestScreen(
+          request: existingReq,
+          locationService: mockLocationService,
+        )),
+      );
+      await tester.pumpAndSettle();
+
+      // Only change description
+      await tester.enterText(
+        find.widgetWithText(TextFormField, 'Problem Description'),
+        'Updated description for existing pipe issue',
+      );
+
+      final saveBtn = find.text('Save Changes');
+      await tester.ensureVisible(saveBtn);
+      await tester.tap(saveBtn);
+      await tester.pumpAndSettle();
+
+      expect(mockService.lastUpdateDto, isNotNull);
+      expect(mockService.lastUpdateDto!.description, 'Updated description for existing pipe issue');
+      expect(mockService.lastUpdateDto!.locationText, '123 Galle Road, Colombo 03');
+      expect(mockService.lastUpdateDto!.latitude, 6.9000);
+      expect(mockService.lastUpdateDto!.longitude, 79.8500);
+    });
+
+    testWidgets('11. EditServiceRequestScreen blocks PUT and shows confirmation when locationText changes with GPS',
+        (tester) async {
+      final existingReq = ServiceRequestModel(
+        serviceRequestId: 'req-edit-2',
+        customerId: 'cust-1',
+        category: 'Plumbing',
+        description: 'Original description',
+        locationText: 'Colombo 03',
+        latitude: 6.9000,
+        longitude: 79.8500,
+        urgency: ServiceRequestUrgency.low,
+        status: ServiceRequestStatus.created,
+        createdAt: DateTime(2026, 9, 9),
+        updatedAt: DateTime(2026, 9, 9),
+      );
+      mockService.mockRequests = [existingReq];
+      mockService.lastUpdateDto = null;
+
+      await tester.pumpWidget(
+        buildApp(EditServiceRequestScreen(
+          request: existingReq,
+          locationService: mockLocationService,
+        )),
+      );
+      await tester.pumpAndSettle();
+
+      // Edit location address to Kandy
+      await tester.enterText(
+        find.widgetWithText(TextFormField, 'Location / Address'),
+        'Kandy City Center',
+      );
+      await tester.pumpAndSettle();
+
+      // Confirmation prompt appears in UI
+      expect(find.byKey(const Key('edit_gps_confirmation_prompt')), findsOneWidget);
+
+      // Attempt to save without choosing
+      final saveBtn = find.text('Save Changes');
+      await tester.ensureVisible(saveBtn);
+      await tester.tap(saveBtn);
+      await tester.pumpAndSettle();
+
+      // PUT was blocked!
+      expect(mockService.lastUpdateDto, isNull);
+      expect(
+        find.text('Please confirm how to handle the attached GPS coordinates.'),
+        findsOneWidget,
+      );
+    });
+
+    testWidgets('12. EditServiceRequestScreen allows keeping existing coordinates on confirmation',
+        (tester) async {
+      final existingReq = ServiceRequestModel(
+        serviceRequestId: 'req-edit-3',
+        customerId: 'cust-1',
+        category: 'Plumbing',
+        description: 'Original description',
+        locationText: 'Colombo 03',
+        latitude: 6.9000,
+        longitude: 79.8500,
+        urgency: ServiceRequestUrgency.low,
+        status: ServiceRequestStatus.created,
+        createdAt: DateTime(2026, 9, 9),
+        updatedAt: DateTime(2026, 9, 9),
+      );
+      mockService.mockRequests = [existingReq];
+
+      await tester.pumpWidget(
+        buildApp(EditServiceRequestScreen(
+          request: existingReq,
+          locationService: mockLocationService,
+        )),
+      );
+      await tester.pumpAndSettle();
+
+      await tester.enterText(
+        find.widgetWithText(TextFormField, 'Location / Address'),
+        'Colombo 03, Apartment 4B',
+      );
+      await tester.pumpAndSettle();
+
+      // Explicitly choose: Keep Existing GPS Coordinates
+      final keepBtn = find.byKey(const Key('edit_keep_gps_button'));
+      await tester.ensureVisible(keepBtn);
+      await tester.tap(keepBtn);
+      await tester.pumpAndSettle();
+
+      final saveBtn = find.text('Save Changes');
+      await tester.ensureVisible(saveBtn);
+      await tester.tap(saveBtn);
+      await tester.pumpAndSettle();
+
+      expect(mockService.lastUpdateDto, isNotNull);
+      expect(mockService.lastUpdateDto!.locationText, 'Colombo 03, Apartment 4B');
+      expect(mockService.lastUpdateDto!.latitude, 6.9000);
+      expect(mockService.lastUpdateDto!.longitude, 79.8500);
+    });
+
+    testWidgets('13. EditServiceRequestScreen allows removing GPS coordinates on confirmation',
+        (tester) async {
+      final existingReq = ServiceRequestModel(
+        serviceRequestId: 'req-edit-4',
+        customerId: 'cust-1',
+        category: 'Plumbing',
+        description: 'Original description',
+        locationText: 'Colombo 03',
+        latitude: 6.9000,
+        longitude: 79.8500,
+        urgency: ServiceRequestUrgency.low,
+        status: ServiceRequestStatus.created,
+        createdAt: DateTime(2026, 9, 9),
+        updatedAt: DateTime(2026, 9, 9),
+      );
+      mockService.mockRequests = [existingReq];
+
+      await tester.pumpWidget(
+        buildApp(EditServiceRequestScreen(
+          request: existingReq,
+          locationService: mockLocationService,
+        )),
+      );
+      await tester.pumpAndSettle();
+
+      await tester.enterText(
+        find.widgetWithText(TextFormField, 'Location / Address'),
+        'Galle Fort',
+      );
+      await tester.pumpAndSettle();
+
+      // Explicitly choose: Remove GPS Coordinates
+      final removeBtn = find.byKey(const Key('edit_remove_gps_button'));
+      await tester.ensureVisible(removeBtn);
+      await tester.tap(removeBtn);
+      await tester.pumpAndSettle();
+
+      final saveBtn = find.text('Save Changes');
+      await tester.ensureVisible(saveBtn);
+      await tester.tap(saveBtn);
+      await tester.pumpAndSettle();
+
+      expect(mockService.lastUpdateDto, isNotNull);
+      expect(mockService.lastUpdateDto!.locationText, 'Galle Fort');
+      expect(mockService.lastUpdateDto!.latitude, isNull);
+      expect(mockService.lastUpdateDto!.longitude, isNull);
+    });
+
+    testWidgets('14. EditServiceRequestScreen allows updating with current location on confirmation',
+        (tester) async {
+      final existingReq = ServiceRequestModel(
+        serviceRequestId: 'req-edit-5',
+        customerId: 'cust-1',
+        category: 'Plumbing',
+        description: 'Original description',
+        locationText: 'Colombo 03',
+        latitude: 6.9000,
+        longitude: 79.8500,
+        urgency: ServiceRequestUrgency.low,
+        status: ServiceRequestStatus.created,
+        createdAt: DateTime(2026, 9, 9),
+        updatedAt: DateTime(2026, 9, 9),
+      );
+      mockService.mockRequests = [existingReq];
+
+      await tester.pumpWidget(
+        buildApp(EditServiceRequestScreen(
+          request: existingReq,
+          locationService: mockLocationService,
+        )),
+      );
+      await tester.pumpAndSettle();
+
+      await tester.enterText(
+        find.widgetWithText(TextFormField, 'Location / Address'),
+        'New Street Location',
+      );
+      await tester.pumpAndSettle();
+
+      // Explicitly choose: Update with Current Location
+      final updateBtn = find.byKey(const Key('edit_update_gps_button'));
+      await tester.ensureVisible(updateBtn);
+      await tester.tap(updateBtn);
+      await tester.pumpAndSettle();
+
+      final saveBtn = find.text('Save Changes');
+      await tester.ensureVisible(saveBtn);
+      await tester.tap(saveBtn);
+      await tester.pumpAndSettle();
+
+      expect(mockService.lastUpdateDto, isNotNull);
+      expect(mockService.lastUpdateDto!.locationText, 'New Street Location');
+      expect(mockService.lastUpdateDto!.latitude, 6.9271);
+      expect(mockService.lastUpdateDto!.longitude, 79.8612);
+    });
+
+    testWidgets('15. ServiceRequestDetailScreen displays GPS location captured when coordinates are present',
+        (tester) async {
+      final reqWithCoords = ServiceRequestModel(
+        serviceRequestId: 'req-detail-gps',
+        customerId: 'cust-1',
+        category: 'Plumbing',
+        description: 'Water leak',
+        locationText: '123 Galle Road, Colombo 03',
+        latitude: 6.9271,
+        longitude: 79.8612,
+        urgency: ServiceRequestUrgency.low,
+        status: ServiceRequestStatus.created,
+        createdAt: DateTime(2026, 9, 9),
+        updatedAt: DateTime(2026, 9, 9),
+      );
+      mockService.mockRequests = [reqWithCoords];
+
+      await tester.pumpWidget(
+        buildApp(const ServiceRequestDetailScreen(requestId: 'req-detail-gps')),
+      );
+      await tester.pumpAndSettle();
+
+      expect(find.text('123 Galle Road, Colombo 03'), findsOneWidget);
+      expect(find.textContaining('GPS location captured (6.9271, 79.8612)'), findsOneWidget);
+    });
+  });
 }
+

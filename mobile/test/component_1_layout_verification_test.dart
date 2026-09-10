@@ -44,6 +44,8 @@ class MockLayoutServiceRequestService extends ServiceRequestService {
       category: 'General',
       description: dto.description,
       locationText: dto.locationText,
+      latitude: dto.latitude,
+      longitude: dto.longitude,
       urgency: ServiceRequestUrgency.low,
       status: ServiceRequestStatus.created,
       createdAt: DateTime(2026, 9, 9),
@@ -59,6 +61,8 @@ class MockLayoutServiceRequestService extends ServiceRequestService {
     final updated = requests[idx].copyWith(
       description: dto.description,
       locationText: dto.locationText,
+      latitude: dto.latitude,
+      longitude: dto.longitude,
     );
     requests[idx] = updated;
     return updated;

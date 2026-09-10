@@ -360,13 +360,40 @@ class _ServiceRequestDetailScreenState
                         ),
                         const SizedBox(width: AppSpacing.xs),
                         Expanded(
-                          child: Text(
-                            request.locationText.isEmpty
-                                ? 'No location specified'
-                                : request.locationText,
-                            style: AppTextStyles.body.copyWith(
-                              fontWeight: FontWeight.w500,
-                            ),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                request.locationText.isEmpty
+                                    ? 'No location specified'
+                                    : request.locationText,
+                                style: AppTextStyles.body.copyWith(
+                                  fontWeight: FontWeight.w500,
+                                ),
+                              ),
+                              if (request.latitude != null &&
+                                  request.longitude != null) ...[
+                                const SizedBox(height: 2),
+                                Row(
+                                  children: [
+                                    const Icon(
+                                      Icons.my_location_rounded,
+                                      size: 13,
+                                      color: AppColors.success,
+                                    ),
+                                    const SizedBox(width: 4),
+                                    Text(
+                                      'GPS location captured (${request.latitude!.toStringAsFixed(4)}, ${request.longitude!.toStringAsFixed(4)})',
+                                      style: AppTextStyles.small.copyWith(
+                                        color: AppColors.success,
+                                        fontSize: 12,
+                                        fontWeight: FontWeight.w500,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ],
+                            ],
                           ),
                         ),
                       ],

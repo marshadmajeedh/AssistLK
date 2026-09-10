@@ -25,10 +25,149 @@ public class ServiceRequestServiceTests
 
         var request = repositories.Requests.Single();
         Assert.Equal(customerId, request.CustomerId);
+        Assert.Null(request.CategoryHint);
+        Assert.Null(response.CategoryHint);
         Assert.Equal("Unclassified", response.Category);
         Assert.Equal(ServiceRequestUrgency.Unknown, response.Urgency);
         Assert.Equal(ServiceRequestStatus.Created, response.Status);
         Assert.NotEqual(Guid.Empty, response.ServiceRequestId);
+    }
+
+    [Theory]
+    [InlineData(null, null)]
+    [InlineData("", null)]
+    [InlineData("   ", null)]
+    [InlineData("Plumbing", "Plumbing")]
+    [InlineData("Electrical", "Electrical")]
+    [InlineData("Vehicle Repair", "Vehicle Repair")]
+    [InlineData("Appliance Repair", "Appliance Repair")]
+    public async Task CreateAsync_WithValidCategoryHints_PersistsHint_AndLeavesCategoryUnclassified(
+        string? inputHint,
+        string? expectedHint)
+    {
+        var repositories = CreateService();
+        var customerId = Guid.NewGuid();
+
+        var response = await repositories.Service.CreateAsync(
+            customerId,
+            new CreateServiceRequestRequest
+            {
+                Description = "Water leaking under sink",
+                LocationText = "Colombo",
+                CategoryHint = inputHint
+            });
+
+        var persisted = repositories.Requests.Single();
+        Assert.Equal(expectedHint, persisted.CategoryHint);
+        Assert.Equal(expectedHint, response.CategoryHint);
+        Assert.Equal("Unclassified", persisted.Category);
+        Assert.Equal("Unclassified", response.Category);
+    }
+
+    [Theory]
+    [InlineData("Vehicle Assistance")]
+    [InlineData("Cleaning")]
+    [InlineData("AC Service")]
+    [InlineData("Carpentry")]
+    [InlineData("Gardening")]
+    [InlineData("Work")]
+    [InlineData("Emergency")]
+    [InlineData("vehicle")]
+    [InlineData("random text")]
+    public async Task CreateAsync_WithInvalidCategoryHints_ThrowsArgumentException(string invalidHint)
+    {
+        var repositories = CreateService();
+
+        var ex = await Assert.ThrowsAsync<ArgumentException>(() =>
+            repositories.Service.CreateAsync(
+                Guid.NewGuid(),
+                new CreateServiceRequestRequest
+                {
+                    Description = "Valid problem description",
+                    LocationText = "Colombo",
+                    CategoryHint = invalidHint
+                }));
+
+        Assert.Contains("invalid", ex.Message, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public async Task UpdateAsync_CanUpdateCategoryHint_InEditableStatuses_WithoutChangingCategory()
+    {
+        var repositories = CreateService();
+        var customerId = Guid.NewGuid();
+        var created = await repositories.Service.CreateAsync(
+            customerId,
+            new CreateServiceRequestRequest
+            {
+                Description = "Initial description",
+                LocationText = "Colombo",
+                CategoryHint = "Plumbing"
+            });
+
+        Assert.Equal("Plumbing", created.CategoryHint);
+        Assert.Equal("Unclassified", created.Category);
+
+        // Update in Created status to Electrical
+        var updatedInCreated = await repositories.Service.UpdateAsync(
+            customerId,
+            created.ServiceRequestId,
+            new UpdateServiceRequestRequest
+            {
+                Description = "Updated description",
+                LocationText = "Colombo",
+                CategoryHint = "Electrical"
+            });
+
+        Assert.Equal("Electrical", updatedInCreated.CategoryHint);
+        Assert.Equal("Unclassified", updatedInCreated.Category);
+
+        // Transition to AwaitingInformation
+        var entity = repositories.Requests.Single();
+        entity.Status = ServiceRequestStatus.AwaitingInformation;
+        entity.Category = "Electrical"; // Simulate prior analysis result
+
+        // Update in AwaitingInformation status to Appliance Repair
+        var updatedInAwaiting = await repositories.Service.UpdateAsync(
+            customerId,
+            created.ServiceRequestId,
+            new UpdateServiceRequestRequest
+            {
+                Description = "Further updated description",
+                LocationText = "Colombo",
+                CategoryHint = "Appliance Repair"
+            });
+
+        Assert.Equal("Appliance Repair", updatedInAwaiting.CategoryHint);
+        Assert.Equal("Electrical", updatedInAwaiting.Category); // Category untouched by hint edit
+    }
+
+    [Theory]
+    [InlineData("Vehicle Assistance")]
+    [InlineData("Cleaning")]
+    [InlineData("invalid")]
+    public async Task UpdateAsync_WithInvalidCategoryHint_ThrowsArgumentException(string invalidHint)
+    {
+        var repositories = CreateService();
+        var customerId = Guid.NewGuid();
+        var created = await repositories.Service.CreateAsync(
+            customerId,
+            new CreateServiceRequestRequest
+            {
+                Description = "Initial description",
+                LocationText = "Colombo"
+            });
+
+        await Assert.ThrowsAsync<ArgumentException>(() =>
+            repositories.Service.UpdateAsync(
+                customerId,
+                created.ServiceRequestId,
+                new UpdateServiceRequestRequest
+                {
+                    Description = "Valid update",
+                    LocationText = "Colombo",
+                    CategoryHint = invalidHint
+                }));
     }
 
     [Fact]

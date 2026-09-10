@@ -126,18 +126,31 @@ Build succeeded.
    \q
    ```
 
-### 5.3 Database Connection Configuration
-The backend uses **Entity Framework Core**.  
-Configuration file location: `backend/src/AssistLK.Api/appsettings.json` (or `appsettings.Development.json`)
+### 5.3 Shared Database Connection Configuration (Supabase)
+The backend uses **Entity Framework Core** with **PostgreSQL**.
+In development, the team connects to a shared **Supabase PostgreSQL** database using the **Session Pooler** (`port 5432`).
 
-```json
-{
-  "ConnectionStrings": {
-    "DefaultConnection": "Host=localhost;Database=assistlk;Username=postgres;Password=your_password"
-  }
-}
+> ⚠️ **Security Requirement:** Never commit database credentials, passwords, or connection strings to Git. Do not place real credentials in `appsettings.json`, `appsettings.Development.json`, or tracked files.
+
+#### Setting Your Connection Locally (.NET User Secrets)
+From `backend/`:
+```bash
+dotnet user-secrets set "ConnectionStrings:DefaultConnection" "Host=<pooler-host>;Port=5432;Database=postgres;Username=postgres.<project-ref>;Password=<your-password>;SSL Mode=Require;Trust Server Certificate=true;" --project src/AssistLK.Api
 ```
-> ⚠️ **Security Notice:** Never commit production passwords or sensitive credentials to Git.
+
+Alternatively, you can export the environment variable:
+```bash
+# Windows PowerShell
+$env:ConnectionStrings__DefaultConnection="Host=<pooler-host>;Port=5432;Database=postgres;Username=postgres.<project-ref>;Password=<your-password>;SSL Mode=Require;Trust Server Certificate=true;"
+
+# Linux / macOS / Bash
+export ConnectionStrings__DefaultConnection="Host=<pooler-host>;Port=5432;Database=postgres;Username=postgres.<project-ref>;Password=<your-password>;SSL Mode=Require;Trust Server Certificate=true;"
+```
+
+### 5.4 Team Database & Migration Policy
+1. **Shared Development Database:** All team members' local ASP.NET Core backends connect to the same shared Supabase PostgreSQL instance.
+2. **Single Migrator Rule:** **ONLY ONE DESIGNATED DEVELOPER** runs database migrations (`dotnet ef database update`) against the shared Supabase database. Teammates must NOT independently run database updates against the shared database to prevent migration lock contention and schema drift.
+3. **Isolated Integration Tests:** Automated integration tests continue to run against an isolated local or ephemeral database (`assistlk_test_integration`) and will NEVER execute against the shared Supabase database.
 
 ---
 

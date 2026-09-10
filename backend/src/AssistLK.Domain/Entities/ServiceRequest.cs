@@ -8,6 +8,8 @@ public class ServiceRequest : BaseEntity
 
     public User Customer { get; set; } = null!;
 
+    public string? CategoryHint { get; set; }
+
     public string Category { get; set; } = "Unclassified";
 
     public string Description { get; set; } = string.Empty;

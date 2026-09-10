@@ -41,7 +41,8 @@ public class MigrationPostgreSqlTests
                 "AddAgentMemory",
                 "AddAgentSafetyActions",
                 "AddAgentExecutionMetrics",
-                "AddServiceRequestAndProblemAnalysis"
+                "AddServiceRequestAndProblemAnalysis",
+                "AddCategoryHintToServiceRequests"
             };
 
             Assert.Equal(expectedMigrations.Length, appliedMigrations.Count);

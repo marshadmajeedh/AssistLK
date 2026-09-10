@@ -71,8 +71,61 @@ public class ServiceRequestsControllerSecurityTests : IClassFixture<AssistLKApiT
         Assert.NotEqual(Guid.Empty, body.ServiceRequestId);
         Assert.Equal(customerId, body.CustomerId);
         Assert.Equal(ServiceRequestStatus.Created, body.Status);
+        Assert.Null(body.CategoryHint);
         Assert.Equal("Unclassified", body.Category);
         Assert.Equal(ServiceRequestUrgency.Unknown, body.Urgency);
+    }
+
+    [Fact]
+    public async Task Requirement02B_CustomerCanCreateRequest_WithValidCategoryHint_PersistsHint_AndLeavesCategoryUnclassified()
+    {
+        var customerId = Guid.NewGuid();
+        var client = _factory.CreateAuthenticatedClient(customerId, UserRole.Customer);
+
+        var payload = new CreateServiceRequestRequest
+        {
+            Description = "Water pipe has burst and is flooding the entire kitchen floor",
+            LocationText = "Kandy Road, Kadawatha",
+            CategoryHint = "Plumbing"
+        };
+
+        var response = await client.PostAsJsonAsync("/api/service-requests", payload);
+
+        Assert.Equal(HttpStatusCode.Created, response.StatusCode);
+
+        var body = await response.Content.ReadFromJsonAsync<ServiceRequestResponse>(_jsonOptions);
+        Assert.NotNull(body);
+        Assert.Equal("Plumbing", body.CategoryHint);
+        Assert.Equal("Unclassified", body.Category);
+
+        // Verify GET details returns CategoryHint
+        var getResponse = await client.GetAsync($"/api/service-requests/{body.ServiceRequestId}");
+        Assert.Equal(HttpStatusCode.OK, getResponse.StatusCode);
+        var getBody = await getResponse.Content.ReadFromJsonAsync<ServiceRequestResponse>(_jsonOptions);
+        Assert.NotNull(getBody);
+        Assert.Equal("Plumbing", getBody.CategoryHint);
+        Assert.Equal("Unclassified", getBody.Category);
+    }
+
+    [Theory]
+    [InlineData("Vehicle Assistance")]
+    [InlineData("Cleaning")]
+    [InlineData("random text")]
+    public async Task Requirement02C_CustomerCreateRequest_WithInvalidCategoryHint_Returns400BadRequest(string invalidHint)
+    {
+        var customerId = Guid.NewGuid();
+        var client = _factory.CreateAuthenticatedClient(customerId, UserRole.Customer);
+
+        var payload = new CreateServiceRequestRequest
+        {
+            Description = "Need urgent help",
+            LocationText = "Colombo",
+            CategoryHint = invalidHint
+        };
+
+        var response = await client.PostAsJsonAsync("/api/service-requests", payload);
+
+        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
     }
 
     [Fact]
@@ -255,6 +308,43 @@ public class ServiceRequestsControllerSecurityTests : IClassFixture<AssistLKApiT
         Assert.NotNull(updated);
         Assert.Equal("Updated description with more details", updated.Description);
         Assert.Equal("Colombo 07", updated.LocationText);
+    }
+
+    [Fact]
+    public async Task Requirement09B_CustomerCanUpdateCategoryHint_Returns200Ok_AndLeavesCategoryUntouched()
+    {
+        var customerId = Guid.NewGuid();
+        var requestId = Guid.NewGuid();
+
+        await _factory.SeedAsync(async db =>
+        {
+            await db.ServiceRequests.AddAsync(new ServiceRequest
+            {
+                Id = requestId,
+                CustomerId = customerId,
+                CategoryHint = "Plumbing",
+                Category = "Unclassified",
+                Description = "Initial description",
+                LocationText = "Colombo 03",
+                Status = ServiceRequestStatus.Created
+            });
+        });
+
+        var client = _factory.CreateAuthenticatedClient(customerId, UserRole.Customer);
+        var updatePayload = new UpdateServiceRequestRequest
+        {
+            Description = "Updated description with electrical focus",
+            LocationText = "Colombo 07",
+            CategoryHint = "Electrical"
+        };
+
+        var response = await client.PutAsJsonAsync($"/api/service-requests/{requestId}", updatePayload);
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        var updated = await response.Content.ReadFromJsonAsync<ServiceRequestResponse>(_jsonOptions);
+        Assert.NotNull(updated);
+        Assert.Equal("Electrical", updated.CategoryHint);
+        Assert.Equal("Unclassified", updated.Category);
     }
 
     [Theory]

@@ -18,6 +18,7 @@ public class AgentMonitoringController :
         _db = db;
     }
 
+    [Microsoft.AspNetCore.Authorization.Authorize]
     [HttpGet]
     public async Task<IActionResult> GetMetrics()
     {

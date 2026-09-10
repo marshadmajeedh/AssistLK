@@ -135,12 +135,12 @@ void main() {
   Future<void> simulateMouseHoverSweep(WidgetTester tester) async {
     final gesture = await tester.createGesture(kind: PointerDeviceKind.mouse);
     await gesture.addPointer(location: Offset.zero);
-    addTearDown(gesture.removePointer);
 
     for (double y = 40; y <= 600; y += 40) {
       await gesture.moveTo(Offset(200, y));
       await tester.pump();
     }
+    await gesture.removePointer();
   }
 
   group('Component 1 UI Layout & RenderBox Verification Under AppTheme.lightTheme', () {
@@ -189,8 +189,30 @@ void main() {
       await tester.pumpAndSettle();
 
       expect(find.text('Create Service Request'), findsOneWidget);
-      expect(find.text('Submit Request'), findsOneWidget);
+      expect(find.text('Next: Location'), findsOneWidget);
 
+      await simulateMouseHoverSweep(tester);
+
+      // Step to Location
+      await tester.enterText(
+        find.widgetWithText(TextFormField, 'Problem Description'),
+        'Major ceiling leak in the living room after heavy rain',
+      );
+      await tester.tap(find.text('Next: Location'));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Next: Review'), findsOneWidget);
+      await simulateMouseHoverSweep(tester);
+
+      // Step to Review
+      await tester.enterText(
+        find.widgetWithText(TextFormField, 'Location / Address'),
+        '123 Galle Road, Colombo 03',
+      );
+      await tester.tap(find.text('Next: Review'));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Submit Request'), findsOneWidget);
       await simulateMouseHoverSweep(tester);
     });
 

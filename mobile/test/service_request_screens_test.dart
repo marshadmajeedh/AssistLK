@@ -22,6 +22,8 @@ import 'package:mobile/features/service_requests/services/service_request_servic
 import 'package:mobile/features/service_requests/widgets/analysis_result_card.dart';
 import 'package:mobile/features/service_requests/widgets/clarification_section.dart';
 import 'package:mobile/features/service_requests/widgets/ready_for_matching_section.dart';
+import 'package:mobile/features/service_requests/widgets/service_category_card.dart';
+import 'package:mobile/features/service_requests/widgets/service_request_card.dart';
 import 'package:mobile/shared/theme/app_theme.dart';
 import 'package:provider/provider.dart';
 
@@ -178,7 +180,8 @@ void main() {
       await tester.pumpAndSettle();
 
       expect(tester.takeException(), isNull);
-      expect(find.text('Plumbing'), findsOneWidget);
+      expect(find.widgetWithText(ServiceCategoryCard, 'Plumbing'), findsOneWidget);
+      expect(find.widgetWithText(ServiceRequestCard, 'Plumbing'), findsOneWidget);
       expect(find.text('Bathroom tap is dripping continuously'), findsOneWidget);
       expect(find.text('Created'), findsOneWidget);
       expect(find.text('Low'), findsOneWidget);
@@ -278,7 +281,7 @@ void main() {
       expect(tester.takeException(), isNull);
 
       // Move over the card
-      await gesture.moveTo(tester.getCenter(find.text('Plumbing')));
+      await gesture.moveTo(tester.getCenter(find.widgetWithText(ServiceRequestCard, 'Plumbing')));
       await tester.pumpAndSettle();
 
       expect(tester.takeException(), isNull);
@@ -322,37 +325,240 @@ void main() {
     });
   });
 
-  group('CreateServiceRequestScreen', () {
-    testWidgets('validates required inputs and submits', (tester) async {
+  group('CreateServiceRequestScreen 3-Step Guided Flow', () {
+    testWidgets('validates required inputs and submits across 3-step flow', (tester) async {
       await tester.pumpWidget(buildApp(const CreateServiceRequestScreen()));
       await tester.pumpAndSettle();
 
       expect(find.text('Create Service Request'), findsOneWidget);
-      expect(find.text('Submit Request'), findsOneWidget);
+      expect(find.text('Next: Location'), findsOneWidget);
 
-      // Tap submit without typing -> should show validation errors
-      await tester.tap(find.text('Submit Request'));
+      // Step 1: Tap Next without typing description -> shows validation error
+      await tester.tap(find.text('Next: Location'));
       await tester.pumpAndSettle();
 
       expect(find.text('Please describe the problem you are experiencing.'), findsOneWidget);
-      expect(find.text('Please provide the service location.'), findsOneWidget);
 
-      // Enter valid text
+      // Enter description with fewer than 10 characters
+      await tester.enterText(
+        find.widgetWithText(TextFormField, 'Problem Description'),
+        'Short',
+      );
+      await tester.tap(find.text('Next: Location'));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Please provide at least 10 characters.'), findsOneWidget);
+
+      // Enter valid description
       await tester.enterText(
         find.widgetWithText(TextFormField, 'Problem Description'),
         'Major ceiling leak in the living room after heavy rain',
       );
+
+      // Advance to Step 2: Location
+      await tester.tap(find.text('Next: Location'));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Service Location'), findsOneWidget);
+      expect(find.text('Next: Review'), findsOneWidget);
+
+      // Step 2: Tap Next without typing location -> shows validation error
+      await tester.tap(find.text('Next: Review'));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Please provide the service location.'), findsOneWidget);
+
+      // Enter valid location
       await tester.enterText(
         find.widgetWithText(TextFormField, 'Location / Address'),
         '123 Galle Road, Colombo 03',
       );
 
-      await tester.tap(find.text('Submit Request'));
+      // Advance to Step 3: Review
+      await tester.tap(find.text('Next: Review'));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Review Service Request'), findsOneWidget);
+      expect(find.text('Submit Request'), findsOneWidget);
+      expect(
+        find.text(
+          'AssistLK AI will analyze your description and confirm the appropriate service category and urgency.',
+        ),
+        findsOneWidget,
+      );
+
+      // Submit Request
+      final submitButton = find.text('Submit Request');
+      await tester.ensureVisible(submitButton);
+      await tester.tap(submitButton);
       await tester.pumpAndSettle();
 
       expect(mockService.mockRequests.length, 1);
-      expect(mockService.mockRequests.first.description,
-          'Major ceiling leak in the living room after heavy rain');
+      expect(
+        mockService.mockRequests.first.description,
+        'Major ceiling leak in the living room after heavy rain',
+      );
+      expect(mockService.mockRequests.first.locationText, '123 Galle Road, Colombo 03');
+    });
+
+    testWidgets('supports back navigation between steps while preserving entered data',
+        (tester) async {
+      await tester.pumpWidget(buildApp(const CreateServiceRequestScreen()));
+      await tester.pumpAndSettle();
+
+      // Step 1: Enter description
+      await tester.enterText(
+        find.widgetWithText(TextFormField, 'Problem Description'),
+        'Broken pipe leaking continuously under kitchen sink',
+      );
+      await tester.tap(find.text('Next: Location'));
+      await tester.pumpAndSettle();
+
+      // Step 2: Enter location
+      await tester.enterText(
+        find.widgetWithText(TextFormField, 'Location / Address'),
+        '45 Havelock Road, Colombo 05',
+      );
+
+      // Navigate back to Step 1
+      await tester.tap(find.widgetWithText(OutlinedButton, 'Back'));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Next: Location'), findsOneWidget);
+      expect(
+        find.text('Broken pipe leaking continuously under kitchen sink'),
+        findsOneWidget,
+      );
+
+      // Navigate forward to Step 2 again
+      await tester.tap(find.text('Next: Location'));
+      await tester.pumpAndSettle();
+
+      expect(find.text('45 Havelock Road, Colombo 05'), findsOneWidget);
+
+      // Advance to Step 3
+      await tester.tap(find.text('Next: Review'));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Review Service Request'), findsOneWidget);
+
+      // Navigate back to Step 2
+      final backButton = find.widgetWithText(OutlinedButton, 'Back');
+      await tester.ensureVisible(backButton);
+      await tester.tap(backButton);
+      await tester.pumpAndSettle();
+
+      expect(find.text('Service Location'), findsOneWidget);
+      expect(find.text('45 Havelock Road, Colombo 05'), findsOneWidget);
+    });
+
+    testWidgets('renders initial category preference banner and supports changing preference',
+        (tester) async {
+      await tester.pumpWidget(
+        buildApp(
+          const CreateServiceRequestScreen(
+            initialCategoryPreference: 'Plumbing',
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      expect(find.text('Service preference'), findsOneWidget);
+      expect(find.text('Plumbing'), findsOneWidget);
+      expect(find.text('Change'), findsOneWidget);
+
+      // Tap Change to open bottom sheet
+      await tester.tap(find.text('Change'));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Select Service Preference'), findsOneWidget);
+      expect(find.text('Electrical'), findsOneWidget);
+
+      // Select Electrical
+      await tester.tap(find.text('Electrical'));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Electrical'), findsOneWidget);
+    });
+
+    testWidgets('renders Let AI identify banner when no preference is provided',
+        (tester) async {
+      await tester.pumpWidget(
+        buildApp(const CreateServiceRequestScreen(initialCategoryPreference: null)),
+      );
+      await tester.pumpAndSettle();
+
+      expect(find.text('Service preference'), findsOneWidget);
+      expect(find.text('Let AI identify'), findsOneWidget);
+      expect(find.text('Choose preference'), findsOneWidget);
+    });
+  });
+
+  group('CustomerHomeScreen Service Shortcuts and AI Option', () {
+    testWidgets('renders exactly 4 canonical category shortcuts and no prohibited categories',
+        (tester) async {
+      await tester.pumpWidget(buildApp(const CustomerHomeScreen()));
+      await tester.pumpAndSettle();
+
+      expect(find.text('What do you need help with?'), findsOneWidget);
+      expect(find.widgetWithText(ServiceCategoryCard, 'Plumbing'), findsOneWidget);
+      expect(find.widgetWithText(ServiceCategoryCard, 'Electrical'), findsOneWidget);
+      expect(find.widgetWithText(ServiceCategoryCard, 'Vehicle Assistance'), findsOneWidget);
+      expect(find.widgetWithText(ServiceCategoryCard, 'Appliance Repair'), findsOneWidget);
+
+      // Verify prohibited categories are NEVER rendered
+      expect(find.text('Cleaning'), findsNothing);
+      expect(find.text('AC Service'), findsNothing);
+      expect(find.text('Carpentry'), findsNothing);
+      expect(find.text('Gardening'), findsNothing);
+      expect(find.text('Work'), findsNothing);
+      expect(find.text('Emergency'), findsNothing);
+    });
+
+    testWidgets('renders prominent AI problem understanding card', (tester) async {
+      await tester.pumpWidget(buildApp(const CustomerHomeScreen()));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Not sure what service you need?'), findsOneWidget);
+      expect(find.text('Let AI understand your problem'), findsOneWidget);
+    });
+
+    testWidgets('tapping Plumbing shortcut navigates with Plumbing preference',
+        (tester) async {
+      await tester.pumpWidget(buildApp(const CustomerHomeScreen()));
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.widgetWithText(ServiceCategoryCard, 'Plumbing'));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Create Service Request'), findsOneWidget);
+      expect(find.text('Plumbing'), findsOneWidget);
+    });
+
+    testWidgets('tapping Vehicle Assistance shortcut navigates with canonical Vehicle Repair',
+        (tester) async {
+      await tester.pumpWidget(buildApp(const CustomerHomeScreen()));
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.widgetWithText(ServiceCategoryCard, 'Vehicle Assistance'));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Create Service Request'), findsOneWidget);
+      expect(find.text('Vehicle Assistance'), findsOneWidget);
+    });
+
+    testWidgets('tapping AI option card navigates with Let AI identify mode',
+        (tester) async {
+      await tester.pumpWidget(buildApp(const CustomerHomeScreen()));
+      await tester.pumpAndSettle();
+
+      final aiCardFinder = find.text('Not sure what service you need?');
+      await tester.ensureVisible(aiCardFinder);
+      await tester.tap(aiCardFinder);
+      await tester.pumpAndSettle();
+
+      expect(find.text('Create Service Request'), findsOneWidget);
+      expect(find.text('Let AI identify'), findsOneWidget);
     });
   });
 

@@ -35,6 +35,8 @@ class MockServiceRequestService extends ServiceRequestService {
   Completer<ProblemUnderstandingResultModel>? analyzeCompleter;
   bool shouldAnalyzeThrow = false;
   bool shouldGetByIdThrow = false;
+  CreateServiceRequestDto? lastCreateDto;
+  UpdateServiceRequestDto? lastUpdateDto;
 
   @override
   Future<List<ServiceRequestModel>> getMyRequests() async => List.of(mockRequests);
@@ -47,10 +49,12 @@ class MockServiceRequestService extends ServiceRequestService {
 
   @override
   Future<ServiceRequestModel> create(CreateServiceRequestDto dto) async {
+    lastCreateDto = dto;
     final created = ServiceRequestModel(
-      serviceRequestId: 'req-new',
+      serviceRequestId: 'req-new-${mockRequests.length + 1}',
       customerId: 'cust-1',
       category: 'General',
+      categoryHint: dto.categoryHint,
       description: dto.description,
       locationText: dto.locationText,
       urgency: ServiceRequestUrgency.low,
@@ -64,8 +68,10 @@ class MockServiceRequestService extends ServiceRequestService {
 
   @override
   Future<ServiceRequestModel> update(String id, UpdateServiceRequestDto dto) async {
+    lastUpdateDto = dto;
     final idx = mockRequests.indexWhere((r) => r.serviceRequestId == id);
     final updated = mockRequests[idx].copyWith(
+      categoryHint: dto.categoryHint,
       description: dto.description,
       locationText: dto.locationText,
     );
@@ -990,6 +996,824 @@ void main() {
 
       expect(mockService.mockRequests.first.description,
           'Updated description with more specific details');
+    });
+  });
+
+  group('CreateServiceRequestScreen CategoryHint Integration', () {
+    testWidgets('submits canonical categoryHint for Plumbing and preserves description', (tester) async {
+      await tester.pumpWidget(
+        buildApp(const CreateServiceRequestScreen(initialCategoryPreference: 'Plumbing')),
+      );
+      await tester.pumpAndSettle();
+
+      await tester.enterText(
+        find.widgetWithText(TextFormField, 'Problem Description'),
+        'Bathroom pipe leaking under the washbasin',
+      );
+      await tester.tap(find.text('Next: Location'));
+      await tester.pumpAndSettle();
+
+      await tester.enterText(
+        find.widgetWithText(TextFormField, 'Location / Address'),
+        'No 10 Main Street, Kandy',
+      );
+      await tester.tap(find.text('Next: Review'));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Plumbing'), findsWidgets);
+
+      final submitButton = find.text('Submit Request');
+      await tester.ensureVisible(submitButton);
+      await tester.tap(submitButton);
+      await tester.pumpAndSettle();
+
+      expect(mockService.lastCreateDto?.categoryHint, 'Plumbing');
+      expect(mockService.lastCreateDto?.description, 'Bathroom pipe leaking under the washbasin');
+      expect(mockService.lastCreateDto?.locationText, 'No 10 Main Street, Kandy');
+    });
+
+    testWidgets('submits Vehicle Assistance mapped to canonical Vehicle Repair', (tester) async {
+      await tester.pumpWidget(
+        buildApp(const CreateServiceRequestScreen(initialCategoryPreference: 'Vehicle Assistance')),
+      );
+      await tester.pumpAndSettle();
+
+      await tester.enterText(
+        find.widgetWithText(TextFormField, 'Problem Description'),
+        'Car engine stalling while idling at traffic lights',
+      );
+      await tester.tap(find.text('Next: Location'));
+      await tester.pumpAndSettle();
+
+      await tester.enterText(
+        find.widgetWithText(TextFormField, 'Location / Address'),
+        'Galle Road, Bambalapitiya',
+      );
+      await tester.tap(find.text('Next: Review'));
+      await tester.pumpAndSettle();
+
+      // UI displays customer-friendly 'Vehicle Assistance'
+      expect(find.text('Vehicle Assistance'), findsWidgets);
+
+      final submitButton = find.text('Submit Request');
+      await tester.ensureVisible(submitButton);
+      await tester.tap(submitButton);
+      await tester.pumpAndSettle();
+
+      // Transport submits canonical 'Vehicle Repair'
+      expect(mockService.lastCreateDto?.categoryHint, 'Vehicle Repair');
+      expect(mockService.lastCreateDto?.description, 'Car engine stalling while idling at traffic lights');
+    });
+
+    testWidgets('submits canonical categoryHint for Electrical', (tester) async {
+      await tester.pumpWidget(
+        buildApp(const CreateServiceRequestScreen(initialCategoryPreference: 'Electrical')),
+      );
+      await tester.pumpAndSettle();
+
+      await tester.enterText(
+        find.widgetWithText(TextFormField, 'Problem Description'),
+        'Short circuit tripped all main breaker switches',
+      );
+      await tester.tap(find.text('Next: Location'));
+      await tester.pumpAndSettle();
+      await tester.enterText(
+        find.widgetWithText(TextFormField, 'Location / Address'),
+        'Colombo 07',
+      );
+      await tester.tap(find.text('Next: Review'));
+      await tester.pumpAndSettle();
+
+      final submitBtn = find.text('Submit Request');
+      await tester.ensureVisible(submitBtn);
+      await tester.tap(submitBtn);
+      await tester.pumpAndSettle();
+
+      expect(mockService.lastCreateDto?.categoryHint, 'Electrical');
+    });
+
+    testWidgets('submits canonical categoryHint for Appliance Repair', (tester) async {
+      await tester.pumpWidget(
+        buildApp(const CreateServiceRequestScreen(initialCategoryPreference: 'Appliance Repair')),
+      );
+      await tester.pumpAndSettle();
+
+      await tester.enterText(
+        find.widgetWithText(TextFormField, 'Problem Description'),
+        'Refrigerator compressor not turning on properly',
+      );
+      await tester.tap(find.text('Next: Location'));
+      await tester.pumpAndSettle();
+      await tester.enterText(
+        find.widgetWithText(TextFormField, 'Location / Address'),
+        'Colombo 04',
+      );
+      await tester.tap(find.text('Next: Review'));
+      await tester.pumpAndSettle();
+
+      final submitBtn2 = find.text('Submit Request');
+      await tester.ensureVisible(submitBtn2);
+      await tester.tap(submitBtn2);
+      await tester.pumpAndSettle();
+
+      expect(mockService.lastCreateDto?.categoryHint, 'Appliance Repair');
+    });
+
+    testWidgets('submits null categoryHint when Let AI identify is chosen', (tester) async {
+      await tester.pumpWidget(
+        buildApp(const CreateServiceRequestScreen(initialCategoryPreference: null)),
+      );
+      await tester.pumpAndSettle();
+
+      await tester.enterText(
+        find.widgetWithText(TextFormField, 'Problem Description'),
+        'Strange buzzing sound in the wall that happens at night',
+      );
+      await tester.tap(find.text('Next: Location'));
+      await tester.pumpAndSettle();
+
+      await tester.enterText(
+        find.widgetWithText(TextFormField, 'Location / Address'),
+        'Rajagiriya',
+      );
+      await tester.tap(find.text('Next: Review'));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Let AI identify'), findsWidgets);
+
+      final submitButton = find.text('Submit Request');
+      await tester.ensureVisible(submitButton);
+      await tester.tap(submitButton);
+      await tester.pumpAndSettle();
+
+      expect(mockService.lastCreateDto?.categoryHint, isNull);
+    });
+  });
+
+  group('EditServiceRequestScreen CategoryHint Integration', () {
+    testWidgets('pre-fills existing categoryHint in UI', (tester) async {
+      final sample = ServiceRequestModel(
+        serviceRequestId: 'req-edit-hint',
+        customerId: 'cust-1',
+        category: 'General',
+        categoryHint: 'Vehicle Repair',
+        description: 'Brakes making squealing sound',
+        locationText: 'Nugegoda',
+        urgency: ServiceRequestUrgency.low,
+        status: ServiceRequestStatus.created,
+        createdAt: DateTime(2026, 9, 9),
+        updatedAt: DateTime(2026, 9, 9),
+      );
+      mockService.mockRequests = [sample];
+
+      await tester.pumpWidget(buildApp(EditServiceRequestScreen(request: sample)));
+      await tester.pumpAndSettle();
+
+      // Vehicle Repair displays as friendly 'Vehicle Assistance'
+      expect(find.text('Vehicle Assistance'), findsOneWidget);
+    });
+
+    testWidgets('preserves existing categoryHint when only description is modified', (tester) async {
+      final sample = ServiceRequestModel(
+        serviceRequestId: 'req-edit-desc',
+        customerId: 'cust-1',
+        category: 'General',
+        categoryHint: 'Plumbing',
+        description: 'Initial description',
+        locationText: 'Kandy',
+        urgency: ServiceRequestUrgency.low,
+        status: ServiceRequestStatus.created,
+        createdAt: DateTime(2026, 9, 9),
+        updatedAt: DateTime(2026, 9, 9),
+      );
+      mockService.mockRequests = [sample];
+
+      await tester.pumpWidget(buildApp(EditServiceRequestScreen(request: sample)));
+      await tester.pumpAndSettle();
+
+      await tester.enterText(
+        find.widgetWithText(TextFormField, 'Problem Description'),
+        'Updated description for plumbing problem',
+      );
+      await tester.tap(find.text('Save Changes'));
+      await tester.pumpAndSettle();
+
+      expect(mockService.lastUpdateDto?.categoryHint, 'Plumbing');
+      expect(mockService.lastUpdateDto?.description, 'Updated description for plumbing problem');
+    });
+
+    testWidgets('preserves existing categoryHint when only location is modified', (tester) async {
+      final sample = ServiceRequestModel(
+        serviceRequestId: 'req-edit-loc',
+        customerId: 'cust-1',
+        category: 'General',
+        categoryHint: 'Electrical',
+        description: 'Same description',
+        locationText: 'Old Location',
+        urgency: ServiceRequestUrgency.low,
+        status: ServiceRequestStatus.created,
+        createdAt: DateTime(2026, 9, 9),
+        updatedAt: DateTime(2026, 9, 9),
+      );
+      mockService.mockRequests = [sample];
+
+      await tester.pumpWidget(buildApp(EditServiceRequestScreen(request: sample)));
+      await tester.pumpAndSettle();
+
+      await tester.enterText(
+        find.widgetWithText(TextFormField, 'Location / Address'),
+        'New Address Colombo 03',
+      );
+      await tester.tap(find.text('Save Changes'));
+      await tester.pumpAndSettle();
+
+      expect(mockService.lastUpdateDto?.categoryHint, 'Electrical');
+      expect(mockService.lastUpdateDto?.locationText, 'New Address Colombo 03');
+    });
+
+    testWidgets('updates categoryHint when customer chooses a different preference', (tester) async {
+      final sample = ServiceRequestModel(
+        serviceRequestId: 'req-edit-change',
+        customerId: 'cust-1',
+        category: 'General',
+        categoryHint: 'Plumbing',
+        description: 'Some problem',
+        locationText: 'Colombo',
+        urgency: ServiceRequestUrgency.low,
+        status: ServiceRequestStatus.created,
+        createdAt: DateTime(2026, 9, 9),
+        updatedAt: DateTime(2026, 9, 9),
+      );
+      mockService.mockRequests = [sample];
+
+      await tester.pumpWidget(buildApp(EditServiceRequestScreen(request: sample)));
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.text('Change'));
+      await tester.pumpAndSettle();
+
+      // Pick Electrical
+      await tester.tap(find.text('Electrical'));
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.text('Save Changes'));
+      await tester.pumpAndSettle();
+
+      expect(mockService.lastUpdateDto?.categoryHint, 'Electrical');
+    });
+
+    testWidgets('updates categoryHint to canonical Vehicle Repair when customer chooses Vehicle Assistance', (tester) async {
+      final sample = ServiceRequestModel(
+        serviceRequestId: 'req-edit-va',
+        customerId: 'cust-1',
+        category: 'General',
+        categoryHint: 'Plumbing',
+        description: 'Some problem',
+        locationText: 'Colombo',
+        urgency: ServiceRequestUrgency.low,
+        status: ServiceRequestStatus.created,
+        createdAt: DateTime(2026, 9, 9),
+        updatedAt: DateTime(2026, 9, 9),
+      );
+      mockService.mockRequests = [sample];
+
+      await tester.pumpWidget(buildApp(EditServiceRequestScreen(request: sample)));
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.text('Change'));
+      await tester.pumpAndSettle();
+
+      // Pick Vehicle Assistance
+      await tester.tap(find.text('Vehicle Assistance'));
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.text('Save Changes'));
+      await tester.pumpAndSettle();
+
+      expect(mockService.lastUpdateDto?.categoryHint, 'Vehicle Repair');
+    });
+
+    testWidgets('clears categoryHint with explicit null when customer chooses Let AI identify', (tester) async {
+      final sample = ServiceRequestModel(
+        serviceRequestId: 'req-edit-null',
+        customerId: 'cust-1',
+        category: 'General',
+        categoryHint: 'Plumbing',
+        description: 'Some problem',
+        locationText: 'Colombo',
+        urgency: ServiceRequestUrgency.low,
+        status: ServiceRequestStatus.created,
+        createdAt: DateTime(2026, 9, 9),
+        updatedAt: DateTime(2026, 9, 9),
+      );
+      mockService.mockRequests = [sample];
+
+      await tester.pumpWidget(buildApp(EditServiceRequestScreen(request: sample)));
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.text('Change'));
+      await tester.pumpAndSettle();
+
+      // Pick Let AI identify
+      await tester.tap(find.text('Let AI identify'));
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.text('Save Changes'));
+      await tester.pumpAndSettle();
+
+      expect(mockService.lastUpdateDto?.categoryHint, isNull);
+    });
+  });
+
+  group('ServiceRequestDetailScreen Preference and Lifecycle AI Classification', () {
+    testWidgets('shows Service preference and lifecycle wording in Created status', (tester) async {
+      final sample = ServiceRequestModel(
+        serviceRequestId: 'req-detail-c',
+        customerId: 'cust-1',
+        category: 'Unclassified',
+        categoryHint: 'Plumbing',
+        description: 'Bathroom pipe leak',
+        locationText: 'Colombo',
+        urgency: ServiceRequestUrgency.low,
+        status: ServiceRequestStatus.created,
+        createdAt: DateTime(2026, 9, 9),
+        updatedAt: DateTime(2026, 9, 9),
+      );
+      mockService.mockRequests = [sample];
+
+      await tester.pumpWidget(buildApp(const ServiceRequestDetailScreen(requestId: 'req-detail-c')));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Service preference: '), findsOneWidget);
+      expect(find.text('Plumbing'), findsOneWidget);
+      expect(find.text('AI classification: '), findsOneWidget);
+      expect(find.text('Not analyzed yet'), findsOneWidget);
+    });
+
+    testWidgets('shows Analysis in progress in Analyzing status', (tester) async {
+      final sample = ServiceRequestModel(
+        serviceRequestId: 'req-detail-a',
+        customerId: 'cust-1',
+        category: 'Unclassified',
+        categoryHint: 'Electrical',
+        description: 'Power cut',
+        locationText: 'Colombo',
+        urgency: ServiceRequestUrgency.medium,
+        status: ServiceRequestStatus.analyzing,
+        createdAt: DateTime(2026, 9, 9),
+        updatedAt: DateTime(2026, 9, 9),
+      );
+      mockService.mockRequests = [sample];
+
+      await tester.pumpWidget(buildApp(const ServiceRequestDetailScreen(requestId: 'req-detail-a')));
+      await tester.pump();
+      await tester.pump();
+
+      expect(find.text('Service preference: '), findsOneWidget);
+      expect(find.text('Electrical'), findsOneWidget);
+      expect(find.text('AI classification: '), findsOneWidget);
+      expect(find.text('Analysis in progress'), findsOneWidget);
+    });
+
+    testWidgets('shows Needs more information in AwaitingInformation status', (tester) async {
+      final sample = ServiceRequestModel(
+        serviceRequestId: 'req-detail-ai',
+        customerId: 'cust-1',
+        category: 'Unclassified',
+        categoryHint: 'Appliance Repair',
+        description: 'Strange hum',
+        locationText: 'Colombo',
+        urgency: ServiceRequestUrgency.medium,
+        status: ServiceRequestStatus.awaitingInformation,
+        createdAt: DateTime(2026, 9, 9),
+        updatedAt: DateTime(2026, 9, 9),
+      );
+      mockService.mockRequests = [sample];
+
+      await tester.pumpWidget(buildApp(const ServiceRequestDetailScreen(requestId: 'req-detail-ai')));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Service preference: '), findsOneWidget);
+      expect(find.text('Appliance Repair'), findsOneWidget);
+      expect(find.text('AI classification: '), findsOneWidget);
+      expect(find.text('Needs more information'), findsOneWidget);
+    });
+
+    testWidgets('ReadyForMatching preserves AnalysisResultCard with completed AI classification, handoff section, and no duplicate header rows', (tester) async {
+      final sample = ServiceRequestModel(
+        serviceRequestId: 'req-detail-rfm',
+        customerId: 'cust-1',
+        category: 'Electrical',
+        categoryHint: 'Plumbing',
+        description: 'Fixed issue',
+        locationText: 'Colombo',
+        urgency: ServiceRequestUrgency.high,
+        status: ServiceRequestStatus.readyForMatching,
+        createdAt: DateTime(2026, 9, 9),
+        updatedAt: DateTime(2026, 9, 9),
+      );
+      mockService.mockRequests = [sample];
+
+      await tester.pumpWidget(buildApp(const ServiceRequestDetailScreen(requestId: 'req-detail-rfm')));
+      await tester.pumpAndSettle();
+
+      // Header Card does NOT duplicate 'Service preference: ' or 'AI classification: '
+      expect(find.text('Service preference: '), findsNothing);
+      expect(find.text('AI classification: '), findsNothing);
+
+      // AnalysisResultCard is preserved as primary AI result/comparison UI
+      expect(find.byType(AnalysisResultCard), findsOneWidget);
+      expect(find.text('Your preference:'), findsOneWidget);
+      expect(find.text('Plumbing'), findsOneWidget);
+      expect(find.text('AI classification:'), findsOneWidget);
+      expect(find.text('Electrical'), findsWidgets);
+
+      // Differing hint/category in ReadyForMatching shows neutral mismatch banner
+      expect(find.text('AI identified a different service category based on your problem description.'), findsOneWidget);
+
+      // ReadyForMatchingSection handoff UI is present
+      expect(find.byType(ReadyForMatchingSection), findsOneWidget);
+      expect(find.text('Request Understood'), findsOneWidget);
+      expect(find.text('Ready for provider matching'), findsOneWidget);
+    });
+
+    testWidgets('ReadyForMatching with matching hint/category shows no mismatch notice', (tester) async {
+      final sample = ServiceRequestModel(
+        serviceRequestId: 'req-detail-rfm-match',
+        customerId: 'cust-1',
+        category: 'Electrical',
+        categoryHint: 'Electrical',
+        description: 'Fixed breaker',
+        locationText: 'Colombo',
+        urgency: ServiceRequestUrgency.high,
+        status: ServiceRequestStatus.readyForMatching,
+        createdAt: DateTime(2026, 9, 9),
+        updatedAt: DateTime(2026, 9, 9),
+      );
+      mockService.mockRequests = [sample];
+
+      await tester.pumpWidget(buildApp(const ServiceRequestDetailScreen(requestId: 'req-detail-rfm-match')));
+      await tester.pumpAndSettle();
+
+      expect(find.byType(AnalysisResultCard), findsOneWidget);
+      expect(find.text('Your preference:'), findsOneWidget);
+      expect(find.text('AI classification:'), findsOneWidget);
+      expect(find.text('AI identified a different service category based on your problem description.'), findsNothing);
+      expect(find.byType(ReadyForMatchingSection), findsOneWidget);
+    });
+
+    testWidgets('transition from Analyzed to ReadyForMatching does not cause analysis result to disappear', (tester) async {
+      final sample = ServiceRequestModel(
+        serviceRequestId: 'req-transition',
+        customerId: 'cust-1',
+        category: 'Plumbing',
+        categoryHint: 'Electrical',
+        description: 'Pipe leaking in bathroom',
+        locationText: 'Kandy',
+        urgency: ServiceRequestUrgency.medium,
+        status: ServiceRequestStatus.analyzed,
+        createdAt: DateTime(2026, 9, 9),
+        updatedAt: DateTime(2026, 9, 9),
+      );
+      mockService.mockRequests = [sample];
+
+      await tester.pumpWidget(buildApp(const ServiceRequestDetailScreen(requestId: 'req-transition')));
+      await tester.pumpAndSettle();
+
+      // In Analyzed status: AnalysisResultCard is shown with mismatch notice, Mark Ready button is present
+      expect(find.byType(AnalysisResultCard), findsOneWidget);
+      expect(find.text('Your preference:'), findsOneWidget);
+      expect(find.text('Electrical'), findsOneWidget);
+      expect(find.text('AI classification:'), findsOneWidget);
+      expect(find.text('Plumbing'), findsWidgets);
+      expect(find.text('AI identified a different service category based on your problem description.'), findsOneWidget);
+      expect(find.text('Mark Ready for Matching'), findsOneWidget);
+      expect(find.byType(ReadyForMatchingSection), findsNothing);
+
+      // Perform transition
+      await tester.ensureVisible(find.text('Mark Ready for Matching'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Mark Ready for Matching'));
+      await tester.pumpAndSettle();
+
+      // Post-transition: AnalysisResultCard REMAINS present and ReadyForMatchingSection is added
+      expect(find.byType(AnalysisResultCard), findsOneWidget);
+      expect(find.text('Your preference:'), findsOneWidget);
+      expect(find.text('Electrical'), findsOneWidget);
+      expect(find.text('AI classification:'), findsOneWidget);
+      expect(find.text('Plumbing'), findsWidgets);
+      expect(find.text('AI identified a different service category based on your problem description.'), findsOneWidget);
+      expect(find.byType(ReadyForMatchingSection), findsOneWidget);
+      expect(find.text('Mark Ready for Matching'), findsNothing);
+    });
+
+    testWidgets('in Analyzed status, avoids duplicate rows in Header Card and delegates to AnalysisResultCard', (tester) async {
+      final sample = ServiceRequestModel(
+        serviceRequestId: 'req-detail-analyzed',
+        customerId: 'cust-1',
+        category: 'Electrical',
+        categoryHint: 'Plumbing',
+        description: 'Circuit tripping',
+        locationText: 'Colombo',
+        urgency: ServiceRequestUrgency.high,
+        status: ServiceRequestStatus.analyzed,
+        createdAt: DateTime(2026, 9, 9),
+        updatedAt: DateTime(2026, 9, 9),
+      );
+      mockService.mockRequests = [sample];
+
+      await tester.pumpWidget(buildApp(const ServiceRequestDetailScreen(requestId: 'req-detail-analyzed')));
+      await tester.pumpAndSettle();
+
+      // Header Card does NOT duplicate 'Service preference: '
+      expect(find.text('Service preference: '), findsNothing);
+
+      // AnalysisResultCard is the primary place
+      expect(find.byType(AnalysisResultCard), findsOneWidget);
+      expect(find.text('Your preference:'), findsOneWidget);
+      expect(find.text('AI classification:'), findsOneWidget);
+      expect(find.text('Plumbing'), findsOneWidget);
+      expect(find.text('Electrical'), findsWidgets);
+    });
+  });
+
+  group('AnalysisResultCard Mismatch Display Safety', () {
+    testWidgets('matching category and hint shows no mismatch banner in ReadyForMatching status', (tester) async {
+      final analysis = ProblemUnderstandingResultModel(
+        workflowId: 'wf-rfm-1',
+        executionId: 'ex-rfm-1',
+        serviceRequestId: 'req-rfm-1',
+        status: ServiceRequestStatus.readyForMatching,
+        category: 'Plumbing',
+        problemSummary: 'Leaking pipe under kitchen sink',
+        urgency: ServiceRequestUrgency.medium,
+        confidence: 0.95,
+        needsMoreInformation: false,
+        followUpQuestions: const [],
+      );
+
+      await tester.pumpWidget(
+        MaterialApp(
+          theme: AppTheme.lightTheme,
+          home: Scaffold(
+            body: AnalysisResultCard(
+              analysis: analysis,
+              categoryHint: 'Plumbing',
+              status: ServiceRequestStatus.readyForMatching,
+            ),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      expect(find.text('Your preference:'), findsOneWidget);
+      expect(find.text('Plumbing'), findsNWidgets(2));
+      expect(find.text('AI identified a different service category based on your problem description.'), findsNothing);
+    });
+
+    testWidgets('mismatching category and hint in ReadyForMatching status shows neutral mismatch banner', (tester) async {
+      final analysis = ProblemUnderstandingResultModel(
+        workflowId: 'wf-rfm-2',
+        executionId: 'ex-rfm-2',
+        serviceRequestId: 'req-rfm-2',
+        status: ServiceRequestStatus.readyForMatching,
+        category: 'Plumbing',
+        problemSummary: 'Water pipe leak',
+        urgency: ServiceRequestUrgency.medium,
+        confidence: 0.92,
+        needsMoreInformation: false,
+        followUpQuestions: const [],
+      );
+
+      await tester.pumpWidget(
+        MaterialApp(
+          theme: AppTheme.lightTheme,
+          home: Scaffold(
+            body: AnalysisResultCard(
+              analysis: analysis,
+              categoryHint: 'Electrical',
+              status: ServiceRequestStatus.readyForMatching,
+            ),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      expect(find.text('Your preference:'), findsOneWidget);
+      expect(find.text('Electrical'), findsOneWidget);
+      expect(find.text('AI classification:'), findsOneWidget);
+      expect(find.text('Plumbing'), findsOneWidget);
+      expect(find.text('AI identified a different service category based on your problem description.'), findsOneWidget);
+      expect(find.byIcon(Icons.info_outline_rounded), findsOneWidget);
+    });
+    testWidgets('matching category and hint shows no mismatch banner in Analyzed status', (tester) async {
+      final analysis = ProblemUnderstandingResultModel(
+        workflowId: 'wf-1',
+        executionId: 'ex-1',
+        serviceRequestId: 'req-1',
+        status: ServiceRequestStatus.analyzed,
+        category: 'Plumbing',
+        problemSummary: 'Leaking pipe under kitchen sink',
+        urgency: ServiceRequestUrgency.medium,
+        confidence: 0.95,
+        needsMoreInformation: false,
+        followUpQuestions: const [],
+      );
+
+      await tester.pumpWidget(
+        MaterialApp(
+          theme: AppTheme.lightTheme,
+          home: Scaffold(
+            body: AnalysisResultCard(
+              analysis: analysis,
+              categoryHint: 'Plumbing',
+              status: ServiceRequestStatus.analyzed,
+            ),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      expect(find.text('Your preference:'), findsOneWidget);
+      expect(find.text('Plumbing'), findsNWidgets(2)); // in preference and AI classification
+      expect(find.text('AI identified a different service category based on your problem description.'), findsNothing);
+    });
+
+    testWidgets('mismatching category and hint in Analyzed status shows neutral mismatch banner', (tester) async {
+      final analysis = ProblemUnderstandingResultModel(
+        workflowId: 'wf-2',
+        executionId: 'ex-2',
+        serviceRequestId: 'req-2',
+        status: ServiceRequestStatus.analyzed,
+        category: 'Plumbing',
+        problemSummary: 'Water pipe leak',
+        urgency: ServiceRequestUrgency.medium,
+        confidence: 0.92,
+        needsMoreInformation: false,
+        followUpQuestions: const [],
+      );
+
+      await tester.pumpWidget(
+        MaterialApp(
+          theme: AppTheme.lightTheme,
+          home: Scaffold(
+            body: AnalysisResultCard(
+              analysis: analysis,
+              categoryHint: 'Electrical',
+              status: ServiceRequestStatus.analyzed,
+            ),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      expect(find.text('Your preference:'), findsOneWidget);
+      expect(find.text('Electrical'), findsOneWidget);
+      expect(find.text('AI classification:'), findsOneWidget);
+      expect(find.text('Plumbing'), findsOneWidget);
+      expect(find.text('AI identified a different service category based on your problem description.'), findsOneWidget);
+      expect(find.byIcon(Icons.info_outline_rounded), findsOneWidget);
+    });
+
+    testWidgets('canonical equivalence between Vehicle Assistance and Vehicle Repair produces no mismatch', (tester) async {
+      final analysis = ProblemUnderstandingResultModel(
+        workflowId: 'wf-3',
+        executionId: 'ex-3',
+        serviceRequestId: 'req-3',
+        status: ServiceRequestStatus.analyzed,
+        category: 'Vehicle Repair',
+        problemSummary: 'Transmission failure',
+        urgency: ServiceRequestUrgency.high,
+        confidence: 0.94,
+        needsMoreInformation: false,
+        followUpQuestions: const [],
+      );
+
+      await tester.pumpWidget(
+        MaterialApp(
+          theme: AppTheme.lightTheme,
+          home: Scaffold(
+            body: AnalysisResultCard(
+              analysis: analysis,
+              categoryHint: 'Vehicle Assistance',
+              status: ServiceRequestStatus.analyzed,
+            ),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      expect(find.text('Your preference:'), findsOneWidget);
+      expect(find.text('Vehicle Assistance'), findsOneWidget);
+      expect(find.text('AI classification:'), findsOneWidget);
+      expect(find.text('Vehicle Repair'), findsOneWidget);
+      expect(find.text('AI identified a different service category based on your problem description.'), findsNothing);
+    });
+
+    testWidgets('null categoryHint (Let AI identify) shows no mismatch banner', (tester) async {
+      final analysis = ProblemUnderstandingResultModel(
+        workflowId: 'wf-4',
+        executionId: 'ex-4',
+        serviceRequestId: 'req-4',
+        status: ServiceRequestStatus.analyzed,
+        category: 'Electrical',
+        problemSummary: 'Tripping circuit',
+        urgency: ServiceRequestUrgency.high,
+        confidence: 0.91,
+        needsMoreInformation: false,
+        followUpQuestions: const [],
+      );
+
+      await tester.pumpWidget(
+        MaterialApp(
+          theme: AppTheme.lightTheme,
+          home: Scaffold(
+            body: AnalysisResultCard(
+              analysis: analysis,
+              categoryHint: null,
+              status: ServiceRequestStatus.analyzed,
+            ),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      expect(find.text('Your preference:'), findsOneWidget);
+      expect(find.text('Let AI identify'), findsOneWidget);
+      expect(find.text('AI identified a different service category based on your problem description.'), findsNothing);
+    });
+
+    testWidgets('Unclassified AI category shows no mismatch banner', (tester) async {
+      final analysis = ProblemUnderstandingResultModel(
+        workflowId: 'wf-5',
+        executionId: 'ex-5',
+        serviceRequestId: 'req-5',
+        status: ServiceRequestStatus.analyzed,
+        category: 'Unclassified',
+        problemSummary: 'Need help',
+        urgency: ServiceRequestUrgency.low,
+        confidence: 0.50,
+        needsMoreInformation: true,
+        followUpQuestions: const [],
+      );
+
+      await tester.pumpWidget(
+        MaterialApp(
+          theme: AppTheme.lightTheme,
+          home: Scaffold(
+            body: AnalysisResultCard(
+              analysis: analysis,
+              categoryHint: 'Plumbing',
+              status: ServiceRequestStatus.analyzed,
+            ),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      expect(find.text('AI identified a different service category based on your problem description.'), findsNothing);
+    });
+
+    testWidgets('lifecycle safety: mismatch notice suppressed when status is Created, Analyzing, AwaitingInformation, Cancelled', (tester) async {
+      final analysis = ProblemUnderstandingResultModel(
+        workflowId: 'wf-6',
+        executionId: 'ex-6',
+        serviceRequestId: 'req-6',
+        status: ServiceRequestStatus.awaitingInformation,
+        category: 'Plumbing',
+        problemSummary: 'Water leak',
+        urgency: ServiceRequestUrgency.medium,
+        confidence: 0.88,
+        needsMoreInformation: true,
+        followUpQuestions: const [],
+      );
+
+      for (final unsafeStatus in [
+        ServiceRequestStatus.created,
+        ServiceRequestStatus.analyzing,
+        ServiceRequestStatus.awaitingInformation,
+        ServiceRequestStatus.cancelled,
+      ]) {
+        await tester.pumpWidget(
+          MaterialApp(
+            theme: AppTheme.lightTheme,
+            home: Scaffold(
+              body: AnalysisResultCard(
+                analysis: analysis,
+                categoryHint: 'Electrical', // deliberately different
+                status: unsafeStatus,
+              ),
+            ),
+          ),
+        );
+        await tester.pumpAndSettle();
+
+        expect(
+          find.text('AI identified a different service category based on your problem description.'),
+          findsNothing,
+          reason: 'Status $unsafeStatus must never show mismatch notice',
+        );
+      }
     });
   });
 }

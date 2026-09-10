@@ -7,7 +7,9 @@ import '../../../../shared/theme/app_spacing.dart';
 import '../../../../shared/theme/app_text_styles.dart';
 import '../../../../shared/widgets/app_button.dart';
 import '../../auth/providers/auth_provider.dart';
+import '../models/canonical_service_category.dart';
 import '../providers/service_request_provider.dart';
+import '../widgets/service_category_card.dart';
 import '../widgets/service_request_card.dart';
 import 'create_service_request_screen.dart';
 import 'service_request_detail_screen.dart';
@@ -28,10 +30,12 @@ class _CustomerHomeScreenState extends State<CustomerHomeScreen> {
     });
   }
 
-  void _navigateToCreate() {
+  void _navigateToCreate({String? categoryPreference}) {
     Navigator.of(context).push(
       MaterialPageRoute(
-        builder: (_) => const CreateServiceRequestScreen(),
+        builder: (_) => CreateServiceRequestScreen(
+          initialCategoryPreference: categoryPreference,
+        ),
       ),
     );
   }
@@ -71,7 +75,7 @@ class _CustomerHomeScreenState extends State<CustomerHomeScreen> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              // Welcome Section
+              // 1. Welcome Section
               Container(
                 width: double.infinity,
                 padding: const EdgeInsets.all(AppSpacing.lg),
@@ -113,7 +117,150 @@ class _CustomerHomeScreenState extends State<CustomerHomeScreen> {
               ),
               const SizedBox(height: AppSpacing.lg),
 
-              // Action Row: "My Service Requests" Title and "Create Request" Button
+              // 2. Service Shortcuts Section
+              const Text(
+                'What do you need help with?',
+                style: AppTextStyles.sectionHeading,
+              ),
+              const SizedBox(height: AppSpacing.xs),
+              Text(
+                'Choose a service category to get started quickly',
+                style: AppTextStyles.small.copyWith(
+                  color: AppColors.textSecondary,
+                ),
+              ),
+              const SizedBox(height: AppSpacing.md),
+
+              // 2x2 Grid of Canonical Service Categories
+              Row(
+                children: [
+                  Expanded(
+                    child: ServiceCategoryCard(
+                      category: CanonicalServiceCategory.plumbing,
+                      onTap: () => _navigateToCreate(
+                        categoryPreference:
+                            CanonicalServiceCategory.plumbing.canonicalName,
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: AppSpacing.sm),
+                  Expanded(
+                    child: ServiceCategoryCard(
+                      category: CanonicalServiceCategory.electrical,
+                      onTap: () => _navigateToCreate(
+                        categoryPreference:
+                            CanonicalServiceCategory.electrical.canonicalName,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: AppSpacing.sm),
+              Row(
+                children: [
+                  Expanded(
+                    child: ServiceCategoryCard(
+                      category: CanonicalServiceCategory.vehicleRepair,
+                      onTap: () => _navigateToCreate(
+                        categoryPreference:
+                            CanonicalServiceCategory.vehicleRepair.canonicalName,
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: AppSpacing.sm),
+                  Expanded(
+                    child: ServiceCategoryCard(
+                      category: CanonicalServiceCategory.applianceRepair,
+                      onTap: () => _navigateToCreate(
+                        categoryPreference:
+                            CanonicalServiceCategory.applianceRepair.canonicalName,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: AppSpacing.lg),
+
+              // 3. AI Assistance Option Card
+              Material(
+                color: Colors.transparent,
+                child: InkWell(
+                  onTap: () => _navigateToCreate(categoryPreference: null),
+                  borderRadius: BorderRadius.circular(AppRadius.large),
+                  child: Container(
+                    width: double.infinity,
+                    padding: const EdgeInsets.all(AppSpacing.md),
+                    decoration: BoxDecoration(
+                      color: AppColors.primary.withValues(alpha: 0.04),
+                      borderRadius: BorderRadius.circular(AppRadius.large),
+                      border: Border.all(
+                        color: AppColors.primary.withValues(alpha: 0.25),
+                      ),
+                    ),
+                    child: Row(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Container(
+                          padding: const EdgeInsets.all(AppSpacing.sm),
+                          decoration: BoxDecoration(
+                            color: AppColors.primary.withValues(alpha: 0.1),
+                            borderRadius: BorderRadius.circular(AppRadius.medium),
+                          ),
+                          child: const Icon(
+                            Icons.auto_awesome_rounded,
+                            color: AppColors.primary,
+                            size: 24,
+                          ),
+                        ),
+                        const SizedBox(width: AppSpacing.md),
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              const Text(
+                                'Not sure what service you need?',
+                                style: AppTextStyles.cardHeading,
+                              ),
+                              const SizedBox(height: AppSpacing.xs),
+                              Text(
+                                'Describe your problem in plain language and let AssistLK AI identify the right service and urgency.',
+                                style: AppTextStyles.body.copyWith(
+                                  color: AppColors.textSecondary,
+                                ),
+                              ),
+                              const SizedBox(height: AppSpacing.sm),
+                              Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  Flexible(
+                                    child: Text(
+                                      'Let AI understand your problem',
+                                      style: AppTextStyles.small.copyWith(
+                                        color: AppColors.primary,
+                                        fontWeight: FontWeight.w600,
+                                      ),
+                                      overflow: TextOverflow.ellipsis,
+                                    ),
+                                  ),
+                                  const SizedBox(width: 4),
+                                  const Icon(
+                                    Icons.arrow_forward_rounded,
+                                    size: 16,
+                                    color: AppColors.primary,
+                                  ),
+                                ],
+                              ),
+                            ],
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              ),
+              const SizedBox(height: AppSpacing.lg),
+
+              // 4. Action Row: "My Service Requests" Title and "Create Request" Button
               Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
@@ -126,7 +273,7 @@ class _CustomerHomeScreenState extends State<CustomerHomeScreen> {
                   ),
                   const SizedBox(width: AppSpacing.sm),
                   ElevatedButton.icon(
-                    onPressed: _navigateToCreate,
+                    onPressed: () => _navigateToCreate(),
                     icon: const Icon(Icons.add, size: 18),
                     label: const Text('Create Request'),
                     style: ElevatedButton.styleFrom(
@@ -144,7 +291,7 @@ class _CustomerHomeScreenState extends State<CustomerHomeScreen> {
               ),
               const SizedBox(height: AppSpacing.md),
 
-              // Request list or Loading or Empty State
+              // 5. Request list or Loading or Empty State
               if (requestProvider.isLoading && requests.isEmpty) ...[
                 const Padding(
                   padding: EdgeInsets.symmetric(vertical: 40),
@@ -221,7 +368,7 @@ class _CustomerHomeScreenState extends State<CustomerHomeScreen> {
             width: 200,
             child: AppButton(
               text: 'Create Request',
-              onPressed: _navigateToCreate,
+              onPressed: () => _navigateToCreate(),
             ),
           ),
         ],

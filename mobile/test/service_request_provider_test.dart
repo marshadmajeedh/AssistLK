@@ -5,9 +5,11 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:mobile/core/api/api_client.dart';
 import 'package:mobile/features/service_requests/models/create_service_request_dto.dart';
 import 'package:mobile/features/service_requests/models/problem_understanding_result_model.dart';
+import 'package:mobile/features/service_requests/models/service_request_clarification_model.dart';
 import 'package:mobile/features/service_requests/models/service_request_model.dart';
 import 'package:mobile/features/service_requests/models/service_request_status.dart';
 import 'package:mobile/features/service_requests/models/service_request_urgency.dart';
+import 'package:mobile/features/service_requests/models/submit_clarification_answers_dto.dart';
 import 'package:mobile/features/service_requests/models/update_service_request_dto.dart';
 import 'package:mobile/features/service_requests/providers/service_request_provider.dart';
 import 'package:mobile/features/service_requests/services/service_request_service.dart';
@@ -119,6 +121,37 @@ class FakeServiceRequestService extends ServiceRequestService {
     );
     fakeRequests[index] = updated;
     return updated;
+  }
+
+  bool shouldSubmitClarificationThrow = false;
+  int submitClarificationCallCount = 0;
+  SubmitClarificationAnswersDto? lastSubmittedAnswersDto;
+
+  @override
+  Future<List<ServiceRequestClarificationModel>> submitClarificationAnswers(
+    String id,
+    SubmitClarificationAnswersDto dto,
+  ) async {
+    submitClarificationCallCount++;
+    lastSubmittedAnswersDto = dto;
+    if (shouldThrow || shouldSubmitClarificationThrow) {
+      throw Exception('Submit clarification answers failed');
+    }
+    final index = fakeRequests.indexWhere((r) => r.serviceRequestId == id);
+    if (index < 0) throw Exception('Request not found');
+    final req = fakeRequests[index];
+    final updatedList = req.clarifications.map((c) {
+      final item = dto.answers.cast<ClarificationAnswerSubmissionItemDto?>().firstWhere(
+        (a) => a?.clarificationId == c.id,
+        orElse: () => null,
+      );
+      if (item != null) {
+        return c.copyWith(answer: item.answer, answeredAt: DateTime.now());
+      }
+      return c;
+    }).toList();
+    fakeRequests[index] = req.copyWith(clarifications: updatedList);
+    return updatedList;
   }
 
   @override
@@ -669,5 +702,95 @@ void main() {
     expect(fakeService.getByIdCallCount - initialGetCount, 1);
     expect(provider.error, isNotNull);
     expect(provider.isAnalyzing, false);
+  });
+
+  group('Clarification Answers Submission', () {
+    test('submitClarificationAnswers updates currentRequest clarifications and returns true', () async {
+      const clarification = ServiceRequestClarificationModel(
+        id: 'c-1',
+        clarificationRound: 1,
+        sequence: 1,
+        question: 'Which room?',
+      );
+      final reqWithClarification = sampleRequest.copyWith(
+        status: ServiceRequestStatus.awaitingInformation,
+        clarifications: [clarification],
+      );
+      fakeService.fakeRequests = [reqWithClarification];
+      await provider.loadRequestById('req-1');
+
+      final result = await provider.submitClarificationAnswers(
+        'req-1',
+        1,
+        {'c-1': 'Master bedroom'},
+      );
+
+      expect(result, true);
+      expect(provider.error, isNull);
+      expect(fakeService.submitClarificationCallCount, 1);
+      expect(fakeService.lastSubmittedAnswersDto?.clarificationRound, 1);
+      expect(fakeService.lastSubmittedAnswersDto?.answers.first.answer, 'Master bedroom');
+      expect(provider.currentRequest?.clarifications.first.answer, 'Master bedroom');
+      expect(provider.currentRequest?.currentRoundIsFullyAnswered, true);
+    });
+
+    test('submitClarificationAnswers sets error and returns false when service throws', () async {
+      fakeService.shouldSubmitClarificationThrow = true;
+      fakeService.fakeRequests = [sampleRequest];
+      await provider.loadRequestById('req-1');
+
+      final result = await provider.submitClarificationAnswers(
+        'req-1',
+        1,
+        {'c-1': 'Master bedroom'},
+      );
+
+      expect(result, false);
+      expect(provider.error, isNotNull);
+    });
+
+    test('submitClarificationAnswersAndReanalyze submits answers and triggers re-analysis', () async {
+      const clarification = ServiceRequestClarificationModel(
+        id: 'c-1',
+        clarificationRound: 1,
+        sequence: 1,
+        question: 'Which room?',
+      );
+      final reqWithClarification = sampleRequest.copyWith(
+        status: ServiceRequestStatus.awaitingInformation,
+        clarifications: [clarification],
+      );
+      fakeService.fakeRequests = [reqWithClarification];
+      await provider.loadRequestById('req-1');
+
+      final analysis = await provider.submitClarificationAnswersAndReanalyze(
+        'req-1',
+        1,
+        {'c-1': 'Master bedroom'},
+      );
+
+      expect(fakeService.submitClarificationCallCount, 1);
+      expect(fakeService.analyzeCallCount, 1);
+      expect(analysis, isNotNull);
+      expect(provider.currentRequest?.clarifications.first.answer, 'Master bedroom');
+      expect(provider.currentRequest?.status, ServiceRequestStatus.analyzed);
+    });
+
+    test('submitClarificationAnswersAndReanalyze aborts and does not call analyze if answer submission fails', () async {
+      fakeService.shouldSubmitClarificationThrow = true;
+      fakeService.fakeRequests = [sampleRequest];
+      await provider.loadRequestById('req-1');
+
+      final analysis = await provider.submitClarificationAnswersAndReanalyze(
+        'req-1',
+        1,
+        {'c-1': 'Master bedroom'},
+      );
+
+      expect(analysis, isNull);
+      expect(fakeService.submitClarificationCallCount, 1);
+      expect(fakeService.analyzeCallCount, 0);
+      expect(provider.error, isNotNull);
+    });
   });
 }

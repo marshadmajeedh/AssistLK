@@ -1,3 +1,5 @@
+import 'problem_analysis_summary_model.dart';
+import 'service_request_clarification_model.dart';
 import 'service_request_status.dart';
 import 'service_request_urgency.dart';
 
@@ -16,6 +18,8 @@ class ServiceRequestModel {
   final ServiceRequestStatus status;
   final DateTime createdAt;
   final DateTime updatedAt;
+  final ProblemAnalysisSummaryModel? latestAnalysis;
+  final List<ServiceRequestClarificationModel> clarifications;
 
   const ServiceRequestModel({
     required this.serviceRequestId,
@@ -30,7 +34,29 @@ class ServiceRequestModel {
     required this.status,
     required this.createdAt,
     required this.updatedAt,
+    this.latestAnalysis,
+    this.clarifications = const [],
   });
+
+  int get currentClarificationRound => clarifications.isEmpty
+      ? 0
+      : clarifications
+          .map((c) => c.clarificationRound)
+          .reduce((a, b) => a > b ? a : b);
+
+  List<ServiceRequestClarificationModel> get currentRoundClarifications =>
+      clarifications
+          .where((c) => c.clarificationRound == currentClarificationRound)
+          .toList();
+
+  bool get currentRoundIsFullyAnswered =>
+      currentRoundClarifications.isNotEmpty &&
+      currentRoundClarifications.every((c) => c.isAnswered);
+
+  List<ServiceRequestClarificationModel> get pendingQuestions =>
+      currentRoundClarifications.where((c) => c.isActionable).toList();
+
+  bool get hasReachedMaxRounds => currentClarificationRound >= 2;
 
   factory ServiceRequestModel.fromJson(Map<String, dynamic> json) {
     return ServiceRequestModel(
@@ -50,6 +76,15 @@ class ServiceRequestModel {
       updatedAt: json['updatedAt'] != null
           ? DateTime.parse(json['updatedAt'] as String)
           : DateTime.now(),
+      latestAnalysis: json['latestAnalysis'] != null
+          ? ProblemAnalysisSummaryModel.fromJson(
+              Map<String, dynamic>.from(json['latestAnalysis'] as Map))
+          : null,
+      clarifications: (json['clarifications'] as List<dynamic>?)
+              ?.map((e) => ServiceRequestClarificationModel.fromJson(
+                  Map<String, dynamic>.from(e as Map)))
+              .toList() ??
+          const [],
     );
   }
 
@@ -67,6 +102,8 @@ class ServiceRequestModel {
       'status': status.toJson(),
       'createdAt': createdAt.toIso8601String(),
       'updatedAt': updatedAt.toIso8601String(),
+      'latestAnalysis': latestAnalysis?.toJson(),
+      'clarifications': clarifications.map((c) => c.toJson()).toList(),
     };
   }
 
@@ -83,6 +120,8 @@ class ServiceRequestModel {
     ServiceRequestStatus? status,
     DateTime? createdAt,
     DateTime? updatedAt,
+    Object? latestAnalysis = _sentinel,
+    List<ServiceRequestClarificationModel>? clarifications,
   }) {
     return ServiceRequestModel(
       serviceRequestId: serviceRequestId ?? this.serviceRequestId,
@@ -99,6 +138,10 @@ class ServiceRequestModel {
       status: status ?? this.status,
       createdAt: createdAt ?? this.createdAt,
       updatedAt: updatedAt ?? this.updatedAt,
+      latestAnalysis: identical(latestAnalysis, _sentinel)
+          ? this.latestAnalysis
+          : latestAnalysis as ProblemAnalysisSummaryModel?,
+      clarifications: clarifications ?? this.clarifications,
     );
   }
 }

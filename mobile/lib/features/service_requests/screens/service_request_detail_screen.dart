@@ -91,6 +91,43 @@ class _ServiceRequestDetailScreenState
     }
   }
 
+  Future<void> _submitClarificationAnswers(
+    String id,
+    int round,
+    Map<String, String> answers,
+  ) async {
+    final provider = context.read<ServiceRequestProvider>();
+    final result = await provider.submitClarificationAnswersAndReanalyze(
+      id,
+      round,
+      answers,
+    );
+
+    if (!mounted) return;
+
+    if (result != null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            result.needsMoreInformation
+                ? 'Answers submitted. Additional clarification is needed.'
+                : 'Answers submitted and problem analyzed successfully!',
+          ),
+          backgroundColor: result.needsMoreInformation
+              ? AppColors.warning
+              : AppColors.success,
+        ),
+      );
+    } else if (provider.error != null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(provider.error!),
+          backgroundColor: AppColors.error,
+        ),
+      );
+    }
+  }
+
   Future<void> _markReadyForMatching(String id) async {
     final provider = context.read<ServiceRequestProvider>();
     final result = await provider.markReadyForMatching(id);
@@ -561,35 +598,45 @@ class _ServiceRequestDetailScreenState
         );
 
       case ServiceRequestStatus.awaitingInformation:
-        // Backend currently does not persist followUpQuestions in the database.
-        // Stored temporarily in memory until customer completes clarification.
-        final questions = analysis != null && analysis.followUpQuestions.isNotEmpty
-            ? analysis.followUpQuestions
-            : <String>[
-                'Please provide further details regarding the issue.',
-              ];
-
         return ClarificationSection(
-          followUpQuestions: questions,
+          followUpQuestions: analysis?.followUpQuestions ?? const [],
+          clarifications: request.clarifications,
+          hasReachedMaxRounds: request.hasReachedMaxRounds,
           isReanalyzing: provider.isAnalyzing,
+          isSubmitting: provider.isLoading,
           onEditDetails: () => _navigateToEdit(request),
           onReanalyze: () => _triggerAnalysis(request.serviceRequestId),
+          onSubmitAnswers: (round, answers) =>
+              _submitClarificationAnswers(request.serviceRequestId, round, answers),
         );
 
       case ServiceRequestStatus.analyzed:
         final displayAnalysis = analysis ??
-            ProblemUnderstandingResultModel(
-              workflowId: '',
-              executionId: '',
-              serviceRequestId: request.serviceRequestId,
-              status: request.status,
-              category: request.category,
-              problemSummary: request.description,
-              urgency: request.urgency,
-              confidence: 0.90,
-              needsMoreInformation: false,
-              followUpQuestions: const [],
-            );
+            (request.latestAnalysis != null
+                ? ProblemUnderstandingResultModel(
+                    workflowId: '',
+                    executionId: '',
+                    serviceRequestId: request.serviceRequestId,
+                    status: request.status,
+                    category: request.category,
+                    problemSummary: request.latestAnalysis!.detectedProblem,
+                    urgency: request.urgency,
+                    confidence: request.latestAnalysis!.confidence,
+                    needsMoreInformation: false,
+                    followUpQuestions: const [],
+                  )
+                : ProblemUnderstandingResultModel(
+                    workflowId: '',
+                    executionId: '',
+                    serviceRequestId: request.serviceRequestId,
+                    status: request.status,
+                    category: request.category,
+                    problemSummary: request.description,
+                    urgency: request.urgency,
+                    confidence: 0.0,
+                    needsMoreInformation: false,
+                    followUpQuestions: const [],
+                  ));
 
         return Column(
           children: [
@@ -609,18 +656,31 @@ class _ServiceRequestDetailScreenState
 
       case ServiceRequestStatus.readyForMatching:
         final displayAnalysis = analysis ??
-            ProblemUnderstandingResultModel(
-              workflowId: '',
-              executionId: '',
-              serviceRequestId: request.serviceRequestId,
-              status: request.status,
-              category: request.category,
-              problemSummary: request.description,
-              urgency: request.urgency,
-              confidence: 0.90,
-              needsMoreInformation: false,
-              followUpQuestions: const [],
-            );
+            (request.latestAnalysis != null
+                ? ProblemUnderstandingResultModel(
+                    workflowId: '',
+                    executionId: '',
+                    serviceRequestId: request.serviceRequestId,
+                    status: request.status,
+                    category: request.category,
+                    problemSummary: request.latestAnalysis!.detectedProblem,
+                    urgency: request.urgency,
+                    confidence: request.latestAnalysis!.confidence,
+                    needsMoreInformation: false,
+                    followUpQuestions: const [],
+                  )
+                : ProblemUnderstandingResultModel(
+                    workflowId: '',
+                    executionId: '',
+                    serviceRequestId: request.serviceRequestId,
+                    status: request.status,
+                    category: request.category,
+                    problemSummary: request.description,
+                    urgency: request.urgency,
+                    confidence: 0.0,
+                    needsMoreInformation: false,
+                    followUpQuestions: const [],
+                  ));
 
         return Column(
           children: [

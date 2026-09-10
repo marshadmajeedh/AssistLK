@@ -59,5 +59,11 @@ public interface IServiceRequestService
         Guid serviceRequestId,
         Guid customerId,
         CancellationToken cancellationToken = default);
+
+    Task<IReadOnlyList<ServiceRequestClarificationDto>> SubmitClarificationAnswersAsync(
+        Guid customerId,
+        Guid serviceRequestId,
+        SubmitClarificationAnswersRequest request,
+        CancellationToken cancellationToken = default);
 }
 

@@ -194,4 +194,67 @@ public class ServiceRequestsApiPostgreSqlTests : IClassFixture<PostgreSqlAssistL
         Assert.NotNull(req);
         Assert.Equal(ServiceRequestStatus.AwaitingInformation, req.Status);
     }
+
+    [Fact]
+    public async Task SubmitClarificationAnswers_OverHttp_PersistsInPostgreSql_AndRestoresOnGet()
+    {
+        var customerId = Guid.NewGuid();
+        await _factory.SeedUserAsync(customerId, email: "clarify_http@assistlk.com");
+
+        var client = _factory.CreateAuthenticatedClient(customerId, UserRole.Customer);
+
+        // 1. Create ambiguous request
+        var createResponse = await client.PostAsJsonAsync("api/service-requests", new CreateServiceRequestRequest
+        {
+            Description = "refrigerator not working",
+            LocationText = "Colombo"
+        });
+        Assert.Equal(HttpStatusCode.Created, createResponse.StatusCode);
+        var created = await createResponse.Content.ReadFromJsonAsync<ServiceRequestResponse>(_jsonOptions);
+        Assert.NotNull(created);
+
+        // 2. Initial analysis generates clarification questions
+        var analyzeResponse = await client.PostAsync($"api/service-requests/{created.ServiceRequestId}/analyze", null);
+        Assert.Equal(HttpStatusCode.OK, analyzeResponse.StatusCode);
+
+        // 3. GET request details - verify clarifications and latestAnalysis restoration
+        var getResponse = await client.GetAsync($"api/service-requests/{created.ServiceRequestId}");
+        Assert.Equal(HttpStatusCode.OK, getResponse.StatusCode);
+        var detailDto = await getResponse.Content.ReadFromJsonAsync<ServiceRequestResponse>(_jsonOptions);
+        Assert.NotNull(detailDto);
+        Assert.NotNull(detailDto.LatestAnalysis);
+        Assert.NotNull(detailDto.Clarifications);
+        Assert.NotEmpty(detailDto.Clarifications);
+
+        var firstQuestion = detailDto.Clarifications.First();
+        Assert.Null(firstQuestion.Answer);
+
+        // 4. Submit answers over HTTP
+        var answersPayload = new SubmitClarificationAnswersRequest
+        {
+            ClarificationRound = firstQuestion.ClarificationRound,
+            Answers = detailDto.Clarifications.Select(q => new ClarificationAnswerSubmissionItem
+            {
+                ClarificationId = q.Id,
+                Answer = "The compressor makes a clicking noise and the fridge does not cool."
+            }).ToList()
+        };
+
+        var submitResponse = await client.PostAsJsonAsync(
+            $"api/service-requests/{created.ServiceRequestId}/clarifications/answers",
+            answersPayload);
+        Assert.Equal(HttpStatusCode.OK, submitResponse.StatusCode);
+
+        var answeredList = await submitResponse.Content.ReadFromJsonAsync<List<ServiceRequestClarificationDto>>(_jsonOptions);
+        Assert.NotNull(answeredList);
+        Assert.All(answeredList, a => Assert.NotNull(a.Answer));
+
+        // 5. Reload via GET - verify answers are restored without fabricated data
+        var reloadedResponse = await client.GetAsync($"api/service-requests/{created.ServiceRequestId}");
+        var reloadedDto = await reloadedResponse.Content.ReadFromJsonAsync<ServiceRequestResponse>(_jsonOptions);
+        Assert.NotNull(reloadedDto);
+        Assert.NotNull(reloadedDto.Clarifications);
+        Assert.All(reloadedDto.Clarifications, c => Assert.NotNull(c.Answer));
+        Assert.Equal(detailDto.LatestAnalysis.Confidence, reloadedDto.LatestAnalysis?.Confidence);
+    }
 }

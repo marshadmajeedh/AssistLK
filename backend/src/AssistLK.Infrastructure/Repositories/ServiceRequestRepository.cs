@@ -15,22 +15,41 @@ public class ServiceRequestRepository : IServiceRequestRepository
         _context = context;
     }
 
-    public async Task<ServiceRequest?> GetByIdAsync(
+    public Task<ServiceRequest?> GetByIdAsync(
         Guid serviceRequestId,
         bool includeProblemAnalyses = false,
         CancellationToken cancellationToken = default)
     {
-        return await BuildQuery(includeProblemAnalyses)
+        return GetByIdAsync(serviceRequestId, includeProblemAnalyses, false, cancellationToken);
+    }
+
+    public async Task<ServiceRequest?> GetByIdAsync(
+        Guid serviceRequestId,
+        bool includeProblemAnalyses,
+        bool includeClarifications,
+        CancellationToken cancellationToken = default)
+    {
+        return await BuildQuery(includeProblemAnalyses, includeClarifications)
             .FirstOrDefaultAsync(x => x.Id == serviceRequestId, cancellationToken);
     }
 
-    public async Task<ServiceRequest?> GetByIdAndCustomerIdAsync(
+    public Task<ServiceRequest?> GetByIdAndCustomerIdAsync(
         Guid serviceRequestId,
         Guid customerId,
         bool includeProblemAnalyses = false,
         CancellationToken cancellationToken = default)
     {
-        return await BuildQuery(includeProblemAnalyses)
+        return GetByIdAndCustomerIdAsync(serviceRequestId, customerId, includeProblemAnalyses, false, cancellationToken);
+    }
+
+    public async Task<ServiceRequest?> GetByIdAndCustomerIdAsync(
+        Guid serviceRequestId,
+        Guid customerId,
+        bool includeProblemAnalyses,
+        bool includeClarifications,
+        CancellationToken cancellationToken = default)
+    {
+        return await BuildQuery(includeProblemAnalyses, includeClarifications)
             .FirstOrDefaultAsync(
                 x => x.Id == serviceRequestId && x.CustomerId == customerId,
                 cancellationToken);
@@ -62,9 +81,21 @@ public class ServiceRequestRepository : IServiceRequestRepository
         await _context.ServiceRequests.AddAsync(serviceRequest, cancellationToken);
     }
 
+    public async Task AddClarificationsAsync(
+        IEnumerable<ServiceRequestClarification> clarifications,
+        CancellationToken cancellationToken = default)
+    {
+        await _context.ServiceRequestClarifications.AddRangeAsync(clarifications, cancellationToken);
+    }
+
     public void Update(ServiceRequest serviceRequest)
     {
-        _context.ServiceRequests.Update(serviceRequest);
+        var entry = _context.Entry(serviceRequest);
+        if (entry.State == EntityState.Detached)
+        {
+            _context.ServiceRequests.Attach(serviceRequest);
+            entry.State = EntityState.Modified;
+        }
     }
 
     public async Task SaveChangesAsync(CancellationToken cancellationToken = default)
@@ -72,11 +103,20 @@ public class ServiceRequestRepository : IServiceRequestRepository
         await _context.SaveChangesAsync(cancellationToken);
     }
 
-    private IQueryable<ServiceRequest> BuildQuery(bool includeProblemAnalyses)
+    private IQueryable<ServiceRequest> BuildQuery(bool includeProblemAnalyses, bool includeClarifications)
     {
         var query = _context.ServiceRequests.AsQueryable();
-        return includeProblemAnalyses
-            ? query.Include(x => x.ProblemAnalyses)
-            : query;
+
+        if (includeProblemAnalyses)
+        {
+            query = query.Include(x => x.ProblemAnalyses);
+        }
+
+        if (includeClarifications)
+        {
+            query = query.Include(x => x.Clarifications);
+        }
+
+        return query;
     }
 }

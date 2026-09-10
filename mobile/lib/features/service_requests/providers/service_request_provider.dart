@@ -6,6 +6,7 @@ import '../models/create_service_request_dto.dart';
 import '../models/problem_understanding_result_model.dart';
 import '../models/service_request_model.dart';
 import '../models/service_request_status.dart';
+import '../models/submit_clarification_answers_dto.dart';
 import '../models/update_service_request_dto.dart';
 import '../services/service_request_service.dart';
 
@@ -330,6 +331,58 @@ class ServiceRequestProvider extends ChangeNotifier {
     } finally {
       _setLoading(false);
     }
+  }
+
+  Future<bool> submitClarificationAnswers(
+    String id,
+    int round,
+    Map<String, String> answers,
+  ) async {
+    _setLoading(true);
+    _error = null;
+
+    try {
+      final submission = SubmitClarificationAnswersDto(
+        clarificationRound: round,
+        answers: answers.entries
+            .map((e) => ClarificationAnswerSubmissionItemDto(
+                  clarificationId: e.key,
+                  answer: e.value,
+                ))
+            .toList(),
+      );
+
+      final updatedClarifications =
+          await serviceRequestService.submitClarificationAnswers(id, submission);
+
+      if (_currentRequest != null && _currentRequest!.serviceRequestId == id) {
+        _currentRequest = _currentRequest!.copyWith(
+          clarifications: updatedClarifications,
+        );
+        _updateRequestInList(_currentRequest!);
+      }
+
+      return true;
+    } catch (err) {
+      _error = serviceRequestService.getErrorMessage(err);
+      return false;
+    } finally {
+      _setLoading(false);
+    }
+  }
+
+  Future<ProblemUnderstandingResultModel?> submitClarificationAnswersAndReanalyze(
+    String id,
+    int round,
+    Map<String, String> answers, {
+    Duration? pollInterval,
+    int? maxPolls,
+  }) async {
+    final success = await submitClarificationAnswers(id, round, answers);
+    if (!success) {
+      return null;
+    }
+    return analyzeRequest(id, pollInterval: pollInterval, maxPolls: maxPolls);
   }
 
   void reset() {

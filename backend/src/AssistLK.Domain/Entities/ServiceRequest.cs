@@ -26,4 +26,7 @@ public class ServiceRequest : BaseEntity
 
     public ICollection<ProblemAnalysis> ProblemAnalyses { get; set; }
         = new List<ProblemAnalysis>();
+
+    public ICollection<ServiceRequestClarification> Clarifications { get; set; }
+        = new List<ServiceRequestClarification>();
 }

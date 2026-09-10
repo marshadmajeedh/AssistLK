@@ -201,10 +201,24 @@ public class Component1EndToEndPostgreSqlTests : PostgreSqlIntegrationTestBase
         // 3. Customer provides clarification: "The refrigerator is warm and not cooling food"
         await using (var updateContext = CreateDbContext())
         {
-            var req = await updateContext.ServiceRequests.FindAsync(requestId);
-            Assert.NotNull(req);
-            req.Description = "The refrigerator is warm and not cooling food";
-            await updateContext.SaveChangesAsync();
+            var requestRepo = new ServiceRequestRepository(updateContext);
+            var analysisRepo = new ProblemAnalysisRepository(updateContext);
+            var requestService = new ServiceRequestService(requestRepo, analysisRepo);
+            await requestService.UpdateAsync(customer.Id, requestId, new AssistLK.Application.ServiceRequests.DTOs.UpdateServiceRequestRequest
+            {
+                Description = "The refrigerator is warm and not cooling food",
+                LocationText = "Galle"
+            });
+        }
+
+        // Verify that Round 1 clarifications were superseded (preserved for audit, not deleted)
+        await using (var verifyContext = CreateDbContext())
+        {
+            var superseded = await verifyContext.ServiceRequestClarifications
+                .Where(c => c.ServiceRequestId == requestId && c.ClarificationRound == 1)
+                .ToListAsync();
+            Assert.NotEmpty(superseded);
+            Assert.All(superseded, q => Assert.NotNull(q.SupersededAt));
         }
 
         // 4. Second analysis runs with clarification

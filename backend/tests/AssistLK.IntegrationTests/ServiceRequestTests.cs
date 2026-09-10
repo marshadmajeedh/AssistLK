@@ -38,10 +38,26 @@ public class ServiceRequestTests
         Assert.Equal(
             Enum.GetValues<ServiceRequestStatus>().First(),
             request.Status);
+        Assert.Null(request.CategoryHint);
         Assert.Equal("Unclassified", request.Category);
         Assert.Equal(string.Empty, request.Description);
         Assert.Equal(string.Empty, request.LocationText);
         Assert.Empty(request.ProblemAnalyses);
+    }
+
+    [Fact]
+    public void ServiceRequest_CanBeConstructedWithCategoryHint_WhileCategoryRemainsDistinct()
+    {
+        var request = new ServiceRequest
+        {
+            CustomerId = Guid.NewGuid(),
+            CategoryHint = "Plumbing",
+            Description = "Leaking pipe under sink",
+            LocationText = "Colombo"
+        };
+
+        Assert.Equal("Plumbing", request.CategoryHint);
+        Assert.Equal("Unclassified", request.Category);
     }
 
     [Fact]

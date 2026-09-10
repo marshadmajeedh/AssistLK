@@ -2,6 +2,7 @@ using System.ComponentModel.DataAnnotations;
 using AssistLK.Application.Common.Exceptions;
 using AssistLK.Application.Interfaces;
 using AssistLK.Application.ServiceRequests.DTOs;
+using AssistLK.Domain.Constants;
 using AssistLK.Domain.Entities;
 using AssistLK.Domain.Enums;
 
@@ -46,9 +47,12 @@ public class ServiceRequestService : IServiceRequestService
 
         ValidateRequest(request);
 
+        CanonicalServiceCategories.IsValidHint(request.CategoryHint, out var normalizedCategoryHint);
+
         var serviceRequest = new ServiceRequest
         {
             CustomerId = customerId,
+            CategoryHint = normalizedCategoryHint,
             Description = request.Description.Trim(),
             LocationText = request.LocationText.Trim(),
             Latitude = request.Latitude,
@@ -111,6 +115,9 @@ public class ServiceRequestService : IServiceRequestService
         serviceRequest.LocationText = request.LocationText.Trim();
         serviceRequest.Latitude = request.Latitude;
         serviceRequest.Longitude = request.Longitude;
+
+        CanonicalServiceCategories.IsValidHint(request.CategoryHint, out var normalizedCategoryHint);
+        serviceRequest.CategoryHint = normalizedCategoryHint;
 
         _serviceRequestRepository.Update(serviceRequest);
         await _serviceRequestRepository.SaveChangesAsync(cancellationToken);
@@ -470,6 +477,22 @@ public class ServiceRequestService : IServiceRequestService
             throw new ArgumentException(
                 "Description and location are required.");
         }
+
+        var categoryHint = request switch
+        {
+            CreateServiceRequestRequest create => create.CategoryHint,
+            UpdateServiceRequestRequest update => update.CategoryHint,
+            _ => null
+        };
+
+        if (categoryHint is not null)
+        {
+            if (!CanonicalServiceCategories.IsValidHint(categoryHint, out _))
+            {
+                throw new ArgumentException(
+                    $"Category hint '{categoryHint}' is invalid. Allowed values are: Plumbing, Electrical, Vehicle Repair, Appliance Repair, or null.");
+            }
+        }
     }
 
     private static void ValidateAnalysisResult(ApplyProblemAnalysisResult result)
@@ -507,6 +530,7 @@ public class ServiceRequestService : IServiceRequestService
         {
             ServiceRequestId = serviceRequest.Id,
             CustomerId = serviceRequest.CustomerId,
+            CategoryHint = serviceRequest.CategoryHint,
             Category = serviceRequest.Category,
             Description = serviceRequest.Description,
             LocationText = serviceRequest.LocationText,

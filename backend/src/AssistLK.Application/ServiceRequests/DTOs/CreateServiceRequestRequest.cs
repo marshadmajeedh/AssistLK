@@ -17,4 +17,7 @@ public class CreateServiceRequestRequest
 
     [Range(-180, 180)]
     public decimal? Longitude { get; set; }
+
+    [MaxLength(100)]
+    public string? CategoryHint { get; set; }
 }

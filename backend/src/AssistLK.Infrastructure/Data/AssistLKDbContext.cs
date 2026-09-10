@@ -273,6 +273,10 @@ public class AssistLKDbContext : DbContext, IAgentWorkflowDbContext
         request.Property(x => x.CustomerId)
             .IsRequired();
 
+        request.Property(x => x.CategoryHint)
+            .HasMaxLength(100)
+            .IsRequired(false);
+
         request.Property(x => x.Category)
             .IsRequired()
             .HasMaxLength(100);

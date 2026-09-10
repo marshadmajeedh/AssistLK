@@ -16,4 +16,9 @@ public class ServiceRequestResponse
     public ServiceRequestStatus Status { get; set; }
     public DateTime CreatedAt { get; set; }
     public DateTime UpdatedAt { get; set; }
+
+    public ProblemAnalysisSummaryDto? LatestAnalysis { get; set; }
+
+    public IReadOnlyList<ServiceRequestClarificationDto> Clarifications { get; set; }
+        = Array.Empty<ServiceRequestClarificationDto>();
 }

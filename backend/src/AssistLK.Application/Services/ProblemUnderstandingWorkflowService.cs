@@ -64,6 +64,45 @@ public class ProblemUnderstandingWorkflowService
             customerId,
             cancellationToken);
 
+        // Precondition check for AwaitingInformation:
+        // When ServiceRequest.Status == AwaitingInformation AND clarification rounds exist:
+        // POST /analyze must not start unless the CURRENT clarification round is fully answered.
+        // Legacy compatibility: If Status == AwaitingInformation and no clarification rows exist, preserve safe path.
+        if (serviceRequest.Status == ServiceRequestStatus.AwaitingInformation &&
+            serviceRequest.Clarifications != null &&
+            serviceRequest.Clarifications.Any())
+        {
+            var currentRound = serviceRequest.Clarifications.Max(c => c.ClarificationRound);
+            var actionableQuestions = serviceRequest.Clarifications
+                .Where(c => c.ClarificationRound == currentRound && c.SupersededAt == null)
+                .ToList();
+
+            var hasUnanswered = actionableQuestions.Any(c => string.IsNullOrWhiteSpace(c.Answer));
+            if (hasUnanswered)
+            {
+                throw new ConflictException(
+                    "Active clarification questions must be answered before re-analysis.");
+            }
+        }
+
+        // Map answered clarification history for agent input:
+        var clarificationHistory = new List<ClarificationHistoryItem>();
+        if (serviceRequest.Clarifications != null)
+        {
+            foreach (var c in serviceRequest.Clarifications
+                .Where(c => !string.IsNullOrWhiteSpace(c.Answer))
+                .OrderBy(c => c.ClarificationRound)
+                .ThenBy(c => c.Sequence))
+            {
+                clarificationHistory.Add(new ClarificationHistoryItem
+                {
+                    Round = c.ClarificationRound,
+                    Question = c.Question,
+                    Answer = c.Answer!
+                });
+            }
+        }
+
         var input = new ProblemUnderstandingInput
         {
             ServiceRequestId = serviceRequest.ServiceRequestId,
@@ -71,7 +110,8 @@ public class ProblemUnderstandingWorkflowService
             LocationText = serviceRequest.LocationText,
             Latitude = serviceRequest.Latitude,
             Longitude = serviceRequest.Longitude,
-            CategoryHint = serviceRequest.CategoryHint
+            CategoryHint = serviceRequest.CategoryHint,
+            ClarificationHistory = clarificationHistory
         };
 
         return await AnalyzeAsync(input, cancellationToken);
@@ -180,6 +220,7 @@ public class ProblemUnderstandingWorkflowService
                 Confidence = output.Confidence,
                 Urgency = output.Urgency,
                 NeedsMoreInformation = output.NeedsMoreInformation,
+                FollowUpQuestions = output.FollowUpQuestions,
                 AgentName = "ProblemUnderstandingAgent"
             };
 

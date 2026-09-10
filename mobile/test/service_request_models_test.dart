@@ -1,7 +1,9 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:mobile/features/service_requests/models/canonical_service_category.dart';
 import 'package:mobile/features/service_requests/models/create_service_request_dto.dart';
+import 'package:mobile/features/service_requests/models/problem_analysis_summary_model.dart';
 import 'package:mobile/features/service_requests/models/problem_understanding_result_model.dart';
+import 'package:mobile/features/service_requests/models/service_request_clarification_model.dart';
 import 'package:mobile/features/service_requests/models/service_request_model.dart';
 import 'package:mobile/features/service_requests/models/service_request_status.dart';
 import 'package:mobile/features/service_requests/models/service_request_urgency.dart';
@@ -503,6 +505,149 @@ void main() {
         () => CanonicalServiceCategory.toCanonicalCategoryHint('random string'),
         throwsArgumentError,
       );
+    });
+  });
+
+  group('Structured Clarification Models and Lifecycle', () {
+    test('ServiceRequestClarificationModel parses from json and serializes to json', () {
+      final json = {
+        'id': 'c-1',
+        'clarificationRound': 1,
+        'sequence': 2,
+        'question': 'Is there water leaking?',
+        'answer': 'Yes, from underneath.',
+        'answeredAt': '2026-09-10T12:00:00.000Z',
+        'supersededAt': null,
+      };
+
+      final model = ServiceRequestClarificationModel.fromJson(json);
+      expect(model.id, 'c-1');
+      expect(model.clarificationRound, 1);
+      expect(model.sequence, 2);
+      expect(model.question, 'Is there water leaking?');
+      expect(model.answer, 'Yes, from underneath.');
+      expect(model.isAnswered, isTrue);
+      expect(model.isSuperseded, isFalse);
+      expect(model.isActionable, isFalse); // Answered, so not actionable
+
+      final serialized = model.toJson();
+      expect(serialized['id'], 'c-1');
+      expect(serialized['answer'], 'Yes, from underneath.');
+    });
+
+    test('ServiceRequestClarificationModel actionable state', () {
+      final pending = const ServiceRequestClarificationModel(
+        id: 'c-pending',
+        clarificationRound: 1,
+        sequence: 1,
+        question: 'Any error code?',
+      );
+      expect(pending.isAnswered, isFalse);
+      expect(pending.isSuperseded, isFalse);
+      expect(pending.isActionable, isTrue);
+
+      final superseded = ServiceRequestClarificationModel(
+        id: 'c-superseded',
+        clarificationRound: 1,
+        sequence: 1,
+        question: 'Any error code?',
+        supersededAt: DateTime.now(),
+      );
+      expect(superseded.isAnswered, isFalse);
+      expect(superseded.isSuperseded, isTrue);
+      expect(superseded.isActionable, isFalse);
+    });
+
+    test('ProblemAnalysisSummaryModel parses and serializes authoritative fields', () {
+      final json = {
+        'id': 'pa-1',
+        'detectedProblem': 'Compressor failed',
+        'confidence': 0.85,
+        'agentName': 'ProblemUnderstandingAgent',
+        'createdAt': '2026-09-10T12:00:00.000Z',
+      };
+
+      final model = ProblemAnalysisSummaryModel.fromJson(json);
+      expect(model.id, 'pa-1');
+      expect(model.detectedProblem, 'Compressor failed');
+      expect(model.confidence, 0.85);
+      expect(model.agentName, 'ProblemUnderstandingAgent');
+
+      final serialized = model.toJson();
+      expect(serialized['confidence'], 0.85);
+    });
+
+    test('ServiceRequestModel lifecycle: current round is MAX(ClarificationRound) even when answered', () {
+      final model = ServiceRequestModel(
+        serviceRequestId: 'req-1',
+        customerId: 'cust-1',
+        category: 'Appliance Repair',
+        description: 'Fridge issue',
+        locationText: 'Colombo',
+        urgency: ServiceRequestUrgency.medium,
+        status: ServiceRequestStatus.awaitingInformation,
+        createdAt: DateTime.now(),
+        updatedAt: DateTime.now(),
+        clarifications: [
+          const ServiceRequestClarificationModel(
+            id: 'c-1',
+            clarificationRound: 1,
+            sequence: 1,
+            question: 'Freezer cold?',
+            answer: 'Yes, freezing cold',
+          ),
+          const ServiceRequestClarificationModel(
+            id: 'c-2',
+            clarificationRound: 1,
+            sequence: 2,
+            question: 'Any noise?',
+            answer: 'Buzzing noise',
+          ),
+        ],
+      );
+
+      // Section 1: current round != unanswered round!
+      // Must be 1 even though answered!
+      expect(model.currentClarificationRound, 1);
+      expect(model.currentRoundIsFullyAnswered, isTrue);
+      expect(model.pendingQuestions, isEmpty);
+      expect(model.hasReachedMaxRounds, isFalse);
+    });
+
+    test('ServiceRequestModel lifecycle: max rounds detection and pending separation', () {
+      final model = ServiceRequestModel(
+        serviceRequestId: 'req-2',
+        customerId: 'cust-1',
+        category: 'Appliance Repair',
+        description: 'Fridge issue',
+        locationText: 'Colombo',
+        urgency: ServiceRequestUrgency.medium,
+        status: ServiceRequestStatus.awaitingInformation,
+        createdAt: DateTime.now(),
+        updatedAt: DateTime.now(),
+        clarifications: [
+          const ServiceRequestClarificationModel(
+            id: 'c-r1-1',
+            clarificationRound: 1,
+            sequence: 1,
+            question: 'Round 1 Q',
+            answer: 'Round 1 A',
+          ),
+          const ServiceRequestClarificationModel(
+            id: 'c-r2-1',
+            clarificationRound: 2,
+            sequence: 1,
+            question: 'Round 2 Q',
+            answer: null,
+          ),
+        ],
+      );
+
+      expect(model.currentClarificationRound, 2);
+      expect(model.currentRoundIsFullyAnswered, isFalse);
+      expect(model.pendingQuestions.length, 1);
+      expect(model.pendingQuestions.first.id, 'c-r2-1');
+      expect(model.hasReachedMaxRounds, isTrue);
     });
   });
 }

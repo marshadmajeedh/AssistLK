@@ -5,7 +5,9 @@ import 'package:dio/dio.dart';
 import '../../../core/api/api_client.dart';
 import '../models/create_service_request_dto.dart';
 import '../models/problem_understanding_result_model.dart';
+import '../models/service_request_clarification_model.dart';
 import '../models/service_request_model.dart';
+import '../models/submit_clarification_answers_dto.dart';
 import '../models/update_service_request_dto.dart';
 
 class ServiceRequestService {
@@ -102,6 +104,22 @@ class ServiceRequestService {
     return ServiceRequestModel.fromJson(
       Map<String, dynamic>.from(response.data as Map),
     );
+  }
+
+  Future<List<ServiceRequestClarificationModel>> submitClarificationAnswers(
+    String id,
+    SubmitClarificationAnswersDto dto,
+  ) async {
+    final response = await apiClient.client.post(
+      '/service-requests/$id/clarifications/answers',
+      data: dto.toJson(),
+    );
+
+    final dataList = response.data as List<dynamic>;
+    return dataList
+        .map((e) => ServiceRequestClarificationModel.fromJson(
+            Map<String, dynamic>.from(e as Map)))
+        .toList();
   }
 
   String getErrorMessage(Object error) {

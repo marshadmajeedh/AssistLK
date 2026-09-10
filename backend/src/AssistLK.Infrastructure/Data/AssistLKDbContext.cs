@@ -18,6 +18,8 @@ public class AssistLKDbContext : DbContext, IAgentWorkflowDbContext
 
     public DbSet<ProblemAnalysis> ProblemAnalyses => Set<ProblemAnalysis>();
 
+    public DbSet<ServiceRequestClarification> ServiceRequestClarifications => Set<ServiceRequestClarification>();
+
     public DbSet<AgentWorkflow> AgentWorkflows =>
         Set<AgentWorkflow>();
 
@@ -208,6 +210,7 @@ public class AssistLKDbContext : DbContext, IAgentWorkflowDbContext
         ConfigureUser(modelBuilder);
         ConfigureServiceRequest(modelBuilder);
         ConfigureProblemAnalysis(modelBuilder);
+        ConfigureServiceRequestClarification(modelBuilder);
     }
 
     private static void ConfigureUser(ModelBuilder modelBuilder)
@@ -359,6 +362,65 @@ public class AssistLKDbContext : DbContext, IAgentWorkflowDbContext
             .OnDelete(DeleteBehavior.Cascade);
 
         analysis.HasIndex(x => x.ServiceRequestId);
+    }
+
+    private static void ConfigureServiceRequestClarification(ModelBuilder modelBuilder)
+    {
+        var clarification = modelBuilder.Entity<ServiceRequestClarification>();
+
+        clarification.ToTable(
+            "ServiceRequestClarifications",
+            table =>
+            {
+                table.HasCheckConstraint(
+                    "CK_ServiceRequestClarifications_Round",
+                    "\"ClarificationRound\" >= 1");
+
+                table.HasCheckConstraint(
+                    "CK_ServiceRequestClarifications_Sequence",
+                    "\"Sequence\" >= 1");
+            });
+
+        clarification.HasKey(x => x.Id);
+
+        clarification.Property(x => x.ServiceRequestId)
+            .IsRequired();
+
+        clarification.Property(x => x.ClarificationRound)
+            .IsRequired();
+
+        clarification.Property(x => x.Sequence)
+            .IsRequired();
+
+        clarification.Property(x => x.Question)
+            .IsRequired()
+            .HasMaxLength(500);
+
+        clarification.Property(x => x.Answer)
+            .HasMaxLength(1000)
+            .IsRequired(false);
+
+        clarification.Property(x => x.AnsweredAt)
+            .IsRequired(false);
+
+        clarification.Property(x => x.SupersededAt)
+            .IsRequired(false);
+
+        clarification.Property(x => x.CreatedAt)
+            .IsRequired();
+
+        clarification.Property(x => x.UpdatedAt)
+            .IsRequired();
+
+        clarification.HasOne(x => x.ServiceRequest)
+            .WithMany(x => x.Clarifications)
+            .HasForeignKey(x => x.ServiceRequestId)
+            .OnDelete(DeleteBehavior.Cascade);
+
+        clarification.HasIndex(x => x.ServiceRequestId);
+
+        clarification.HasIndex(x => new { x.ServiceRequestId, x.ClarificationRound, x.Sequence })
+            .IsUnique();
     }
 
     public override async Task<int> SaveChangesAsync(

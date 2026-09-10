@@ -70,7 +70,8 @@ public class ProblemUnderstandingWorkflowService
             Description = serviceRequest.Description,
             LocationText = serviceRequest.LocationText,
             Latitude = serviceRequest.Latitude,
-            Longitude = serviceRequest.Longitude
+            Longitude = serviceRequest.Longitude,
+            CategoryHint = serviceRequest.CategoryHint
         };
 
         return await AnalyzeAsync(input, cancellationToken);

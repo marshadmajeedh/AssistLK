@@ -132,13 +132,29 @@ In development, the team connects to a shared **Supabase PostgreSQL** database u
 
 > ⚠️ **Security Requirement:** Never commit database credentials, passwords, or connection strings to Git. Do not place real credentials in `appsettings.json`, `appsettings.Development.json`, or tracked files.
 
-#### Setting Your Connection Locally (.NET User Secrets)
+#### Setting Your Connection Locally
+
+You can configure your local connection using any of the three supported configuration methods:
+
+##### Option A: Physical `.env` File (Recommended for Local Ergonomics)
+1. Copy `.env.example` to `.env` in the repository root (or inside `backend/src/AssistLK.Api/`):
+   ```bash
+   cp .env.example .env
+   ```
+2. Set your Supabase connection string placeholder in `.env`:
+   ```env
+   ConnectionStrings__DefaultConnection=<YOUR_SUPABASE_CONNECTION_STRING>
+   ```
+3. Run the backend normally (`dotnet run --project src/AssistLK.Api` or via your IDE). The `.env` loader automatically detects and loads the file before the web host builds.
+4. **Never commit `.env`** — verify that `.env` is ignored by Git (`.gitignore` rules already protect it).
+
+##### Option B: .NET User Secrets
 From `backend/`:
 ```bash
 dotnet user-secrets set "ConnectionStrings:DefaultConnection" "Host=<pooler-host>;Port=5432;Database=postgres;Username=postgres.<project-ref>;Password=<your-password>;SSL Mode=Require;Trust Server Certificate=true;" --project src/AssistLK.Api
 ```
 
-Alternatively, you can export the environment variable:
+##### Option C: Operating System / Process Environment Variables
 ```bash
 # Windows PowerShell
 $env:ConnectionStrings__DefaultConnection="Host=<pooler-host>;Port=5432;Database=postgres;Username=postgres.<project-ref>;Password=<your-password>;SSL Mode=Require;Trust Server Certificate=true;"
@@ -267,25 +283,68 @@ flutter run
 
 ---
 
-## 10. Environment Variables
+## 10. Environment & Secret Configuration
 
-> 🔒 Ensure environment configuration files containing sensitive secrets are listed in `.gitignore`.
+> 🔒 **Security Requirement:** Environment files containing sensitive credentials (`.env`, `secrets.json`, etc.) must NEVER be committed to Git. They are explicitly excluded via `.gitignore`.
 
-- **Backend** (`backend/src/AssistLK.Api/appsettings.Development.json`):
-  ```json
-  {
-    "JwtSettings": {
-      "Secret": "development-secret-key-change-in-production"
-    }
-  }
-  ```
+### 10.1 Backend Configuration (.NET 8)
 
-- **Frontend** (`frontend/.env`):
+The backend supports three complementary configuration methods for local development.
+
+#### Supported Configuration Methods:
+1. **Physical `.env` File (Local Ergonomics)**:
+   - Copy `.env.example` to `.env` in the repository root:
+     ```bash
+     cp .env.example .env
+     ```
+   - Add your local values using placeholders:
+     ```env
+     ConnectionStrings__DefaultConnection=<YOUR_SUPABASE_CONNECTION_STRING>
+     Jwt__Key=<YOUR_LOCAL_JWT_KEY>
+     GOOGLE_API_KEY=<YOUR_GEMINI_API_KEY>
+     ASPNETCORE_ENVIRONMENT=Development
+     ```
+   - **Optional:** Having a `.env` file is completely optional. If absent, the backend boots normally without throwing errors.
+   - **Never commit `.env`:** The file is ignored by `.gitignore`. Keep only `.env.example` tracked in Git with placeholders.
+   - Run the backend normally (`dotnet run --project backend/src/AssistLK.Api` or via VS Code / Visual Studio). The backend loads `.env` before building the web application host.
+
+2. **.NET User Secrets**:
+   - Supported natively via `<UserSecretsId>15fcbe56-7908-4746-bfbe-0692dc0c8045</UserSecretsId>`:
+     ```bash
+     dotnet user-secrets set "ConnectionStrings:DefaultConnection" "<YOUR_SUPABASE_CONNECTION_STRING>" --project backend/src/AssistLK.Api
+     ```
+
+3. **Operating System / Process Environment Variables**:
+   - Standard OS environment variables can be exported in your shell or set in container/CI environments:
+     ```bash
+     export ConnectionStrings__DefaultConnection="<YOUR_SUPABASE_CONNECTION_STRING>"
+     ```
+
+#### Configuration Precedence:
+When configuration is loaded, the backend follows this exact precedence order (highest to lowest):
+
+```text
+┌────────────────────────────────────────────────────────┐
+│  1. Explicit OS / Process Environment Variables        │ (Highest - cannot be overwritten by .env)
+├────────────────────────────────────────────────────────┤
+│  2. Local Physical .env Values                         │ (Loaded into process env if not already set)
+├────────────────────────────────────────────────────────┤
+│  3. .NET User Secrets                                  │ (Development environment secrets store)
+├────────────────────────────────────────────────────────┤
+│  4. appsettings.{Environment}.json / appsettings.json  │ (Lowest - base defaults and schemas)
+└────────────────────────────────────────────────────────┘
+```
+
+> **Note:** The `.env` loader is configured with `overwriteExistingVars: false`. This guarantees that an explicitly provided OS environment variable (such as one set in CI/CD or docker) will **never** be inadvertently overwritten by a `.env` file.
+
+### 10.2 Frontend Configuration (React / Vite)
+- **File:** `web/.env` (copy from `web/.env.example`)
   ```env
-  VITE_API_URL=https://localhost:5001
+  VITE_API_BASE_URL=http://localhost:5012
   ```
 
-- **Mobile** (`mobile/.env`):
+### 10.3 Mobile Configuration (Flutter)
+- **File:** `mobile/.env` (or run-time dart defines)
   ```env
   API_BASE_URL=http://10.0.2.2:5001
   ```

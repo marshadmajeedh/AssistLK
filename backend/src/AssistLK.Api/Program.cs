@@ -17,6 +17,10 @@ using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.IdentityModel.Tokens;
 using Microsoft.OpenApi.Models;
+using dotenv.net;
+
+// Load local .env configuration into environment variables before builder initialization
+Program.LoadDotEnv();
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -331,5 +335,68 @@ app.Run();
 
 public partial class Program
 {
+    /// <summary>
+    /// Predictably locates and loads a physical .env file into process environment variables
+    /// without overwriting existing operating-system environment variables.
+    /// Does not throw if the file does not exist.
+    /// </summary>
+    public static void LoadDotEnv()
+    {
+        var envFilePath = ResolveEnvFilePath();
+        if (envFilePath != null)
+        {
+            DotEnv.Load(new DotEnvOptions(
+                envFilePaths: new[] { envFilePath },
+                ignoreExceptions: true,
+                overwriteExistingVars: false
+            ));
+        }
+    }
 
+    /// <summary>
+    /// Searches for a .env file from explicit override (DOTENV_PATH),
+    /// current working directory, and application base directory ascending up to repository root.
+    /// </summary>
+    public static string? ResolveEnvFilePath()
+    {
+        var customPath = Environment.GetEnvironmentVariable("DOTENV_PATH");
+        if (!string.IsNullOrWhiteSpace(customPath) && File.Exists(customPath))
+        {
+            return customPath;
+        }
+
+        var candidateRoots = new[]
+        {
+            Directory.GetCurrentDirectory(),
+            AppContext.BaseDirectory
+        };
+
+        foreach (var root in candidateRoots)
+        {
+            if (string.IsNullOrWhiteSpace(root))
+            {
+                continue;
+            }
+
+            var dir = new DirectoryInfo(root);
+            while (dir != null)
+            {
+                var candidate = Path.Combine(dir.FullName, ".env");
+                if (File.Exists(candidate))
+                {
+                    return candidate;
+                }
+
+                // Stop traversing upwards once we hit the git repository boundary
+                if (Directory.Exists(Path.Combine(dir.FullName, ".git")))
+                {
+                    break;
+                }
+
+                dir = dir.Parent;
+            }
+        }
+
+        return null;
+    }
 }

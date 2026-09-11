@@ -44,6 +44,7 @@ export const buttonStyles = {
 };
 
 export const inputStyles = {
+  display: "block",
   width: "100%",
   minHeight: 48,
 

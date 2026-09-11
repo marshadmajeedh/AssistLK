@@ -76,7 +76,9 @@ class CanonicalServiceCategory {
   static String? toCanonicalCategoryHint(String? input) {
     if (input == null) return null;
     final trimmed = input.trim();
-    if (trimmed.isEmpty || trimmed.toLowerCase() == 'let ai identify') {
+    if (trimmed.isEmpty ||
+        trimmed.toLowerCase() == 'let ai identify' ||
+        trimmed.toLowerCase() == 'let assistlk ai identify') {
       return null;
     }
     final category = fromCanonicalOrDisplayName(trimmed);

@@ -1,12 +1,14 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
+import '../../../../shared/theme/app_assets.dart';
 import '../../../../shared/theme/app_colors.dart';
 import '../../../../shared/theme/app_radius.dart';
 import '../../../../shared/theme/app_spacing.dart';
 import '../../../../shared/theme/app_text_styles.dart';
 import '../../../../shared/widgets/app_button.dart';
 import '../../../../shared/widgets/app_card.dart';
+import '../../../../shared/widgets/app_image_asset.dart';
 import '../../../../shared/widgets/app_text_field.dart';
 import '../models/canonical_service_category.dart';
 import '../models/create_service_request_dto.dart';
@@ -61,6 +63,21 @@ class _CreateServiceRequestScreenState
     super.dispose();
   }
 
+  String _getCategoryAssetPath(CanonicalServiceCategory category) {
+    switch (category.canonicalName) {
+      case 'Plumbing':
+        return AppAssets.plumbingService;
+      case 'Electrical':
+        return AppAssets.electricalService;
+      case 'Vehicle Repair':
+        return AppAssets.vehicleService;
+      case 'Appliance Repair':
+        return AppAssets.applianceService;
+      default:
+        return AppAssets.plumbingService;
+    }
+  }
+
   void _showChangePreferenceSheet() {
     showModalBottomSheet<void>(
       context: context,
@@ -97,7 +114,25 @@ class _CreateServiceRequestScreenState
                 const SizedBox(height: AppSpacing.sm),
                 for (final cat in CanonicalServiceCategory.canonicalShortcuts) ...[
                   ListTile(
-                    leading: Icon(cat.icon, color: AppColors.primary),
+                    leading: Container(
+                      width: 40,
+                      height: 40,
+                      padding: const EdgeInsets.all(AppSpacing.xs),
+                      decoration: BoxDecoration(
+                        color: AppColors.primarySurface,
+                        borderRadius: BorderRadius.circular(AppRadius.medium),
+                      ),
+                      child: Center(
+                        child: AppImageAsset(
+                          assetPath: _getCategoryAssetPath(cat),
+                          width: 28,
+                          height: 28,
+                          fit: BoxFit.contain,
+                          fallbackIcon: cat.icon,
+                          semanticLabel: cat.displayName,
+                        ),
+                      ),
+                    ),
                     title: Text(cat.displayName, style: AppTextStyles.cardHeading),
                     subtitle: Text(cat.description, style: AppTextStyles.small),
                     trailing: _selectedPreference == cat.canonicalName
@@ -113,11 +148,26 @@ class _CreateServiceRequestScreenState
                   const Divider(height: 1, color: AppColors.border),
                 ],
                 ListTile(
-                  leading: const Icon(
-                    Icons.auto_awesome_rounded,
-                    color: AppColors.primary,
+                  leading: Container(
+                    width: 40,
+                    height: 40,
+                    padding: const EdgeInsets.all(AppSpacing.xs),
+                    decoration: BoxDecoration(
+                      color: AppColors.aiSurface,
+                      borderRadius: BorderRadius.circular(AppRadius.medium),
+                    ),
+                    child: const Center(
+                      child: AppImageAsset(
+                        assetPath: AppAssets.aiDiagnosisSpark,
+                        width: 28,
+                        height: 28,
+                        fit: BoxFit.contain,
+                        fallbackIcon: Icons.auto_awesome_rounded,
+                        semanticLabel: 'AssistLK AI Problem Understanding',
+                      ),
+                    ),
                   ),
-                  title: const Text('Let AI identify', style: AppTextStyles.cardHeading),
+                  title: const Text('Let AssistLK AI identify', style: AppTextStyles.cardHeading),
                   subtitle: const Text(
                     'AssistLK AI will determine the service category',
                     style: AppTextStyles.small,
@@ -320,15 +370,28 @@ class _CreateServiceRequestScreenState
             child: Row(
               children: [
                 Container(
-                  padding: const EdgeInsets.all(AppSpacing.sm),
+                  width: 44,
+                  height: 44,
+                  padding: const EdgeInsets.all(AppSpacing.xs),
                   decoration: BoxDecoration(
-                    color: AppColors.primary.withValues(alpha: 0.08),
+                    color: selectedCategory != null
+                        ? AppColors.primarySurface
+                        : AppColors.aiSurface,
                     borderRadius: BorderRadius.circular(AppRadius.medium),
                   ),
-                  child: Icon(
-                    selectedCategory?.icon ?? Icons.auto_awesome_rounded,
-                    color: AppColors.primary,
-                    size: 22,
+                  child: Center(
+                    child: AppImageAsset(
+                      assetPath: selectedCategory != null
+                          ? _getCategoryAssetPath(selectedCategory)
+                          : AppAssets.aiDiagnosisSpark,
+                      width: 32,
+                      height: 32,
+                      fit: BoxFit.contain,
+                      fallbackIcon:
+                          selectedCategory?.icon ?? Icons.auto_awesome_rounded,
+                      semanticLabel: selectedCategory?.displayName ??
+                          'AssistLK AI Problem Understanding',
+                    ),
                   ),
                 ),
                 const SizedBox(width: AppSpacing.md),
@@ -342,7 +405,7 @@ class _CreateServiceRequestScreenState
                       ),
                       const SizedBox(height: 2),
                       Text(
-                        selectedCategory?.displayName ?? 'Let AI identify',
+                        selectedCategory?.displayName ?? 'Let AssistLK AI identify',
                         style: AppTextStyles.cardHeading,
                       ),
                     ],
@@ -410,18 +473,46 @@ class _CreateServiceRequestScreenState
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const Text(
-            'Service Location',
-            style: AppTextStyles.sectionHeading,
-          ),
-          const SizedBox(height: AppSpacing.xs),
-          Text(
-            'Enter the location or address where service is required.',
-            style: AppTextStyles.body.copyWith(
-              color: AppColors.textSecondary,
+          // Header banner with location illustration
+          Container(
+            width: double.infinity,
+            padding: const EdgeInsets.all(AppSpacing.sm),
+            margin: const EdgeInsets.only(bottom: AppSpacing.md),
+            decoration: BoxDecoration(
+              color: AppColors.primarySurface,
+              borderRadius: BorderRadius.circular(AppRadius.medium),
+            ),
+            child: Row(
+              children: [
+                const AppImageAsset(
+                  assetPath: AppAssets.locationPin,
+                  width: 44,
+                  height: 44,
+                  fit: BoxFit.contain,
+                  fallbackIcon: Icons.location_on_rounded,
+                  semanticLabel: 'Location Pin',
+                ),
+                const SizedBox(width: AppSpacing.sm),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      const Text(
+                        'Service Location',
+                        style: AppTextStyles.sectionHeading,
+                      ),
+                      Text(
+                        'Enter the location or address where service is required.',
+                        style: AppTextStyles.small.copyWith(
+                          color: AppColors.textSecondary,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
             ),
           ),
-          const SizedBox(height: AppSpacing.lg),
 
           // GPS Location Action Button
           SizedBox(
@@ -438,7 +529,7 @@ class _CreateServiceRequestScreenState
                   : const Icon(Icons.my_location_rounded, size: 18),
               label: Text(
                 _isObtainingLocation
-                    ? 'Acquiring GPS location...'
+                    ? 'Getting your current location...'
                     : 'Use Current Location',
               ),
               style: OutlinedButton.styleFrom(
@@ -618,11 +709,48 @@ class _CreateServiceRequestScreenState
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              const Text('Service preference', style: AppTextStyles.small),
-              const SizedBox(height: 2),
-              Text(
-                selectedCategory?.displayName ?? 'Let AI identify',
-                style: AppTextStyles.cardHeading,
+              Row(
+                children: [
+                  Container(
+                    width: 36,
+                    height: 36,
+                    padding: const EdgeInsets.all(AppSpacing.xs),
+                    decoration: BoxDecoration(
+                      color: selectedCategory != null
+                          ? AppColors.primarySurface
+                          : AppColors.aiSurface,
+                      borderRadius: BorderRadius.circular(AppRadius.medium),
+                    ),
+                    child: Center(
+                      child: AppImageAsset(
+                        assetPath: selectedCategory != null
+                            ? _getCategoryAssetPath(selectedCategory)
+                            : AppAssets.aiDiagnosisSpark,
+                        width: 24,
+                        height: 24,
+                        fit: BoxFit.contain,
+                        fallbackIcon: selectedCategory?.icon ??
+                            Icons.auto_awesome_rounded,
+                        semanticLabel: selectedCategory?.displayName ??
+                            'AssistLK AI Problem Understanding',
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: AppSpacing.sm),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        const Text('Service preference', style: AppTextStyles.small),
+                        const SizedBox(height: 2),
+                        Text(
+                          selectedCategory?.displayName ?? 'Let AssistLK AI identify',
+                          style: AppTextStyles.cardHeading,
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
               ),
               const SizedBox(height: AppSpacing.md),
               const Divider(height: 1, color: AppColors.border),

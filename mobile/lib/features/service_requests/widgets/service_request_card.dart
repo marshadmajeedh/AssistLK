@@ -64,11 +64,15 @@ class ServiceRequestCard extends StatelessWidget {
             const SizedBox(height: AppSpacing.sm),
 
             // Bottom row: Urgency Chip and Created Date
-            Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            Wrap(
+              alignment: WrapAlignment.spaceBetween,
+              crossAxisAlignment: WrapCrossAlignment.center,
+              spacing: AppSpacing.xs,
+              runSpacing: AppSpacing.xs,
               children: [
                 UrgencyChip(urgency: request.urgency),
                 Row(
+                  mainAxisSize: MainAxisSize.min,
                   children: [
                     const Icon(
                       Icons.calendar_today_outlined,

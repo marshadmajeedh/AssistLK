@@ -263,7 +263,7 @@ void main() {
       await tester.pumpAndSettle();
 
       expect(tester.takeException(), isNull);
-      expect(find.text('My Service Requests'), findsOneWidget);
+      expect(find.text('My Requests'), findsOneWidget);
       expect(find.widgetWithText(ElevatedButton, 'Create Request').first, findsOneWidget);
     });
 
@@ -341,7 +341,7 @@ void main() {
       // Hover over header action button and request cards
       await gesture.moveTo(tester.getCenter(find.text('Create Request').first));
       await tester.pump();
-      await gesture.moveTo(tester.getCenter(find.text('My Service Requests')));
+      await gesture.moveTo(tester.getCenter(find.text('My Requests')));
       await tester.pump();
       await gesture.moveTo(tester.getCenter(find.text('Bathroom tap is dripping continuously')));
       await tester.pump();
@@ -504,7 +504,7 @@ void main() {
       expect(find.text('Electrical'), findsOneWidget);
     });
 
-    testWidgets('renders Let AI identify banner when no preference is provided',
+    testWidgets('renders Let AssistLK AI identify banner when no preference is provided',
         (tester) async {
       await tester.pumpWidget(
         buildApp(const CreateServiceRequestScreen(initialCategoryPreference: null)),
@@ -512,7 +512,7 @@ void main() {
       await tester.pumpAndSettle();
 
       expect(find.text('Service preference'), findsOneWidget);
-      expect(find.text('Let AI identify'), findsOneWidget);
+      expect(find.text('Let AssistLK AI identify'), findsOneWidget);
       expect(find.text('Choose preference'), findsOneWidget);
     });
   });
@@ -543,7 +543,7 @@ void main() {
       await tester.pumpAndSettle();
 
       expect(find.text('Not sure what service you need?'), findsOneWidget);
-      expect(find.text('Let AI understand your problem'), findsOneWidget);
+      expect(find.text('Let AssistLK AI analyze your problem'), findsOneWidget);
     });
 
     testWidgets('tapping Plumbing shortcut navigates with Plumbing preference',
@@ -570,7 +570,7 @@ void main() {
       expect(find.text('Vehicle Assistance'), findsOneWidget);
     });
 
-    testWidgets('tapping AI option card navigates with Let AI identify mode',
+    testWidgets('tapping AI option card navigates with Let AssistLK AI identify mode',
         (tester) async {
       await tester.pumpWidget(buildApp(const CustomerHomeScreen()));
       await tester.pumpAndSettle();
@@ -581,12 +581,12 @@ void main() {
       await tester.pumpAndSettle();
 
       expect(find.text('Create Service Request'), findsOneWidget);
-      expect(find.text('Let AI identify'), findsOneWidget);
+      expect(find.text('Let AssistLK AI identify'), findsOneWidget);
     });
   });
 
   group('ServiceRequestDetailScreen Status-Driven Logic', () {
-    testWidgets('Created status shows Analyze with Gemini AI button', (tester) async {
+    testWidgets('Created status shows Analyze with AssistLK AI button', (tester) async {
       final sample = ServiceRequestModel(
         serviceRequestId: 'req-c',
         customerId: 'cust-1',
@@ -607,13 +607,15 @@ void main() {
 
       expect(find.text('Request Details'), findsOneWidget);
       expect(find.text('Breaker keeps tripping'), findsOneWidget);
-      expect(find.text('Analyze with Gemini AI'), findsOneWidget);
+      expect(find.text('Analyze with AssistLK AI'), findsOneWidget);
+      expect(find.textContaining('Gemini'), findsNothing);
 
       // Trigger analysis
-      await tester.tap(find.text('Analyze with Gemini AI'));
+      await tester.tap(find.text('Analyze with AssistLK AI'));
       await tester.pumpAndSettle();
 
       expect(find.byType(AnalysisResultCard), findsOneWidget);
+      expect(find.textContaining('Gemini'), findsNothing);
     });
 
     testWidgets('ServiceRequestDetailScreen_WhenBackendStatusAnalyzing shows progress indicator and does not show Analyze button',
@@ -637,9 +639,9 @@ void main() {
       await tester.pump();
       await tester.pump();
 
-      expect(find.text('AI analysis in progress'), findsOneWidget);
+      expect(find.text('AssistLK AI analysis in progress'), findsOneWidget);
       expect(find.byType(CircularProgressIndicator), findsOneWidget);
-      expect(find.text('Analyze with Gemini AI'), findsNothing);
+      expect(find.text('Analyze with AssistLK AI'), findsNothing);
       expect(find.byIcon(Icons.cancel_outlined), findsNothing);
     });
 
@@ -664,16 +666,16 @@ void main() {
       );
       await tester.pumpAndSettle();
 
-      expect(find.text('Analyze with Gemini AI'), findsOneWidget);
+      expect(find.text('Analyze with AssistLK AI'), findsOneWidget);
 
-      // Tap Analyze with Gemini AI
-      await tester.tap(find.text('Analyze with Gemini AI'));
+      // Tap Analyze with AssistLK AI
+      await tester.tap(find.text('Analyze with AssistLK AI'));
       await tester.pump();
 
       // Should show in-progress indicator and hide Analyze button
-      expect(find.text('AI analysis in progress'), findsOneWidget);
+      expect(find.text('AssistLK AI analysis in progress'), findsOneWidget);
       expect(find.byType(CircularProgressIndicator), findsOneWidget);
-      expect(find.text('Analyze with Gemini AI'), findsNothing);
+      expect(find.text('Analyze with AssistLK AI'), findsNothing);
       expect(find.byIcon(Icons.cancel_outlined), findsNothing);
 
       // Complete analysis
@@ -730,7 +732,7 @@ void main() {
       );
       await tester.pumpAndSettle();
 
-      await tester.tap(find.text('Analyze with Gemini AI'));
+      await tester.tap(find.text('Analyze with AssistLK AI'));
       await tester.pumpAndSettle();
 
       expect(find.byType(ClarificationSection), findsOneWidget);
@@ -843,19 +845,19 @@ void main() {
       );
       await tester.pumpAndSettle();
 
-      expect(find.text('Analyze with Gemini AI'), findsOneWidget);
+      expect(find.text('Analyze with AssistLK AI'), findsOneWidget);
 
       // Trigger analysis where both analyze and refresh fail
       mockService.shouldAnalyzeThrow = true;
       mockService.shouldGetByIdThrow = true;
 
-      await tester.tap(find.text('Analyze with Gemini AI'));
+      await tester.tap(find.text('Analyze with AssistLK AI'));
       await tester.pumpAndSettle();
 
       // State is now uncertain
       expect(find.text('Unable to confirm the latest analysis status.'), findsOneWidget);
       expect(find.text('Refresh Status'), findsOneWidget);
-      expect(find.text('Analyze with Gemini AI'), findsNothing);
+      expect(find.text('Analyze with AssistLK AI'), findsNothing);
       expect(find.text('Edit Details'), findsNothing);
       expect(find.byIcon(Icons.cancel_outlined), findsNothing);
     });
@@ -883,7 +885,7 @@ void main() {
       mockService.shouldAnalyzeThrow = true;
       mockService.shouldGetByIdThrow = true;
 
-      await tester.tap(find.text('Analyze with Gemini AI'));
+      await tester.tap(find.text('Analyze with AssistLK AI'));
       await tester.pumpAndSettle();
 
       expect(find.text('Refresh Status'), findsOneWidget);
@@ -894,7 +896,7 @@ void main() {
       await tester.tap(find.text('Refresh Status'));
       await tester.pumpAndSettle();
 
-      expect(find.text('Analyze with Gemini AI'), findsOneWidget);
+      expect(find.text('Analyze with AssistLK AI'), findsOneWidget);
       expect(find.text('Unable to confirm the latest analysis status.'), findsNothing);
     });
 
@@ -921,7 +923,7 @@ void main() {
       mockService.shouldAnalyzeThrow = true;
       mockService.shouldGetByIdThrow = true;
 
-      await tester.tap(find.text('Analyze with Gemini AI'));
+      await tester.tap(find.text('Analyze with AssistLK AI'));
       await tester.pumpAndSettle();
 
       // Backend actually transitioned to Analyzing
@@ -934,9 +936,9 @@ void main() {
       await tester.pump();
       await tester.pump();
 
-      expect(find.text('AI analysis in progress'), findsOneWidget);
+      expect(find.text('AssistLK AI analysis in progress'), findsOneWidget);
       expect(find.byType(CircularProgressIndicator), findsOneWidget);
-      expect(find.text('Analyze with Gemini AI'), findsNothing);
+      expect(find.text('Analyze with AssistLK AI'), findsNothing);
     });
 
     testWidgets('manual Refresh Status shows clarification state if backend returned AwaitingInformation',
@@ -962,7 +964,7 @@ void main() {
       mockService.shouldAnalyzeThrow = true;
       mockService.shouldGetByIdThrow = true;
 
-      await tester.tap(find.text('Analyze with Gemini AI'));
+      await tester.tap(find.text('Analyze with AssistLK AI'));
       await tester.pumpAndSettle();
 
       // Backend finished with AwaitingInformation
@@ -976,7 +978,7 @@ void main() {
 
       expect(find.byType(ClarificationSection), findsOneWidget);
       expect(find.text('Clarification Needed'), findsOneWidget);
-      expect(find.text('Analyze with Gemini AI'), findsNothing);
+      expect(find.text('Analyze with AssistLK AI'), findsNothing);
     });
 
     testWidgets('timeout followed by reconciliation reaching Analyzed shows AnalysisResultCard and mismatch banner',
@@ -1000,7 +1002,7 @@ void main() {
       );
       await tester.pumpAndSettle();
 
-      expect(find.text('Analyze with Gemini AI'), findsOneWidget);
+      expect(find.text('Analyze with AssistLK AI'), findsOneWidget);
 
       mockService.analyzeException = DioException(
         requestOptions: RequestOptions(path: '/service-requests/req-rec-a/analyze'),
@@ -1015,7 +1017,7 @@ void main() {
         ),
       ];
 
-      await tester.tap(find.text('Analyze with Gemini AI'));
+      await tester.tap(find.text('Analyze with AssistLK AI'));
       await tester.pumpAndSettle();
 
       // Successfully transitioned to Analyzed via bounded reconciliation
@@ -1023,9 +1025,9 @@ void main() {
       expect(find.text('Plumbing'), findsWidgets);
       expect(find.text('Your preference:'), findsOneWidget);
       expect(find.text('Electrical'), findsWidgets);
-      expect(find.text('AI identified a different service category based on your problem description.'), findsOneWidget);
+      expect(find.text('AssistLK AI identified a different service category based on your problem description.'), findsOneWidget);
       expect(find.text('Mark Ready for Matching'), findsOneWidget);
-      expect(find.text('Analyze with Gemini AI'), findsNothing);
+      expect(find.text('Analyze with AssistLK AI'), findsNothing);
       expect(find.byType(SnackBar), findsNothing);
     });
 
@@ -1049,7 +1051,7 @@ void main() {
       );
       await tester.pumpAndSettle();
 
-      expect(find.text('Analyze with Gemini AI'), findsOneWidget);
+      expect(find.text('Analyze with AssistLK AI'), findsOneWidget);
 
       mockService.mockRequests = [
         sample.copyWith(status: ServiceRequestStatus.analyzing),
@@ -1059,20 +1061,20 @@ void main() {
         type: DioExceptionType.receiveTimeout,
       );
 
-      await tester.tap(find.text('Analyze with Gemini AI'));
+      await tester.tap(find.text('Analyze with AssistLK AI'));
       await tester.pump();
       await tester.pump();
       await tester.pump();
 
       // Grace period expired while still Analyzing: informational processing card with Refresh Status
-      expect(find.text('AI analysis in progress'), findsOneWidget);
+      expect(find.text('AssistLK AI analysis in progress'), findsOneWidget);
       expect(find.byType(CircularProgressIndicator), findsOneWidget);
       expect(
         find.text('Analysis is taking longer than expected. Your request is still being processed.'),
         findsOneWidget,
       );
       expect(find.text('Refresh Status'), findsOneWidget);
-      expect(find.text('Analyze with Gemini AI'), findsNothing);
+      expect(find.text('Analyze with AssistLK AI'), findsNothing);
       expect(find.byIcon(Icons.cancel_outlined), findsNothing);
       expect(find.byType(SnackBar), findsNothing);
     });
@@ -1097,7 +1099,7 @@ void main() {
       );
       await tester.pumpAndSettle();
 
-      expect(find.text('Analyze with Gemini AI'), findsOneWidget);
+      expect(find.text('Analyze with AssistLK AI'), findsOneWidget);
 
       mockService.mockRequests = [
         sample.copyWith(status: ServiceRequestStatus.analyzing),
@@ -1107,7 +1109,7 @@ void main() {
         type: DioExceptionType.receiveTimeout,
       );
 
-      await tester.tap(find.text('Analyze with Gemini AI'));
+      await tester.tap(find.text('Analyze with AssistLK AI'));
       await tester.pump();
       await tester.pump();
       await tester.pump();
@@ -1292,7 +1294,7 @@ void main() {
       expect(mockService.lastCreateDto?.categoryHint, 'Appliance Repair');
     });
 
-    testWidgets('submits null categoryHint when Let AI identify is chosen', (tester) async {
+    testWidgets('submits null categoryHint when Let AssistLK AI identify is chosen', (tester) async {
       await tester.pumpWidget(
         buildApp(const CreateServiceRequestScreen(initialCategoryPreference: null)),
       );
@@ -1312,7 +1314,7 @@ void main() {
       await tester.tap(find.text('Next: Review'));
       await tester.pumpAndSettle();
 
-      expect(find.text('Let AI identify'), findsWidgets);
+      expect(find.text('Let AssistLK AI identify'), findsWidgets);
 
       final submitButton = find.text('Submit Request');
       await tester.ensureVisible(submitButton);
@@ -1466,7 +1468,7 @@ void main() {
       expect(mockService.lastUpdateDto?.categoryHint, 'Vehicle Repair');
     });
 
-    testWidgets('clears categoryHint with explicit null when customer chooses Let AI identify', (tester) async {
+    testWidgets('clears categoryHint with explicit null when customer chooses Let AssistLK AI identify', (tester) async {
       final sample = ServiceRequestModel(
         serviceRequestId: 'req-edit-null',
         customerId: 'cust-1',
@@ -1487,8 +1489,8 @@ void main() {
       await tester.tap(find.text('Change'));
       await tester.pumpAndSettle();
 
-      // Pick Let AI identify
-      await tester.tap(find.text('Let AI identify'));
+      // Pick Let AssistLK AI identify
+      await tester.tap(find.text('Let AssistLK AI identify'));
       await tester.pumpAndSettle();
 
       await tester.tap(find.text('Save Changes'));
@@ -1519,7 +1521,7 @@ void main() {
 
       expect(find.text('Service preference: '), findsOneWidget);
       expect(find.text('Plumbing'), findsOneWidget);
-      expect(find.text('AI classification: '), findsOneWidget);
+      expect(find.text('AssistLK AI classification: '), findsOneWidget);
       expect(find.text('Not analyzed yet'), findsOneWidget);
     });
 
@@ -1544,7 +1546,7 @@ void main() {
 
       expect(find.text('Service preference: '), findsOneWidget);
       expect(find.text('Electrical'), findsOneWidget);
-      expect(find.text('AI classification: '), findsOneWidget);
+      expect(find.text('AssistLK AI classification: '), findsOneWidget);
       expect(find.text('Analysis in progress'), findsOneWidget);
     });
 
@@ -1568,11 +1570,11 @@ void main() {
 
       expect(find.text('Service preference: '), findsOneWidget);
       expect(find.text('Appliance Repair'), findsOneWidget);
-      expect(find.text('AI classification: '), findsOneWidget);
+      expect(find.text('AssistLK AI classification: '), findsOneWidget);
       expect(find.text('Needs more information'), findsOneWidget);
     });
 
-    testWidgets('ReadyForMatching preserves AnalysisResultCard with completed AI classification, handoff section, and no duplicate header rows', (tester) async {
+    testWidgets('ReadyForMatching preserves AnalysisResultCard with completed AssistLK AI classification, handoff section, and no duplicate header rows', (tester) async {
       final sample = ServiceRequestModel(
         serviceRequestId: 'req-detail-rfm',
         customerId: 'cust-1',
@@ -1590,19 +1592,19 @@ void main() {
       await tester.pumpWidget(buildApp(const ServiceRequestDetailScreen(requestId: 'req-detail-rfm')));
       await tester.pumpAndSettle();
 
-      // Header Card does NOT duplicate 'Service preference: ' or 'AI classification: '
+      // Header Card does NOT duplicate 'Service preference: ' or 'AssistLK AI classification: '
       expect(find.text('Service preference: '), findsNothing);
-      expect(find.text('AI classification: '), findsNothing);
+      expect(find.text('AssistLK AI classification: '), findsNothing);
 
       // AnalysisResultCard is preserved as primary AI result/comparison UI
       expect(find.byType(AnalysisResultCard), findsOneWidget);
       expect(find.text('Your preference:'), findsOneWidget);
       expect(find.text('Plumbing'), findsOneWidget);
-      expect(find.text('AI classification:'), findsOneWidget);
+      expect(find.text('AssistLK AI classification:'), findsOneWidget);
       expect(find.text('Electrical'), findsWidgets);
 
       // Differing hint/category in ReadyForMatching shows neutral mismatch banner
-      expect(find.text('AI identified a different service category based on your problem description.'), findsOneWidget);
+      expect(find.text('AssistLK AI identified a different service category based on your problem description.'), findsOneWidget);
 
       // ReadyForMatchingSection handoff UI is present
       expect(find.byType(ReadyForMatchingSection), findsOneWidget);
@@ -1630,8 +1632,8 @@ void main() {
 
       expect(find.byType(AnalysisResultCard), findsOneWidget);
       expect(find.text('Your preference:'), findsOneWidget);
-      expect(find.text('AI classification:'), findsOneWidget);
-      expect(find.text('AI identified a different service category based on your problem description.'), findsNothing);
+      expect(find.text('AssistLK AI classification:'), findsOneWidget);
+      expect(find.text('AssistLK AI identified a different service category based on your problem description.'), findsNothing);
       expect(find.byType(ReadyForMatchingSection), findsOneWidget);
     });
 
@@ -1657,9 +1659,9 @@ void main() {
       expect(find.byType(AnalysisResultCard), findsOneWidget);
       expect(find.text('Your preference:'), findsOneWidget);
       expect(find.text('Electrical'), findsOneWidget);
-      expect(find.text('AI classification:'), findsOneWidget);
+      expect(find.text('AssistLK AI classification:'), findsOneWidget);
       expect(find.text('Plumbing'), findsWidgets);
-      expect(find.text('AI identified a different service category based on your problem description.'), findsOneWidget);
+      expect(find.text('AssistLK AI identified a different service category based on your problem description.'), findsOneWidget);
       expect(find.text('Mark Ready for Matching'), findsOneWidget);
       expect(find.byType(ReadyForMatchingSection), findsNothing);
 
@@ -1673,9 +1675,9 @@ void main() {
       expect(find.byType(AnalysisResultCard), findsOneWidget);
       expect(find.text('Your preference:'), findsOneWidget);
       expect(find.text('Electrical'), findsOneWidget);
-      expect(find.text('AI classification:'), findsOneWidget);
+      expect(find.text('AssistLK AI classification:'), findsOneWidget);
       expect(find.text('Plumbing'), findsWidgets);
-      expect(find.text('AI identified a different service category based on your problem description.'), findsOneWidget);
+      expect(find.text('AssistLK AI identified a different service category based on your problem description.'), findsOneWidget);
       expect(find.byType(ReadyForMatchingSection), findsOneWidget);
       expect(find.text('Mark Ready for Matching'), findsNothing);
     });
@@ -1704,7 +1706,7 @@ void main() {
       // AnalysisResultCard is the primary place
       expect(find.byType(AnalysisResultCard), findsOneWidget);
       expect(find.text('Your preference:'), findsOneWidget);
-      expect(find.text('AI classification:'), findsOneWidget);
+      expect(find.text('AssistLK AI classification:'), findsOneWidget);
       expect(find.text('Plumbing'), findsOneWidget);
       expect(find.text('Electrical'), findsWidgets);
     });
@@ -1741,7 +1743,7 @@ void main() {
 
       expect(find.text('Your preference:'), findsOneWidget);
       expect(find.text('Plumbing'), findsNWidgets(2));
-      expect(find.text('AI identified a different service category based on your problem description.'), findsNothing);
+      expect(find.text('AssistLK AI identified a different service category based on your problem description.'), findsNothing);
     });
 
     testWidgets('mismatching category and hint in ReadyForMatching status shows neutral mismatch banner', (tester) async {
@@ -1774,9 +1776,9 @@ void main() {
 
       expect(find.text('Your preference:'), findsOneWidget);
       expect(find.text('Electrical'), findsOneWidget);
-      expect(find.text('AI classification:'), findsOneWidget);
+      expect(find.text('AssistLK AI classification:'), findsOneWidget);
       expect(find.text('Plumbing'), findsOneWidget);
-      expect(find.text('AI identified a different service category based on your problem description.'), findsOneWidget);
+      expect(find.text('AssistLK AI identified a different service category based on your problem description.'), findsOneWidget);
       expect(find.byIcon(Icons.info_outline_rounded), findsOneWidget);
     });
     testWidgets('matching category and hint shows no mismatch banner in Analyzed status', (tester) async {
@@ -1809,7 +1811,7 @@ void main() {
 
       expect(find.text('Your preference:'), findsOneWidget);
       expect(find.text('Plumbing'), findsNWidgets(2)); // in preference and AI classification
-      expect(find.text('AI identified a different service category based on your problem description.'), findsNothing);
+      expect(find.text('AssistLK AI identified a different service category based on your problem description.'), findsNothing);
     });
 
     testWidgets('mismatching category and hint in Analyzed status shows neutral mismatch banner', (tester) async {
@@ -1842,9 +1844,9 @@ void main() {
 
       expect(find.text('Your preference:'), findsOneWidget);
       expect(find.text('Electrical'), findsOneWidget);
-      expect(find.text('AI classification:'), findsOneWidget);
+      expect(find.text('AssistLK AI classification:'), findsOneWidget);
       expect(find.text('Plumbing'), findsOneWidget);
-      expect(find.text('AI identified a different service category based on your problem description.'), findsOneWidget);
+      expect(find.text('AssistLK AI identified a different service category based on your problem description.'), findsOneWidget);
       expect(find.byIcon(Icons.info_outline_rounded), findsOneWidget);
     });
 
@@ -1878,12 +1880,12 @@ void main() {
 
       expect(find.text('Your preference:'), findsOneWidget);
       expect(find.text('Vehicle Assistance'), findsOneWidget);
-      expect(find.text('AI classification:'), findsOneWidget);
+      expect(find.text('AssistLK AI classification:'), findsOneWidget);
       expect(find.text('Vehicle Repair'), findsOneWidget);
-      expect(find.text('AI identified a different service category based on your problem description.'), findsNothing);
+      expect(find.text('AssistLK AI identified a different service category based on your problem description.'), findsNothing);
     });
 
-    testWidgets('null categoryHint (Let AI identify) shows no mismatch banner', (tester) async {
+    testWidgets('null categoryHint (Let AssistLK AI identify) shows no mismatch banner', (tester) async {
       final analysis = ProblemUnderstandingResultModel(
         workflowId: 'wf-4',
         executionId: 'ex-4',
@@ -1912,8 +1914,8 @@ void main() {
       await tester.pumpAndSettle();
 
       expect(find.text('Your preference:'), findsOneWidget);
-      expect(find.text('Let AI identify'), findsOneWidget);
-      expect(find.text('AI identified a different service category based on your problem description.'), findsNothing);
+      expect(find.text('Let AssistLK AI identify'), findsOneWidget);
+      expect(find.text('AssistLK AI identified a different service category based on your problem description.'), findsNothing);
     });
 
     testWidgets('Unclassified AI category shows no mismatch banner', (tester) async {
@@ -1944,7 +1946,7 @@ void main() {
       );
       await tester.pumpAndSettle();
 
-      expect(find.text('AI identified a different service category based on your problem description.'), findsNothing);
+      expect(find.text('AssistLK AI identified a different service category based on your problem description.'), findsNothing);
     });
 
     testWidgets('lifecycle safety: mismatch notice suppressed when status is Created, Analyzing, AwaitingInformation, Cancelled', (tester) async {
@@ -1982,7 +1984,7 @@ void main() {
         await tester.pumpAndSettle();
 
         expect(
-          find.text('AI identified a different service category based on your problem description.'),
+          find.text('AssistLK AI identified a different service category based on your problem description.'),
           findsNothing,
           reason: 'Status $unsafeStatus must never show mismatch notice',
         );

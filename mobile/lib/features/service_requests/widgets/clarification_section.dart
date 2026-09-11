@@ -159,7 +159,7 @@ class _ClarificationSectionState extends State<ClarificationSection> {
           ),
           const SizedBox(height: AppSpacing.sm),
           Text(
-            'Maximum clarification rounds (2 of 2) have been completed. Please edit your request description with more specific details so our AI can accurately classify your request.',
+            'Maximum clarification rounds (2 of 2) have been completed. Please edit your request description with more specific details so AssistLK AI can accurately classify your request.',
             style: AppTextStyles.body.copyWith(
               color: AppColors.textSecondary,
             ),
@@ -378,7 +378,7 @@ class _ClarificationSectionState extends State<ClarificationSection> {
             ),
             const SizedBox(height: AppSpacing.sm),
             Text(
-              'Please answer the follow-up question(s) below so our AI can accurately classify your request:',
+              'Please answer the follow-up question(s) below so AssistLK AI can accurately classify your request:',
               style: AppTextStyles.body.copyWith(
                 color: AppColors.textSecondary,
               ),

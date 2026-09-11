@@ -154,7 +154,7 @@ class _EditServiceRequestScreenState extends State<EditServiceRequestScreen> {
                     Icons.auto_awesome_rounded,
                     color: AppColors.primary,
                   ),
-                  title: const Text('Let AI identify', style: AppTextStyles.cardHeading),
+                  title: const Text('Let AssistLK AI identify', style: AppTextStyles.cardHeading),
                   subtitle: const Text(
                     'AssistLK AI will determine the service category',
                     style: AppTextStyles.small,
@@ -352,7 +352,7 @@ class _EditServiceRequestScreenState extends State<EditServiceRequestScreen> {
                             ),
                             const SizedBox(height: 2),
                             Text(
-                              selectedCategory?.displayName ?? 'Let AI identify',
+                              selectedCategory?.displayName ?? 'Let AssistLK AI identify',
                               style: AppTextStyles.cardHeading,
                             ),
                           ],
@@ -376,7 +376,7 @@ class _EditServiceRequestScreenState extends State<EditServiceRequestScreen> {
                 ),
                 const SizedBox(height: AppSpacing.xs),
                 Text(
-                  'Provide more clarity or details to resolve follow-up questions from the AI diagnosis.',
+                  'Provide more clarity or details to resolve follow-up questions from AssistLK AI.',
                   style: AppTextStyles.body.copyWith(
                     color: AppColors.textSecondary,
                   ),

@@ -109,3 +109,11 @@ code {
   padding: 4px 8px;
   background: var(--code-bg);
 }
+
+.app-input {
+  display: block;
+  width: 100%;
+  min-height: 48px;
+  box-sizing: border-box;
+}
+

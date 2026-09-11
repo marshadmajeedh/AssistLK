@@ -4,6 +4,7 @@ using Xunit;
 
 namespace AssistLK.Api.Tests;
 
+[Collection("EnvironmentTests")]
 public class AgentMonitoringControllerSecurityTests : IClassFixture<AssistLKApiTestFactory>
 {
     private readonly AssistLKApiTestFactory _factory;

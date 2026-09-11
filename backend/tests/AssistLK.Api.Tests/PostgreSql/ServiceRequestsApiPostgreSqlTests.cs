@@ -5,9 +5,11 @@ using AssistLK.Application.ServiceRequests.DTOs;
 using AssistLK.Domain.Entities;
 using AssistLK.Domain.Enums;
 using Microsoft.EntityFrameworkCore;
+using Xunit;
 
 namespace AssistLK.Api.Tests.PostgreSql;
 
+[Collection("EnvironmentTests")]
 public class ServiceRequestsApiPostgreSqlTests : IClassFixture<PostgreSqlAssistLKApiTestFactory>, IAsyncLifetime
 {
     private readonly PostgreSqlAssistLKApiTestFactory _factory;

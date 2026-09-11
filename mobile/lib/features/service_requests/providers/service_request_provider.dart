@@ -23,8 +23,6 @@ class ServiceRequestProvider extends ChangeNotifier {
 
   List<ServiceRequestModel> _requests = [];
   ServiceRequestModel? _currentRequest;
-  // Backend currently does not persist followUpQuestions.
-  // Stored temporarily until customer completes clarification.
   ProblemUnderstandingResultModel? _currentAnalysis;
   bool _isLoading = false;
   bool _isAnalyzing = false;

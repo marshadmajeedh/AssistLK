@@ -1,3 +1,4 @@
+
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useAuthStore } from "../../../shared/auth/authStore";
@@ -33,8 +34,6 @@ function LoginPage() {
 
       if (user.role === "Admin") {
         navigate("/dashboard");
-      } else if (user.role === "Customer") {
-        navigate("/service-requests");
       } else {
         useAuthStore.getState().logout();
         setError(

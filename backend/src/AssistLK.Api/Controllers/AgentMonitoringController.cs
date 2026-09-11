@@ -1,4 +1,5 @@
 using AssistLK.Infrastructure.Data;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 
@@ -18,7 +19,7 @@ public class AgentMonitoringController :
         _db = db;
     }
 
-    [Microsoft.AspNetCore.Authorization.Authorize]
+    [Authorize(Roles = "Admin")]
     [HttpGet]
     public async Task<IActionResult> GetMetrics()
     {

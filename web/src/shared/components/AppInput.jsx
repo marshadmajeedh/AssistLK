@@ -37,6 +37,11 @@ function AppInput({
         aria-invalid={Boolean(error)}
         aria-describedby={errorId}
         {...inputProps}
+        className={
+          inputProps.className
+            ? `app-input ${inputProps.className}`
+            : "app-input"
+        }
         style={{
           ...inputStyles,
           ...(inputProps.style ?? {}),

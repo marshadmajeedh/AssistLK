@@ -87,7 +87,9 @@ function LoginPage() {
           <div style={{ marginTop: spacing.lg }}>
             <AppInput
               label="Email"
+              name="email"
               type="email"
+              autoComplete="username"
               value={email}
               onChange={(event) =>
                 setEmail(event.target.value)
@@ -103,7 +105,9 @@ function LoginPage() {
           >
             <AppInput
               label="Password"
+              name="password"
               type="password"
+              autoComplete="current-password"
               value={password}
               onChange={(event) =>
                 setPassword(event.target.value)

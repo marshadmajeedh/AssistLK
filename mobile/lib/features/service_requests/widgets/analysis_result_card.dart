@@ -1,10 +1,12 @@
 import 'package:flutter/material.dart';
 
+import '../../../../shared/theme/app_assets.dart';
 import '../../../../shared/theme/app_colors.dart';
 import '../../../../shared/theme/app_radius.dart';
 import '../../../../shared/theme/app_spacing.dart';
 import '../../../../shared/theme/app_text_styles.dart';
 import '../../../../shared/widgets/app_card.dart';
+import '../../../../shared/widgets/app_image_asset.dart';
 import '../models/canonical_service_category.dart';
 import '../models/problem_understanding_result_model.dart';
 import '../models/service_request_status.dart';
@@ -51,7 +53,7 @@ class AnalysisResultCard extends StatelessWidget {
         canonicalHint != canonicalCategory;
 
     final friendlyHint = CanonicalServiceCategory.fromCanonicalOrDisplayName(categoryHint)?.displayName ??
-        (categoryHint == null ? 'Let AI identify' : categoryHint!);
+        (categoryHint == null ? 'Let AssistLK AI identify' : categoryHint!);
 
     return AppCard(
       child: Column(
@@ -59,29 +61,35 @@ class AnalysisResultCard extends StatelessWidget {
         children: [
           // Header: AI Analysis Label and Confidence
           Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Row(
-                children: [
-                  Container(
-                    padding: const EdgeInsets.all(AppSpacing.xs + 2),
-                    decoration: BoxDecoration(
-                      color: AppColors.secondary.withValues(alpha: 0.12),
-                      borderRadius: BorderRadius.circular(AppRadius.small),
-                    ),
-                    child: const Icon(
-                      Icons.auto_awesome_rounded,
-                      size: 16,
-                      color: AppColors.secondary,
-                    ),
+              Container(
+                width: 26,
+                height: 26,
+                padding: const EdgeInsets.all(AppSpacing.xs),
+                decoration: BoxDecoration(
+                  color: AppColors.secondary.withValues(alpha: 0.12),
+                  borderRadius: BorderRadius.circular(AppRadius.small),
+                ),
+                child: const Center(
+                  child: AppImageAsset(
+                    assetPath: AppAssets.aiDiagnosisSpark,
+                    width: 16,
+                    height: 16,
+                    fit: BoxFit.contain,
+                    fallbackIcon: Icons.auto_awesome_rounded,
+                    semanticLabel: 'AssistLK AI spark',
                   ),
-                  const SizedBox(width: AppSpacing.sm),
-                  const Text(
-                    'AI Analysis Result',
-                    style: AppTextStyles.cardHeading,
-                  ),
-                ],
+                ),
               ),
+              const SizedBox(width: AppSpacing.sm),
+              const Expanded(
+                child: Text(
+                  'AssistLK AI Analysis',
+                  style: AppTextStyles.cardHeading,
+                ),
+              ),
+              const SizedBox(width: AppSpacing.xs),
               Container(
                 padding: const EdgeInsets.symmetric(
                   horizontal: AppSpacing.sm,
@@ -105,8 +113,10 @@ class AnalysisResultCard extends StatelessWidget {
           const SizedBox(height: AppSpacing.md),
 
           // Customer Preference
-          Row(
-            crossAxisAlignment: CrossAxisAlignment.center,
+          Wrap(
+            crossAxisAlignment: WrapCrossAlignment.center,
+            spacing: AppSpacing.sm,
+            runSpacing: AppSpacing.xs,
             children: [
               const Text(
                 'Your preference:',
@@ -116,7 +126,6 @@ class AnalysisResultCard extends StatelessWidget {
                   color: AppColors.textSecondary,
                 ),
               ),
-              const SizedBox(width: AppSpacing.sm),
               Text(
                 friendlyHint,
                 style: const TextStyle(
@@ -130,18 +139,19 @@ class AnalysisResultCard extends StatelessWidget {
           const SizedBox(height: AppSpacing.sm),
 
           // AI Classification
-          Row(
-            crossAxisAlignment: CrossAxisAlignment.center,
+          Wrap(
+            crossAxisAlignment: WrapCrossAlignment.center,
+            spacing: AppSpacing.sm,
+            runSpacing: AppSpacing.xs,
             children: [
               const Text(
-                'AI classification:',
+                'AssistLK AI classification:',
                 style: TextStyle(
                   fontSize: 13,
                   fontWeight: FontWeight.w500,
                   color: AppColors.textSecondary,
                 ),
               ),
-              const SizedBox(width: AppSpacing.sm),
               Text(
                 analysis.category.isEmpty ? 'Unclassified' : analysis.category,
                 style: const TextStyle(
@@ -155,8 +165,10 @@ class AnalysisResultCard extends StatelessWidget {
           const SizedBox(height: AppSpacing.sm),
 
           // Urgency
-          Row(
-            crossAxisAlignment: CrossAxisAlignment.center,
+          Wrap(
+            crossAxisAlignment: WrapCrossAlignment.center,
+            spacing: AppSpacing.sm,
+            runSpacing: AppSpacing.xs,
             children: [
               const Text(
                 'Urgency:',
@@ -166,7 +178,6 @@ class AnalysisResultCard extends StatelessWidget {
                   color: AppColors.textSecondary,
                 ),
               ),
-              const SizedBox(width: AppSpacing.sm),
               UrgencyChip(urgency: analysis.urgency),
             ],
           ),
@@ -195,7 +206,7 @@ class AnalysisResultCard extends StatelessWidget {
                   const SizedBox(width: AppSpacing.sm),
                   Expanded(
                     child: Text(
-                      'AI identified a different service category based on your problem description.',
+                      'AssistLK AI identified a different service category based on your problem description.',
                       style: AppTextStyles.body.copyWith(
                         color: AppColors.textPrimary,
                         fontSize: 13,

@@ -10,38 +10,52 @@ import '../../../shared/widgets/app_button.dart';
 import '../../../shared/widgets/app_image_asset.dart';
 import '../../../shared/widgets/app_text_field.dart';
 import '../providers/auth_provider.dart';
-import 'account_type_selection_screen.dart';
 
-class LoginScreen extends StatefulWidget {
-  const LoginScreen({super.key});
+class CustomerRegisterScreen extends StatefulWidget {
+  const CustomerRegisterScreen({super.key});
 
   @override
-  State<LoginScreen> createState() => _LoginScreenState();
+  State<CustomerRegisterScreen> createState() => _CustomerRegisterScreenState();
 }
 
-class _LoginScreenState extends State<LoginScreen> {
+class _CustomerRegisterScreenState extends State<CustomerRegisterScreen> {
   final _formKey = GlobalKey<FormState>();
+  final _nameController = TextEditingController();
   final _emailController = TextEditingController();
+  final _phoneController = TextEditingController();
   final _passwordController = TextEditingController();
+  final _confirmPasswordController = TextEditingController();
 
   bool _obscurePassword = true;
+  bool _obscureConfirmPassword = true;
 
   @override
   void dispose() {
+    _nameController.dispose();
     _emailController.dispose();
+    _phoneController.dispose();
     _passwordController.dispose();
+    _confirmPasswordController.dispose();
     super.dispose();
   }
 
-  Future<void> _login() async {
+  Future<void> _register() async {
     if (!_formKey.currentState!.validate()) {
       return;
     }
 
-    await context.read<AuthProvider>().login(
+    final success = await context.read<AuthProvider>().register(
+      fullName: _nameController.text.trim(),
       email: _emailController.text.trim(),
       password: _passwordController.text,
+      phoneNumber: _phoneController.text.trim(),
+      role: 'Customer',
     );
+
+    if (success && mounted) {
+      // Pop back past registration flow
+      Navigator.of(context).pop();
+    }
   }
 
   @override
@@ -49,45 +63,52 @@ class _LoginScreenState extends State<LoginScreen> {
     final auth = context.watch<AuthProvider>();
 
     return Scaffold(
+      appBar: AppBar(
+        title: const Text('Create Account'),
+        leading: IconButton(
+          icon: const Icon(Icons.arrow_back),
+          onPressed: () => Navigator.of(context).pop(),
+        ),
+      ),
       body: SafeArea(
         child: Center(
           child: SingleChildScrollView(
             padding: const EdgeInsets.symmetric(
               horizontal: AppSpacing.lg,
-              vertical: AppSpacing.xl,
+              vertical: AppSpacing.md,
             ),
             child: ConstrainedBox(
-              constraints: const BoxConstraints(maxWidth: 440),
+              constraints: const BoxConstraints(maxWidth: 480),
               child: Form(
                 key: _formKey,
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
-                    // Auth Welcome Hero illustration
+                    // Customer registration hero illustration
                     Center(
                       child: AppImageAsset(
-                        assetPath: AppAssets.authWelcome,
-                        height: 150,
+                        assetPath: AppAssets.authCustomerRegister,
+                        height: 130,
                         fit: BoxFit.contain,
-                        semanticLabel:
-                            'AssistLK Services illustration: Home, Vehicle, and Trusted Repairs',
-                        fallbackIcon: Icons.home_repair_service_outlined,
+                        semanticLabel: 'Customer Registration Illustration',
+                        fallbackIcon: Icons.person_add_alt_1_outlined,
                       ),
                     ),
                     const SizedBox(height: AppSpacing.md),
 
                     // Header
                     const Text(
-                      'AssistLK',
+                      'Join AssistLK',
                       style: AppTextStyles.pageTitle,
                       textAlign: TextAlign.center,
                     ),
                     const SizedBox(height: AppSpacing.xs),
                     const Text(
-                      'Sign in to continue',
+                      'Create your customer account to request services with AssistLK.',
                       style: TextStyle(
                         fontSize: 14,
                         color: AppColors.textSecondary,
+                        height: 1.4,
                       ),
                       textAlign: TextAlign.center,
                     ),
@@ -105,7 +126,25 @@ class _LoginScreenState extends State<LoginScreen> {
                         child: Column(
                           crossAxisAlignment: CrossAxisAlignment.stretch,
                           children: [
-                            // Email input
+                            // Full Name
+                            AppTextField(
+                              controller: _nameController,
+                              label: 'Full Name',
+                              hint: 'e.g. Kamal Perera',
+                              prefixIcon: const Icon(
+                                Icons.person_outline,
+                                color: AppColors.textSecondary,
+                              ),
+                              validator: (value) {
+                                if (value == null || value.trim().isEmpty) {
+                                  return 'Full name is required.';
+                                }
+                                return null;
+                              },
+                            ),
+                            const SizedBox(height: AppSpacing.md),
+
+                            // Email
                             AppTextField(
                               controller: _emailController,
                               label: 'Email',
@@ -119,17 +158,28 @@ class _LoginScreenState extends State<LoginScreen> {
                                 if (value == null || value.trim().isEmpty) {
                                   return 'Email is required.';
                                 }
-
                                 if (!value.contains('@')) {
                                   return 'Enter a valid email.';
                                 }
-
                                 return null;
                               },
                             ),
                             const SizedBox(height: AppSpacing.md),
 
-                            // Password input
+                            // Phone Number
+                            AppTextField(
+                              controller: _phoneController,
+                              label: 'Phone Number',
+                              hint: 'e.g. 0771234567',
+                              keyboardType: TextInputType.phone,
+                              prefixIcon: const Icon(
+                                Icons.phone_outlined,
+                                color: AppColors.textSecondary,
+                              ),
+                            ),
+                            const SizedBox(height: AppSpacing.md),
+
+                            // Password
                             AppTextField(
                               controller: _passwordController,
                               label: 'Password',
@@ -152,15 +202,46 @@ class _LoginScreenState extends State<LoginScreen> {
                                 },
                               ),
                               validator: (value) {
-                                if (value == null || value.isEmpty) {
-                                  return 'Password is required.';
+                                if (value == null || value.length < 8) {
+                                  return 'Password must contain at least 8 characters.';
                                 }
+                                return null;
+                              },
+                            ),
+                            const SizedBox(height: AppSpacing.md),
 
+                            // Confirm Password
+                            AppTextField(
+                              controller: _confirmPasswordController,
+                              label: 'Confirm Password',
+                              obscureText: _obscureConfirmPassword,
+                              prefixIcon: const Icon(
+                                Icons.lock_outline,
+                                color: AppColors.textSecondary,
+                              ),
+                              suffixIcon: IconButton(
+                                icon: Icon(
+                                  _obscureConfirmPassword
+                                      ? Icons.visibility_off_outlined
+                                      : Icons.visibility_outlined,
+                                  color: AppColors.textSecondary,
+                                ),
+                                onPressed: () {
+                                  setState(() {
+                                    _obscureConfirmPassword =
+                                        !_obscureConfirmPassword;
+                                  });
+                                },
+                              ),
+                              validator: (value) {
+                                if (value != _passwordController.text) {
+                                  return 'Passwords do not match.';
+                                }
                                 return null;
                               },
                             ),
 
-                            // Auth error message
+                            // Error display
                             if (auth.error != null) ...[
                               const SizedBox(height: AppSpacing.md),
                               Container(
@@ -193,11 +274,11 @@ class _LoginScreenState extends State<LoginScreen> {
                             ],
                             const SizedBox(height: AppSpacing.lg),
 
-                            // Sign In Button
+                            // Submit Button
                             AppButton(
-                              text: 'Sign In',
+                              text: 'Create Account',
                               isLoading: auth.isLoading,
-                              onPressed: auth.isLoading ? null : _login,
+                              onPressed: auth.isLoading ? null : _register,
                             ),
                           ],
                         ),
@@ -205,13 +286,13 @@ class _LoginScreenState extends State<LoginScreen> {
                     ),
                     const SizedBox(height: AppSpacing.md),
 
-                    // Onboarding action
+                    // Already have an account
                     Wrap(
                       alignment: WrapAlignment.center,
                       crossAxisAlignment: WrapCrossAlignment.center,
                       children: [
                         const Text(
-                          "Don't have an account?",
+                          'Already have an account?',
                           style: TextStyle(
                             fontSize: 14,
                             color: AppColors.textSecondary,
@@ -221,14 +302,11 @@ class _LoginScreenState extends State<LoginScreen> {
                         TextButton(
                           onPressed: () {
                             auth.clearError();
-                            Navigator.of(context).push(
-                              MaterialPageRoute(
-                                builder: (_) =>
-                                    const AccountTypeSelectionScreen(),
-                              ),
-                            );
+                            // Pop to root login
+                            Navigator.of(context)
+                                .popUntil((route) => route.isFirst);
                           },
-                          child: const Text('Create an account'),
+                          child: const Text('Sign In'),
                         ),
                       ],
                     ),

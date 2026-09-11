@@ -42,4 +42,11 @@ class AppTextStyles {
     fontSize: 14,
     fontWeight: FontWeight.w600,
   );
+
+  static const TextStyle metadata = TextStyle(
+    fontSize: 11,
+    fontWeight: FontWeight.w500,
+    height: 1.3,
+    color: AppColors.textSecondary,
+  );
 }

@@ -94,7 +94,7 @@ void main() {
 
       await tester.pumpWidget(buildTestable(const AnalysisResultCard(analysis: analysis)));
 
-      expect(find.text('AI Analysis Result'), findsOneWidget);
+      expect(find.text('AssistLK AI Analysis'), findsOneWidget);
       expect(find.text('Electrical Wiring'), findsOneWidget);
       expect(find.text('Critical'), findsOneWidget);
       expect(find.text('95% Confidence'), findsOneWidget);
@@ -249,7 +249,7 @@ void main() {
       );
 
       expect(find.text('Further Details Needed'), findsOneWidget);
-      expect(find.text('Maximum clarification rounds (2 of 2) have been completed. Please edit your request description with more specific details so our AI can accurately classify your request.'), findsOneWidget);
+      expect(find.text('Maximum clarification rounds (2 of 2) have been completed. Please edit your request description with more specific details so AssistLK AI can accurately classify your request.'), findsOneWidget);
       expect(find.text('Edit Details'), findsOneWidget);
       expect(find.text('Please provide further details regarding the issue.'), findsNothing);
       expect(find.byType(TextFormField), findsNothing);

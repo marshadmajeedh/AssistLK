@@ -1,5 +1,8 @@
 using AssistLK.Agents.Abstractions;
+using AssistLK.Agents.Adapters;
 using AssistLK.Agents.Agents;
+using AssistLK.Agents.Clients;
+using AssistLK.Agents.Configuration;
 using AssistLK.Agents.Core;
 using AssistLK.Agents.Services;
 using AssistLK.Agents.Tools;
@@ -100,13 +103,74 @@ builder.Services.AddSingleton<
     AgentSafetyPolicyEngine>();
 
 
-// Agent Registry
+// Agent Configuration & Services
+builder.Services.AddSingleton(sp =>
+{
+    var config = sp.GetRequiredService<IConfiguration>();
+    var options = new AgentServicesOptions();
+    config.GetSection(AgentServicesOptions.SectionName).Bind(options);
+
+    var envMode = Environment.GetEnvironmentVariable("AGENT_SERVICES__PROBLEM_UNDERSTANDING_MODE")
+        ?? Environment.GetEnvironmentVariable("AgentServices__ProblemUnderstandingMode");
+    if (!string.IsNullOrWhiteSpace(envMode))
+    {
+        options.ProblemUnderstandingMode = envMode.Trim();
+    }
+
+    var envUrl = Environment.GetEnvironmentVariable("AGENT_SERVICE_URL")
+        ?? Environment.GetEnvironmentVariable("AgentServices__ProblemUnderstandingUrl");
+    if (!string.IsNullOrWhiteSpace(envUrl))
+    {
+        options.ProblemUnderstandingUrl = envUrl.Trim();
+    }
+
+    var envKey = Environment.GetEnvironmentVariable("AgentServices__InternalApiKey");
+    if (!string.IsNullOrWhiteSpace(envKey))
+    {
+        options.InternalApiKey = envKey.Trim();
+    }
+
+    // Strict mode validation
+    options.Validate();
+    return options;
+});
+
+// External Python Agent Client
+builder.Services.AddHttpClient<IProblemUnderstandingClient, ProblemUnderstandingHttpClient>((sp, client) =>
+{
+    var options = sp.GetRequiredService<AgentServicesOptions>();
+    var baseUrl = !string.IsNullOrWhiteSpace(options.ProblemUnderstandingUrl)
+        ? options.ProblemUnderstandingUrl.TrimEnd('/')
+        : "http://127.0.0.1:8001";
+    client.BaseAddress = new Uri(baseUrl);
+    client.Timeout = TimeSpan.FromSeconds(options.TimeoutSeconds > 0 ? options.TimeoutSeconds : 45);
+});
+
+builder.Services.AddScoped<ProblemUnderstandingAgent>();
+builder.Services.AddScoped<ExternalProblemUnderstandingAgentAdapter>();
+
+// Agent Registry (Mode-aware, Scoped, Lifetime-safe)
 builder.Services.AddScoped<AgentRegistry>(sp =>
 {
     var registry = new AgentRegistry();
+    var options = sp.GetRequiredService<AgentServicesOptions>();
 
-    registry.Register(
-        sp.GetRequiredService<ProblemUnderstandingAgent>());
+    if (string.Equals(options.ProblemUnderstandingMode, AgentServicesOptions.ExternalPythonMode, StringComparison.OrdinalIgnoreCase))
+    {
+        registry.Register(
+            sp.GetRequiredService<ExternalProblemUnderstandingAgentAdapter>());
+    }
+    else if (string.Equals(options.ProblemUnderstandingMode, AgentServicesOptions.NativeCSharpMode, StringComparison.OrdinalIgnoreCase))
+    {
+        registry.Register(
+            sp.GetRequiredService<ProblemUnderstandingAgent>());
+    }
+    else
+    {
+        throw new InvalidOperationException(
+            $"Invalid AgentServices:ProblemUnderstandingMode '{options.ProblemUnderstandingMode}'. " +
+            $"Supported modes are '{AgentServicesOptions.NativeCSharpMode}' and '{AgentServicesOptions.ExternalPythonMode}'.");
+    }
 
     return registry;
 });
@@ -128,10 +192,6 @@ builder.Services.AddScoped<
 
 builder.Services.AddScoped<
     GeminiService>();
-
-
-builder.Services.AddScoped<
-    ProblemUnderstandingAgent>();
 
 
 // -----------------------------

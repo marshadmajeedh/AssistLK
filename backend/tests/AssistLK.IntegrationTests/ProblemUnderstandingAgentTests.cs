@@ -41,7 +41,8 @@ public class ProblemUnderstandingAgentTests
         string description,
         string locationText = "Colombo",
         decimal? latitude = null,
-        decimal? longitude = null)
+        decimal? longitude = null,
+        string? categoryHint = null)
     {
         var serviceRequestId = Guid.NewGuid();
 
@@ -51,7 +52,8 @@ public class ProblemUnderstandingAgentTests
             Description = description,
             LocationText = locationText,
             Latitude = latitude,
-            Longitude = longitude
+            Longitude = longitude,
+            CategoryHint = categoryHint
         };
 
         var context = new AgentContext
@@ -539,5 +541,173 @@ public class ProblemUnderstandingAgentTests
         var result = await agent.ExecuteAsync(context);
 
         Assert.True(result.Success);
+    }
+
+    // -------------------------------------------------------
+    // Phase 3: CategoryHint Tests
+    // -------------------------------------------------------
+
+    private sealed class CapturingGeminiService : IGeminiService
+    {
+        public string? CapturedPrompt { get; private set; }
+        public string? ResponseToReturn { get; set; }
+
+        public Task<string?> GenerateContentAsync(string prompt, string? systemInstruction = null, CancellationToken cancellationToken = default)
+        {
+            CapturedPrompt = prompt;
+            return Task.FromResult<string?>(ResponseToReturn ?? "{\n  \"category\": \"Plumbing\",\n  \"problemSummary\": \"Possible pipe leak.\",\n  \"urgency\": \"Medium\",\n  \"confidence\": 0.9,\n  \"needsMoreInformation\": false,\n  \"followUpQuestions\": []\n}");
+        }
+    }
+
+    [Fact]
+    public void ProblemUnderstandingInput_SupportsNullCategoryHint()
+    {
+        var input = new ProblemUnderstandingInput
+        {
+            ServiceRequestId = Guid.NewGuid(),
+            Description = "Leaking pipe under sink",
+            CategoryHint = null
+        };
+
+        Assert.Null(input.CategoryHint);
+    }
+
+    [Theory]
+    [InlineData("Plumbing")]
+    [InlineData("Electrical")]
+    [InlineData("Vehicle Repair")]
+    [InlineData("Appliance Repair")]
+    public void ProblemUnderstandingInput_SupportsValidCategoryHint(string hint)
+    {
+        var input = new ProblemUnderstandingInput
+        {
+            ServiceRequestId = Guid.NewGuid(),
+            Description = "Test description",
+            CategoryHint = hint
+        };
+
+        Assert.Equal(hint, input.CategoryHint);
+    }
+
+    [Fact]
+    public void BuildPrompt_OmitsHintContext_WhenCategoryHintIsNull()
+    {
+        var prompt = ProblemUnderstandingAgent.BuildPrompt("Water leaking heavily from pipe", "Colombo", null);
+
+        Assert.Contains("Customer Description:", prompt);
+        Assert.Contains("<customer_description>", prompt);
+        Assert.Contains("Water leaking heavily from pipe", prompt);
+        Assert.Contains("</customer_description>", prompt);
+        Assert.Contains("Customer Location: \"Colombo\"", prompt);
+        Assert.DoesNotContain("Customer Category Preference", prompt);
+        Assert.DoesNotContain("CategoryHint: null", prompt);
+    }
+
+    [Fact]
+    public void BuildPrompt_ContainsHint_WhenHintIsProvided()
+    {
+        var prompt = ProblemUnderstandingAgent.BuildPrompt("Water leaking heavily from pipe", "Colombo", "Electrical");
+
+        Assert.Contains("Customer Category Preference (Unverified Context): \"Electrical\"", prompt);
+        Assert.Contains("Note: The customer selected the service preference above as an initial belief.", prompt);
+        Assert.Contains("This is an unverified preference. Independently determine the correct category", prompt);
+        Assert.Contains("Do not force the result to match the customer preference.", prompt);
+    }
+
+    [Fact]
+    public void BuildPrompt_ExplicitlyPresentsHintAsNonAuthoritative()
+    {
+        var prompt = ProblemUnderstandingAgent.BuildPrompt("My car stopped on the road", "Kandy", "Plumbing");
+
+        Assert.Contains("Unverified Context", prompt);
+        Assert.Contains("Independently determine the correct category based on the actual problem description", prompt);
+        Assert.Contains("If the preference conflicts with the problem description, return the canonical category best supported by the problem.", prompt);
+    }
+
+    [Fact]
+    public async Task Agent_PassesCategoryHintToPrompt_WhenHintExistsInContext()
+    {
+        var capturingGemini = new CapturingGeminiService();
+        var toolRegistry = new ToolRegistry();
+        var toolExecutor = new ToolExecutor(toolRegistry);
+        var agent = new ProblemUnderstandingAgent(toolExecutor, capturingGemini, NullLogger<ProblemUnderstandingAgent>.Instance);
+
+        var context = BuildContext(
+            description: "Sparking wall socket in the living room",
+            locationText: "Colombo",
+            categoryHint: "Electrical");
+
+        var result = await agent.ExecuteAsync(context);
+
+        Assert.True(result.Success);
+        Assert.NotNull(capturingGemini.CapturedPrompt);
+        Assert.Contains("Customer Category Preference (Unverified Context): \"Electrical\"", capturingGemini.CapturedPrompt);
+    }
+
+    [Fact]
+    public async Task Agent_OmitsCategoryHintFromPrompt_WhenHintIsNullInContext()
+    {
+        var capturingGemini = new CapturingGeminiService();
+        var toolRegistry = new ToolRegistry();
+        var toolExecutor = new ToolExecutor(toolRegistry);
+        var agent = new ProblemUnderstandingAgent(toolExecutor, capturingGemini, NullLogger<ProblemUnderstandingAgent>.Instance);
+
+        var context = BuildContext(
+            description: "Sparking wall socket in the living room",
+            locationText: "Colombo",
+            categoryHint: null);
+
+        var result = await agent.ExecuteAsync(context);
+
+        Assert.True(result.Success);
+        Assert.NotNull(capturingGemini.CapturedPrompt);
+        Assert.DoesNotContain("Customer Category Preference", capturingGemini.CapturedPrompt);
+        Assert.DoesNotContain("CategoryHint: null", capturingGemini.CapturedPrompt);
+    }
+
+    [Fact]
+    public async Task Agent_Disagreement_CanReturnPlumbing_WhenCategoryHintIsElectrical()
+    {
+        var capturingGemini = new CapturingGeminiService
+        {
+            ResponseToReturn = "{\n  \"category\": \"Plumbing\",\n  \"problemSummary\": \"Possible water leakage from kitchen sink pipe.\",\n  \"urgency\": \"High\",\n  \"confidence\": 0.92,\n  \"needsMoreInformation\": false,\n  \"followUpQuestions\": []\n}"
+        };
+        var toolRegistry = new ToolRegistry();
+        var toolExecutor = new ToolExecutor(toolRegistry);
+        var agent = new ProblemUnderstandingAgent(toolExecutor, capturingGemini, NullLogger<ProblemUnderstandingAgent>.Instance);
+
+        var context = BuildContext(
+            description: "Water is leaking heavily from the pipe under my kitchen sink.",
+            locationText: "Colombo",
+            categoryHint: "Electrical");
+
+        var result = await agent.ExecuteAsync(context);
+
+        Assert.True(result.Success);
+        var output = ExtractOutput(result);
+        Assert.Equal("Plumbing", output.Category);
+    }
+
+    [Fact]
+    public async Task Agent_Disagreement_CanReturnElectrical_WhenCategoryHintIsVehicleRepair()
+    {
+        var capturingGemini = new CapturingGeminiService
+        {
+            ResponseToReturn = "{\n  \"category\": \"Electrical\",\n  \"problemSummary\": \"Possible socket circuit failure.\",\n  \"urgency\": \"Medium\",\n  \"confidence\": 0.88,\n  \"needsMoreInformation\": false,\n  \"followUpQuestions\": []\n}"
+        };
+        var toolRegistry = new ToolRegistry();
+        var toolExecutor = new ToolExecutor(toolRegistry);
+        var agent = new ProblemUnderstandingAgent(toolExecutor, capturingGemini, NullLogger<ProblemUnderstandingAgent>.Instance);
+
+        var context = BuildContext(
+            description: "The electrical sockets in my bedroom have stopped working.",
+            locationText: "Colombo",
+            categoryHint: "Vehicle Repair");
+
+        var result = await agent.ExecuteAsync(context);
+
+        Assert.True(result.Success);
+        var output = ExtractOutput(result);
+        Assert.Equal("Electrical", output.Category);
     }
 }

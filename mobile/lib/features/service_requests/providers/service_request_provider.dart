@@ -1,15 +1,25 @@
+import 'dart:async';
+
 import 'package:flutter/foundation.dart';
 
 import '../models/create_service_request_dto.dart';
 import '../models/problem_understanding_result_model.dart';
 import '../models/service_request_model.dart';
+import '../models/service_request_status.dart';
+import '../models/submit_clarification_answers_dto.dart';
 import '../models/update_service_request_dto.dart';
 import '../services/service_request_service.dart';
 
 class ServiceRequestProvider extends ChangeNotifier {
   final ServiceRequestService serviceRequestService;
+  final Duration reconciliationPollInterval;
+  final int maxReconciliationPolls;
 
-  ServiceRequestProvider({required this.serviceRequestService});
+  ServiceRequestProvider({
+    required this.serviceRequestService,
+    this.reconciliationPollInterval = const Duration(seconds: 2),
+    this.maxReconciliationPolls = 12,
+  });
 
   List<ServiceRequestModel> _requests = [];
   ServiceRequestModel? _currentRequest;
@@ -20,6 +30,20 @@ class ServiceRequestProvider extends ChangeNotifier {
   bool _isAnalyzing = false;
   bool _analysisStateNeedsRefresh = false;
   String? _error;
+  bool _isDisposed = false;
+
+  @override
+  void dispose() {
+    _isDisposed = true;
+    super.dispose();
+  }
+
+  @override
+  void notifyListeners() {
+    if (!_isDisposed) {
+      super.notifyListeners();
+    }
+  }
 
   List<ServiceRequestModel> get requests => List.unmodifiable(_requests);
   ServiceRequestModel? get currentRequest => _currentRequest;
@@ -28,6 +52,7 @@ class ServiceRequestProvider extends ChangeNotifier {
   bool get isAnalyzing => _isAnalyzing;
   bool get analysisStateNeedsRefresh => _analysisStateNeedsRefresh;
   String? get error => _error;
+  bool get isDisposed => _isDisposed;
 
   void clearError() {
     _error = null;
@@ -163,7 +188,11 @@ class ServiceRequestProvider extends ChangeNotifier {
     }
   }
 
-  Future<ProblemUnderstandingResultModel?> analyzeRequest(String id) async {
+  Future<ProblemUnderstandingResultModel?> analyzeRequest(
+    String id, {
+    Duration? pollInterval,
+    int? maxPolls,
+  }) async {
     if (_isAnalyzing || _analysisStateNeedsRefresh) {
       return null;
     }
@@ -199,24 +228,86 @@ class ServiceRequestProvider extends ChangeNotifier {
       return result;
     } catch (err) {
       final analysisError = serviceRequestService.getAnalysisErrorMessage(err);
+      final isTimeoutOrUncertain =
+          serviceRequestService.isTimeoutOrUncertainTransport(err);
 
-      // Attempt authoritative state synchronization in its own try/catch
-      try {
-        final refreshed = await serviceRequestService.getById(id);
-        _currentRequest = refreshed;
-        _updateRequestInList(refreshed);
-        _analysisStateNeedsRefresh = false;
-      } catch (_) {
-        // If synchronization itself fails:
-        // - preserve the original analysis error
-        // - set analysisStateNeedsRefresh = true
-        // - do NOT assume Created
-        // - do NOT assume Analyzing
-        // - do NOT allow another Analyze request until authoritative state is refreshed
-        _analysisStateNeedsRefresh = true;
+      if (!isTimeoutOrUncertain) {
+        // Deterministic HTTP/API error (e.g. 400, 403, 404, 409, 500)
+        // Attempt one authoritative GET to synchronize state
+        try {
+          final refreshed = await serviceRequestService.getById(id);
+          _currentRequest = refreshed;
+          _updateRequestInList(refreshed);
+          _analysisStateNeedsRefresh = false;
+        } catch (_) {
+          _analysisStateNeedsRefresh = true;
+        }
+
+        _error = analysisError;
+        return null;
       }
 
-      _error = analysisError;
+      // Timeout / uncertain transport outcome where server completion is unknown:
+      // 1. Initial authoritative GET
+      ServiceRequestModel refreshed;
+      try {
+        refreshed = await serviceRequestService.getById(id);
+      } catch (_) {
+        // Authoritative GET itself failed -> state is genuinely uncertain
+        _analysisStateNeedsRefresh = true;
+        _error = analysisError;
+        return null;
+      }
+
+      _currentRequest = refreshed;
+      _updateRequestInList(refreshed);
+      _analysisStateNeedsRefresh = false;
+      _error = null; // Backend reachable; clear transport timeout error
+
+      // 2. If status has already transitioned away from Analyzing, stop immediately
+      if (refreshed.status != ServiceRequestStatus.analyzing) {
+        return null;
+      }
+
+      // 3. Status is still Analyzing -> enter bounded reconciliation polling (GET only)
+      final interval = pollInterval ?? reconciliationPollInterval;
+      final limit = maxPolls ?? maxReconciliationPolls;
+      int pollCount = 0;
+
+      while (pollCount < limit) {
+        pollCount++;
+        if (interval > Duration.zero) {
+          await Future.delayed(interval);
+        }
+
+        if (_isDisposed || _currentRequest?.serviceRequestId != id) {
+          return null;
+        }
+
+        try {
+          final pollRefreshed = await serviceRequestService.getById(id);
+          _currentRequest = pollRefreshed;
+          _updateRequestInList(pollRefreshed);
+          _error = null;
+
+          if (pollRefreshed.status != ServiceRequestStatus.analyzing) {
+            _analysisStateNeedsRefresh = false;
+            return null;
+          }
+        } catch (pollErr) {
+          // If polling GET becomes unreliable, mark state as needing refresh
+          _analysisStateNeedsRefresh = true;
+          _error = serviceRequestService.getErrorMessage(pollErr);
+          return null;
+        }
+      }
+
+      // 4. Grace period expired while backend is still Analyzing:
+      // Leave authoritative request status as Analyzing,
+      // clear error (informational UI is driven by status/isAnalyzing/analysisStateNeedsRefresh),
+      // analysisStateNeedsRefresh remains false because backend was reached.
+      _analysisStateNeedsRefresh = false;
+      _error = null;
       return null;
     } finally {
       _setAnalyzing(false);
@@ -240,6 +331,58 @@ class ServiceRequestProvider extends ChangeNotifier {
     } finally {
       _setLoading(false);
     }
+  }
+
+  Future<bool> submitClarificationAnswers(
+    String id,
+    int round,
+    Map<String, String> answers,
+  ) async {
+    _setLoading(true);
+    _error = null;
+
+    try {
+      final submission = SubmitClarificationAnswersDto(
+        clarificationRound: round,
+        answers: answers.entries
+            .map((e) => ClarificationAnswerSubmissionItemDto(
+                  clarificationId: e.key,
+                  answer: e.value,
+                ))
+            .toList(),
+      );
+
+      final updatedClarifications =
+          await serviceRequestService.submitClarificationAnswers(id, submission);
+
+      if (_currentRequest != null && _currentRequest!.serviceRequestId == id) {
+        _currentRequest = _currentRequest!.copyWith(
+          clarifications: updatedClarifications,
+        );
+        _updateRequestInList(_currentRequest!);
+      }
+
+      return true;
+    } catch (err) {
+      _error = serviceRequestService.getErrorMessage(err);
+      return false;
+    } finally {
+      _setLoading(false);
+    }
+  }
+
+  Future<ProblemUnderstandingResultModel?> submitClarificationAnswersAndReanalyze(
+    String id,
+    int round,
+    Map<String, String> answers, {
+    Duration? pollInterval,
+    int? maxPolls,
+  }) async {
+    final success = await submitClarificationAnswers(id, round, answers);
+    if (!success) {
+      return null;
+    }
+    return analyzeRequest(id, pollInterval: pollInterval, maxPolls: maxPolls);
   }
 
   void reset() {

@@ -1,9 +1,14 @@
+import 'problem_analysis_summary_model.dart';
+import 'service_request_clarification_model.dart';
 import 'service_request_status.dart';
 import 'service_request_urgency.dart';
 
 class ServiceRequestModel {
+  static const Object _sentinel = Object();
+
   final String serviceRequestId;
   final String customerId;
+  final String? categoryHint;
   final String category;
   final String description;
   final String locationText;
@@ -13,10 +18,13 @@ class ServiceRequestModel {
   final ServiceRequestStatus status;
   final DateTime createdAt;
   final DateTime updatedAt;
+  final ProblemAnalysisSummaryModel? latestAnalysis;
+  final List<ServiceRequestClarificationModel> clarifications;
 
   const ServiceRequestModel({
     required this.serviceRequestId,
     required this.customerId,
+    this.categoryHint,
     required this.category,
     required this.description,
     required this.locationText,
@@ -26,12 +34,35 @@ class ServiceRequestModel {
     required this.status,
     required this.createdAt,
     required this.updatedAt,
+    this.latestAnalysis,
+    this.clarifications = const [],
   });
+
+  int get currentClarificationRound => clarifications.isEmpty
+      ? 0
+      : clarifications
+          .map((c) => c.clarificationRound)
+          .reduce((a, b) => a > b ? a : b);
+
+  List<ServiceRequestClarificationModel> get currentRoundClarifications =>
+      clarifications
+          .where((c) => c.clarificationRound == currentClarificationRound)
+          .toList();
+
+  bool get currentRoundIsFullyAnswered =>
+      currentRoundClarifications.isNotEmpty &&
+      currentRoundClarifications.every((c) => c.isAnswered);
+
+  List<ServiceRequestClarificationModel> get pendingQuestions =>
+      currentRoundClarifications.where((c) => c.isActionable).toList();
+
+  bool get hasReachedMaxRounds => currentClarificationRound >= 2;
 
   factory ServiceRequestModel.fromJson(Map<String, dynamic> json) {
     return ServiceRequestModel(
       serviceRequestId: json['serviceRequestId']?.toString() ?? '',
       customerId: json['customerId']?.toString() ?? '',
+      categoryHint: json['categoryHint'] as String?,
       category: json['category'] as String? ?? 'Unclassified',
       description: json['description'] as String? ?? '',
       locationText: json['locationText'] as String? ?? '',
@@ -45,6 +76,15 @@ class ServiceRequestModel {
       updatedAt: json['updatedAt'] != null
           ? DateTime.parse(json['updatedAt'] as String)
           : DateTime.now(),
+      latestAnalysis: json['latestAnalysis'] != null
+          ? ProblemAnalysisSummaryModel.fromJson(
+              Map<String, dynamic>.from(json['latestAnalysis'] as Map))
+          : null,
+      clarifications: (json['clarifications'] as List<dynamic>?)
+              ?.map((e) => ServiceRequestClarificationModel.fromJson(
+                  Map<String, dynamic>.from(e as Map)))
+              .toList() ??
+          const [],
     );
   }
 
@@ -52,6 +92,7 @@ class ServiceRequestModel {
     return {
       'serviceRequestId': serviceRequestId,
       'customerId': customerId,
+      'categoryHint': categoryHint,
       'category': category,
       'description': description,
       'locationText': locationText,
@@ -61,12 +102,15 @@ class ServiceRequestModel {
       'status': status.toJson(),
       'createdAt': createdAt.toIso8601String(),
       'updatedAt': updatedAt.toIso8601String(),
+      'latestAnalysis': latestAnalysis?.toJson(),
+      'clarifications': clarifications.map((c) => c.toJson()).toList(),
     };
   }
 
   ServiceRequestModel copyWith({
     String? serviceRequestId,
     String? customerId,
+    Object? categoryHint = _sentinel,
     String? category,
     String? description,
     String? locationText,
@@ -76,10 +120,15 @@ class ServiceRequestModel {
     ServiceRequestStatus? status,
     DateTime? createdAt,
     DateTime? updatedAt,
+    Object? latestAnalysis = _sentinel,
+    List<ServiceRequestClarificationModel>? clarifications,
   }) {
     return ServiceRequestModel(
       serviceRequestId: serviceRequestId ?? this.serviceRequestId,
       customerId: customerId ?? this.customerId,
+      categoryHint: identical(categoryHint, _sentinel)
+          ? this.categoryHint
+          : categoryHint as String?,
       category: category ?? this.category,
       description: description ?? this.description,
       locationText: locationText ?? this.locationText,
@@ -89,6 +138,10 @@ class ServiceRequestModel {
       status: status ?? this.status,
       createdAt: createdAt ?? this.createdAt,
       updatedAt: updatedAt ?? this.updatedAt,
+      latestAnalysis: identical(latestAnalysis, _sentinel)
+          ? this.latestAnalysis
+          : latestAnalysis as ProblemAnalysisSummaryModel?,
+      clarifications: clarifications ?? this.clarifications,
     );
   }
 }

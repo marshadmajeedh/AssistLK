@@ -25,4 +25,7 @@ public class ApplyProblemAnalysisResult
     public string AgentName { get; set; } = string.Empty;
 
     public bool NeedsMoreInformation { get; set; }
+ 
+    public IReadOnlyList<string> FollowUpQuestions { get; set; }
+        = Array.Empty<string>();
 }

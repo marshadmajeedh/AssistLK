@@ -3,20 +3,23 @@ class UpdateServiceRequestDto {
   final String locationText;
   final double? latitude;
   final double? longitude;
+  final String? categoryHint;
 
   const UpdateServiceRequestDto({
     required this.description,
     required this.locationText,
     this.latitude,
     this.longitude,
+    this.categoryHint,
   });
 
   Map<String, dynamic> toJson() {
     return {
       'description': description.trim(),
       'locationText': locationText.trim(),
-      if (latitude != null) 'latitude': latitude,
-      if (longitude != null) 'longitude': longitude,
+      'latitude': latitude,
+      'longitude': longitude,
+      'categoryHint': categoryHint,
     };
   }
 
@@ -32,6 +35,9 @@ class UpdateServiceRequestDto {
     }
     if (locationText.trim().length > 255) {
       return 'Location cannot exceed 255 characters.';
+    }
+    if ((latitude == null) != (longitude == null)) {
+      return 'Both latitude and longitude must be provided together.';
     }
     if (latitude != null && (latitude! < -90 || latitude! > 90)) {
       return 'Latitude must be between -90 and 90.';

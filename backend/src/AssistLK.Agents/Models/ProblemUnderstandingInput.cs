@@ -35,4 +35,17 @@ public class ProblemUnderstandingInput
     /// Optional GPS longitude coordinate.
     /// </summary>
     public decimal? Longitude { get; set; }
+
+    /// <summary>
+    /// Optional customer service category preference / initial belief.
+    /// Non-authoritative context for the agent.
+    /// </summary>
+    public string? CategoryHint { get; set; }
+
+    /// <summary>
+    /// Historical clarification rounds and answers provided by the customer.
+    /// Supplied as non-authoritative customer evidence.
+    /// </summary>
+    public IReadOnlyList<ClarificationHistoryItem> ClarificationHistory { get; set; }
+        = Array.Empty<ClarificationHistoryItem>();
 }

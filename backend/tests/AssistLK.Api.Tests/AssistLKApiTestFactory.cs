@@ -2,6 +2,8 @@ using System.IdentityModel.Tokens.Jwt;
 using System.Net.Http.Headers;
 using System.Security.Claims;
 using System.Text;
+using AssistLK.Agents.Clients;
+using AssistLK.Api.Tests.TestDoubles;
 using AssistLK.Domain.Enums;
 using AssistLK.Infrastructure.Data;
 using Microsoft.AspNetCore.Hosting;
@@ -26,6 +28,8 @@ public class AssistLKApiTestFactory : WebApplicationFactory<Program>
     public const string TestJwtKey = "TestSecretSigningKeyForJwtBearerAuthentication1234567890!";
     public const string TestIssuer = "AssistLK.Api";
     public const string TestAudience = "AssistLK.Clients";
+
+    public FakeProblemUnderstandingClient FakeAgentClient { get; } = new();
 
     static AssistLKApiTestFactory()
     {
@@ -73,6 +77,15 @@ public class AssistLKApiTestFactory : WebApplicationFactory<Program>
             {
                 options.UseInMemoryDatabase(_databaseName);
             });
+
+            // Decouple from remote Python agent by providing local deterministic fake
+            var clientDescriptor = services.SingleOrDefault(d => d.ServiceType == typeof(IProblemUnderstandingClient));
+            if (clientDescriptor != null)
+            {
+                services.Remove(clientDescriptor);
+            }
+
+            services.AddSingleton<IProblemUnderstandingClient>(FakeAgentClient);
         });
     }
 

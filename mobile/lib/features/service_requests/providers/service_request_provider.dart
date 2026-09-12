@@ -23,8 +23,6 @@ class ServiceRequestProvider extends ChangeNotifier {
 
   List<ServiceRequestModel> _requests = [];
   ServiceRequestModel? _currentRequest;
-  // Backend currently does not persist followUpQuestions.
-  // Stored temporarily until customer completes clarification.
   ProblemUnderstandingResultModel? _currentAnalysis;
   bool _isLoading = false;
   bool _isAnalyzing = false;
@@ -225,6 +223,17 @@ class ServiceRequestProvider extends ChangeNotifier {
         }
       }
 
+      // The analyze response does not contain persisted questions or timestamps.
+      // Refresh once before ending the loading state; never repeat the POST if
+      // this read fails after a successful execution.
+      try {
+        final refreshed = await serviceRequestService.getById(id);
+        _currentRequest = refreshed;
+        _updateRequestInList(refreshed);
+      } catch (refreshError) {
+        _analysisStateNeedsRefresh = true;
+        _error = serviceRequestService.getErrorMessage(refreshError);
+      }
       return result;
     } catch (err) {
       final analysisError = serviceRequestService.getAnalysisErrorMessage(err);

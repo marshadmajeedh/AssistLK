@@ -4,12 +4,14 @@ class AppButton extends StatelessWidget {
   final String text;
   final VoidCallback? onPressed;
   final bool isLoading;
+  final int? maxLines;
 
   const AppButton({
     super.key,
     required this.text,
     required this.onPressed,
     this.isLoading = false,
+    this.maxLines,
   });
 
   @override
@@ -24,7 +26,7 @@ class AppButton extends StatelessWidget {
                 height: 20,
                 child: CircularProgressIndicator(strokeWidth: 2),
               )
-            : Text(text),
+            : Text(text, maxLines: maxLines, softWrap: maxLines == 1 ? false : null),
       ),
     );
   }

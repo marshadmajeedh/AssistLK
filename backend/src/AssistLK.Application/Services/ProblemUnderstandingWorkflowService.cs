@@ -1,7 +1,6 @@
 using System.Diagnostics;
 using System.Globalization;
 using System.Text.Json;
-using AssistLK.Agents.Agents;
 using AssistLK.Agents.Core;
 using AssistLK.Agents.Models;
 using AssistLK.Application.Common.Exceptions;
@@ -209,7 +208,7 @@ public class ProblemUnderstandingWorkflowService
             await StoreMemoryAsync(workflow.Id, output);
 
             // 9. Apply analysis result to domain
-            // Persist using CancellationToken.None so that if Gemini/agent execution successfully
+            // Persist using CancellationToken.None so that if agent execution successfully
             // completes but the HTTP client disconnects before final persistence, the completed
             // analysis is safely preserved rather than discarded solely because RequestAborted is cancelled.
             var applyResult = new ApplyProblemAnalysisResult

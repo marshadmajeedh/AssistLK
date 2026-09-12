@@ -7,6 +7,7 @@ import 'package:mobile/features/auth/models/auth_user.dart';
 import 'package:mobile/features/auth/providers/auth_provider.dart';
 import 'package:mobile/features/auth/services/auth_service.dart';
 import 'package:mobile/features/service_requests/models/create_service_request_dto.dart';
+import 'package:mobile/features/service_requests/models/problem_analysis_summary_model.dart';
 import 'package:mobile/features/service_requests/models/problem_understanding_result_model.dart';
 import 'package:mobile/features/service_requests/models/service_request_model.dart';
 import 'package:mobile/features/service_requests/models/service_request_status.dart';
@@ -181,7 +182,7 @@ void main() {
       await tester.pumpWidget(buildThemedApp(const CustomerHomeScreen()));
       await tester.pumpAndSettle();
 
-      expect(find.text('My Service Requests'), findsOneWidget);
+      expect(find.text('My Requests'), findsOneWidget);
       expect(find.text('Water leak under the kitchen sink'), findsOneWidget);
 
       await simulateMouseHoverSweep(tester);
@@ -241,7 +242,8 @@ void main() {
       );
       await tester.pumpAndSettle();
 
-      expect(find.text('Analyze with Gemini AI'), findsOneWidget);
+      expect(find.text('Analyze with AssistLK AI'), findsOneWidget);
+      expect(find.textContaining('Gemini'), findsNothing);
       await simulateMouseHoverSweep(tester);
     });
 
@@ -337,6 +339,215 @@ void main() {
       expect(find.text('Ready for provider matching'), findsOneWidget);
 
       await simulateMouseHoverSweep(tester);
+    });
+  });
+
+  group('CustomerHomeScreen Responsive Layout Verification (320px, 360px, Desktop)', () {
+    testWidgets('Renders safely on narrow 320px viewport without overflow or truncation',
+        (tester) async {
+      tester.view.physicalSize = const Size(320, 568);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(() {
+        tester.view.resetPhysicalSize();
+        tester.view.resetDevicePixelRatio();
+      });
+
+      mockService.requests = [
+        ServiceRequestModel(
+          serviceRequestId: 'req-narrow-1',
+          customerId: 'cust-1',
+          category: 'Plumbing',
+          description: 'Sink leak in Colombo',
+          locationText: 'Colombo',
+          urgency: ServiceRequestUrgency.medium,
+          status: ServiceRequestStatus.created,
+          createdAt: DateTime(2026, 9, 9),
+          updatedAt: DateTime(2026, 9, 9),
+        ),
+      ];
+
+      await tester.pumpWidget(buildThemedApp(const CustomerHomeScreen()));
+      await tester.pumpAndSettle();
+
+      expect(tester.takeException(), isNull);
+      expect(find.text('My Requests'), findsOneWidget);
+      expect(find.widgetWithText(ElevatedButton, 'Create Request'), findsOneWidget);
+      expect(find.text('Not sure what service you need?'), findsOneWidget);
+      expect(
+        find.text(
+          'Describe your issue in plain language and let AssistLK AI analyze your problem, identify the right service, and estimate urgency.',
+        ),
+        findsOneWidget,
+      );
+      expect(find.text('Let AssistLK AI analyze your problem'), findsOneWidget);
+    });
+
+    testWidgets('Renders safely on 360px viewport without overflow with same-row alignment', (tester) async {
+      tester.view.physicalSize = const Size(360, 640);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(() {
+        tester.view.resetPhysicalSize();
+        tester.view.resetDevicePixelRatio();
+      });
+
+      mockService.requests = [];
+
+      await tester.pumpWidget(buildThemedApp(const CustomerHomeScreen()));
+      await tester.pumpAndSettle();
+
+      expect(tester.takeException(), isNull);
+      expect(find.text('My Requests'), findsOneWidget);
+      expect(find.widgetWithText(ElevatedButton, 'Create Request').first, findsOneWidget);
+      expect(find.text('Not sure what service you need?'), findsOneWidget);
+      expect(
+        find.text(
+          'Describe your issue in plain language and let AssistLK AI analyze your problem, identify the right service, and estimate urgency.',
+        ),
+        findsOneWidget,
+      );
+      expect(find.text('Let AssistLK AI analyze your problem'), findsOneWidget);
+
+      // Verify "My Requests" and "Create Request" are on the SAME horizontal row
+      final titleCenter = tester.getCenter(find.text('My Requests'));
+      final buttonCenter = tester.getCenter(find.widgetWithText(ElevatedButton, 'Create Request').first);
+      expect((titleCenter.dy - buttonCenter.dy).abs(), lessThan(5.0)); // Horizontally aligned on same row
+      expect(titleCenter.dx, lessThan(buttonCenter.dx)); // Title on left, button on right
+    });
+
+    testWidgets('Renders on physical device viewport (390x844) with same-row alignment', (tester) async {
+      tester.view.physicalSize = const Size(390, 844);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(() {
+        tester.view.resetPhysicalSize();
+        tester.view.resetDevicePixelRatio();
+      });
+
+      mockService.requests = [];
+
+      await tester.pumpWidget(buildThemedApp(const CustomerHomeScreen()));
+      await tester.pumpAndSettle();
+
+      expect(tester.takeException(), isNull);
+      expect(find.text('My Requests'), findsOneWidget);
+      expect(find.widgetWithText(ElevatedButton, 'Create Request').first, findsOneWidget);
+
+      final titleCenter = tester.getCenter(find.text('My Requests'));
+      final buttonCenter = tester.getCenter(find.widgetWithText(ElevatedButton, 'Create Request').first);
+      expect((titleCenter.dy - buttonCenter.dy).abs(), lessThan(5.0));
+      expect(titleCenter.dx, lessThan(buttonCenter.dx));
+    });
+
+    testWidgets('Tapping Create Request navigates from responsive header', (tester) async {
+      mockService.requests = [];
+
+      await tester.pumpWidget(buildThemedApp(const CustomerHomeScreen()));
+      await tester.pumpAndSettle();
+
+      final createBtn = find.widgetWithText(ElevatedButton, 'Create Request').first;
+      await tester.ensureVisible(createBtn);
+      await tester.tap(createBtn);
+      await tester.pumpAndSettle();
+
+      expect(find.text('Create Service Request'), findsOneWidget);
+    });
+
+    testWidgets('Tapping AI Assistance Card navigates to create request with AI identification',
+        (tester) async {
+      mockService.requests = [];
+
+      await tester.pumpWidget(buildThemedApp(const CustomerHomeScreen()));
+      await tester.pumpAndSettle();
+
+      final aiCard = find.text('Not sure what service you need?');
+      await tester.ensureVisible(aiCard);
+      await tester.tap(aiCard);
+      await tester.pumpAndSettle();
+
+      expect(find.text('Create Service Request'), findsOneWidget);
+      expect(find.text('Let AssistLK AI identify'), findsOneWidget);
+    });
+
+    testWidgets('Detail screen in Created status renders AssistLK AI elements safely on narrow 320px and 360px viewports',
+        (tester) async {
+      for (final size in const [Size(320, 568), Size(360, 640)]) {
+        tester.view.physicalSize = size;
+        tester.view.devicePixelRatio = 1.0;
+
+        final createdReq = ServiceRequestModel(
+          serviceRequestId: 'req-layout-created-${size.width.toInt()}',
+          customerId: 'cust-1',
+          category: 'Plumbing',
+          description: 'Burst pipe under sink',
+          locationText: 'Colombo 03',
+          urgency: ServiceRequestUrgency.high,
+          status: ServiceRequestStatus.created,
+          createdAt: DateTime(2026, 9, 9),
+          updatedAt: DateTime(2026, 9, 9),
+        );
+        mockService.requests = [createdReq];
+
+        await tester.pumpWidget(
+          buildThemedApp(ServiceRequestDetailScreen(
+            key: ValueKey('created-${size.width.toInt()}'),
+            requestId: createdReq.serviceRequestId,
+          )),
+        );
+        await tester.pumpAndSettle();
+
+        expect(tester.takeException(), isNull);
+        expect(find.text('Next Step: AssistLK AI Analysis'), findsOneWidget);
+        expect(find.text('Analyze with AssistLK AI'), findsOneWidget);
+        expect(find.textContaining('Gemini'), findsNothing);
+
+        tester.view.resetPhysicalSize();
+        tester.view.resetDevicePixelRatio();
+      }
+    });
+
+    testWidgets('Detail screen in Analyzed status renders AssistLK AI elements safely on narrow 320px and 360px viewports',
+        (tester) async {
+      for (final size in const [Size(320, 568), Size(360, 640)]) {
+        tester.view.physicalSize = size;
+        tester.view.devicePixelRatio = 1.0;
+
+        final analyzedReq = ServiceRequestModel(
+          serviceRequestId: 'req-layout-analyzed-${size.width.toInt()}',
+          customerId: 'cust-1',
+          category: 'Electrical Wiring',
+          categoryHint: 'Plumbing Service',
+          description: 'Sparks from switchboard',
+          locationText: 'Colombo 05',
+          urgency: ServiceRequestUrgency.critical,
+          status: ServiceRequestStatus.analyzed,
+          createdAt: DateTime(2026, 9, 9),
+          updatedAt: DateTime(2026, 9, 9),
+          latestAnalysis: ProblemAnalysisSummaryModel(
+            id: 'ana-1',
+            detectedProblem: 'Short circuit detected in main switchboard',
+            confidence: 0.95,
+            agentName: 'AssistLK AI',
+            createdAt: DateTime(2026, 9, 9),
+          ),
+        );
+        mockService.requests = [analyzedReq];
+
+        await tester.pumpWidget(
+          buildThemedApp(ServiceRequestDetailScreen(
+            key: ValueKey('analyzed-${size.width.toInt()}'),
+            requestId: analyzedReq.serviceRequestId,
+          )),
+        );
+        await tester.pumpAndSettle();
+
+        expect(tester.takeException(), isNull);
+        expect(find.byType(AnalysisResultCard), findsOneWidget);
+        expect(find.text('AssistLK AI Analysis'), findsOneWidget);
+        expect(find.text('AssistLK AI classification:'), findsOneWidget);
+        expect(find.textContaining('Gemini'), findsNothing);
+
+        tester.view.resetPhysicalSize();
+        tester.view.resetDevicePixelRatio();
+      }
     });
   });
 }

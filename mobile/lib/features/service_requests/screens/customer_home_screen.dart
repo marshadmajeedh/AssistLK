@@ -1,11 +1,13 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
+import '../../../../shared/theme/app_assets.dart';
 import '../../../../shared/theme/app_colors.dart';
 import '../../../../shared/theme/app_radius.dart';
 import '../../../../shared/theme/app_spacing.dart';
 import '../../../../shared/theme/app_text_styles.dart';
 import '../../../../shared/widgets/app_button.dart';
+import '../../../../shared/widgets/app_image_asset.dart';
 import '../../auth/providers/auth_provider.dart';
 import '../models/canonical_service_category.dart';
 import '../providers/service_request_provider.dart';
@@ -75,47 +77,93 @@ class _CustomerHomeScreenState extends State<CustomerHomeScreen> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              // 1. Welcome Section
+              // 1. Hero Welcome Section
               Container(
                 width: double.infinity,
-                padding: const EdgeInsets.all(AppSpacing.lg),
+                height: 135,
                 decoration: BoxDecoration(
-                  gradient: const LinearGradient(
-                    colors: [AppColors.primary, AppColors.primaryDark],
-                    begin: Alignment.topLeft,
-                    end: Alignment.bottomRight,
-                  ),
                   borderRadius: BorderRadius.circular(AppRadius.large),
+                  border: Border.all(color: AppColors.border),
+                  color: AppColors.surface,
                 ),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
+                clipBehavior: Clip.antiAlias,
+                child: Stack(
                   children: [
-                    Text(
-                      'Welcome, ${auth.user?.fullName ?? 'Customer'}',
-                      style: AppTextStyles.sectionHeading.copyWith(
-                        color: Colors.white,
+                    const SizedBox(
+                      width: double.infinity,
+                      height: 135,
+                      child: AppImageAsset(
+                        assetPath: AppAssets.homeServiceHero,
+                        fit: BoxFit.cover,
+                        fallbackIcon: Icons.home_repair_service_rounded,
+                        semanticLabel: 'Home Service Assistance',
                       ),
                     ),
-                    const SizedBox(height: AppSpacing.xs),
-                    Text(
-                      auth.user?.email ?? '',
-                      style: AppTextStyles.small.copyWith(
-                        color: Colors.white.withValues(alpha: 0.8),
+                    Container(
+                      width: double.infinity,
+                      height: 135,
+                      decoration: BoxDecoration(
+                        gradient: LinearGradient(
+                          begin: Alignment.centerLeft,
+                          end: Alignment.centerRight,
+                          colors: [
+                            AppColors.primaryDark.withValues(alpha: 0.92),
+                            AppColors.primaryDark.withValues(alpha: 0.70),
+                            Colors.transparent,
+                          ],
+                        ),
                       ),
-                    ),
-                    const SizedBox(height: AppSpacing.md),
-                    const Text(
-                      'Need help with plumbing, electrical, or home repairs? Create a request and let Gemini AI understand your problem.',
-                      style: TextStyle(
-                        fontSize: 13,
-                        color: Colors.white,
-                        height: 1.4,
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: AppSpacing.md,
+                        vertical: AppSpacing.sm,
+                      ),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          Text(
+                            'Welcome, ${auth.user?.fullName ?? 'Customer'}',
+                            style: AppTextStyles.sectionHeading.copyWith(
+                              color: Colors.white,
+                              fontWeight: FontWeight.w700,
+                            ),
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                          const SizedBox(height: 2),
+                          Text(
+                            auth.user?.email ?? '',
+                            style: AppTextStyles.small.copyWith(
+                              color: Colors.white.withValues(alpha: 0.85),
+                            ),
+                          ),
+                          const SizedBox(height: AppSpacing.xs),
+                          Container(
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 8,
+                              vertical: 2,
+                            ),
+                            decoration: BoxDecoration(
+                              color: Colors.white.withValues(alpha: 0.2),
+                              borderRadius:
+                                  BorderRadius.circular(AppRadius.small),
+                            ),
+                            child: const Text(
+                              'Home & Vehicle Assistance',
+                              style: TextStyle(
+                                fontSize: 10,
+                                color: Colors.white,
+                                fontWeight: FontWeight.w600,
+                              ),
+                            ),
+                          ),
+                        ],
                       ),
                     ),
                   ],
                 ),
               ),
-              const SizedBox(height: AppSpacing.lg),
+              const SizedBox(height: AppSpacing.md),
 
               // 2. Service Shortcuts Section
               const Text(
@@ -201,15 +249,25 @@ class _CustomerHomeScreenState extends State<CustomerHomeScreen> {
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         Container(
-                          padding: const EdgeInsets.all(AppSpacing.sm),
+                          width: 48,
+                          height: 48,
+                          padding: const EdgeInsets.all(AppSpacing.xs),
                           decoration: BoxDecoration(
-                            color: AppColors.primary.withValues(alpha: 0.1),
-                            borderRadius: BorderRadius.circular(AppRadius.medium),
+                            color: AppColors.aiSurface,
+                            borderRadius:
+                                BorderRadius.circular(AppRadius.medium),
+                            border:
+                                Border.all(color: const Color(0xFFDDD6FE)),
                           ),
-                          child: const Icon(
-                            Icons.auto_awesome_rounded,
-                            color: AppColors.primary,
-                            size: 24,
+                          child: const Center(
+                            child: AppImageAsset(
+                              assetPath: AppAssets.aiDiagnosisSpark,
+                              width: 38,
+                              height: 38,
+                              fit: BoxFit.contain,
+                              fallbackIcon: Icons.auto_awesome_rounded,
+                              semanticLabel: 'AssistLK AI Problem Understanding',
+                            ),
                           ),
                         ),
                         const SizedBox(width: AppSpacing.md),
@@ -223,7 +281,7 @@ class _CustomerHomeScreenState extends State<CustomerHomeScreen> {
                               ),
                               const SizedBox(height: AppSpacing.xs),
                               Text(
-                                'Describe your problem in plain language and let AssistLK AI identify the right service and urgency.',
+                                'Describe your issue in plain language and let AssistLK AI analyze your problem, identify the right service, and estimate urgency.',
                                 style: AppTextStyles.body.copyWith(
                                   color: AppColors.textSecondary,
                                 ),
@@ -231,15 +289,15 @@ class _CustomerHomeScreenState extends State<CustomerHomeScreen> {
                               const SizedBox(height: AppSpacing.sm),
                               Row(
                                 mainAxisSize: MainAxisSize.min,
+                                crossAxisAlignment: CrossAxisAlignment.center,
                                 children: [
                                   Flexible(
                                     child: Text(
-                                      'Let AI understand your problem',
+                                      'Let AssistLK AI analyze your problem',
                                       style: AppTextStyles.small.copyWith(
                                         color: AppColors.primary,
                                         fontWeight: FontWeight.w600,
                                       ),
-                                      overflow: TextOverflow.ellipsis,
                                     ),
                                   ),
                                   const SizedBox(width: 4),
@@ -260,15 +318,14 @@ class _CustomerHomeScreenState extends State<CustomerHomeScreen> {
               ),
               const SizedBox(height: AppSpacing.lg),
 
-              // 4. Action Row: "My Service Requests" Title and "Create Request" Button
+              // 4. Action Row: "My Requests" Title and "Create Request" Button
               Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                crossAxisAlignment: CrossAxisAlignment.center,
                 children: [
                   const Expanded(
                     child: Text(
-                      'My Service Requests',
+                      'My Requests',
                       style: AppTextStyles.sectionHeading,
-                      overflow: TextOverflow.ellipsis,
                     ),
                   ),
                   const SizedBox(width: AppSpacing.sm),
@@ -279,11 +336,12 @@ class _CustomerHomeScreenState extends State<CustomerHomeScreen> {
                     style: ElevatedButton.styleFrom(
                       minimumSize: const Size(0, 40),
                       padding: const EdgeInsets.symmetric(
-                        horizontal: AppSpacing.md,
+                        horizontal: 12,
                         vertical: AppSpacing.sm,
                       ),
                       shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(AppRadius.medium),
+                        borderRadius:
+                            BorderRadius.circular(AppRadius.medium),
                       ),
                     ),
                   ),
@@ -337,17 +395,13 @@ class _CustomerHomeScreenState extends State<CustomerHomeScreen> {
       child: Column(
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
-          Container(
-            padding: const EdgeInsets.all(AppSpacing.md),
-            decoration: BoxDecoration(
-              color: AppColors.primary.withValues(alpha: 0.08),
-              shape: BoxShape.circle,
-            ),
-            child: const Icon(
-              Icons.assignment_outlined,
-              size: 40,
-              color: AppColors.primary,
-            ),
+          const AppImageAsset(
+            assetPath: AppAssets.emptyRequests,
+            width: 140,
+            height: 140,
+            fit: BoxFit.contain,
+            fallbackIcon: Icons.assignment_outlined,
+            semanticLabel: 'No service requests',
           ),
           const SizedBox(height: AppSpacing.md),
           const Text(
@@ -357,7 +411,7 @@ class _CustomerHomeScreenState extends State<CustomerHomeScreen> {
           ),
           const SizedBox(height: AppSpacing.xs),
           Text(
-            'You haven\'t created any service requests. Describe your problem to get started with AI diagnosis.',
+            'You haven\'t created any service requests. Describe your problem to get started with AssistLK AI.',
             style: AppTextStyles.body.copyWith(
               color: AppColors.textSecondary,
             ),

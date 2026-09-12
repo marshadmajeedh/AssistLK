@@ -351,13 +351,105 @@ public class ServiceRequestServiceTests
         repositories.Requests.Single().Category = "Vehicle Repair";
         repositories.Requests.Single().Urgency = ServiceRequestUrgency.High;
         repositories.Requests.Single().Status = ServiceRequestStatus.ReadyForMatching;
+        repositories.Requests.Single().LocationSource = LocationSource.OpenStreetMap;
+        repositories.Requests.Single().Latitude = 6.905m;
+        repositories.Requests.Single().Longitude = 79.9195m;
 
         var matching = await repositories.Service.GetReadyForMatchingAsync(response.ServiceRequestId);
 
         Assert.NotNull(matching);
+        Assert.Equal("Colombo", matching.LocationText);
+        Assert.Equal(LocationSource.OpenStreetMap, matching.LocationSource);
+        Assert.Equal(6.905m, matching.Latitude);
+        Assert.Equal(79.9195m, matching.Longitude);
         Assert.Equal("Engine issue", matching!.ProblemSummary);
         Assert.Equal(ServiceRequestStatus.ReadyForMatching, matching.Status);
         Assert.DoesNotContain("CustomerId", matching.GetType().GetProperties().Select(x => x.Name));
+    }
+
+    [Fact]
+    public async Task GetAllForAdminAsync_ReturnsAllRequestsAcrossCustomers()
+    {
+        var repositories = CreateService();
+        var customer1 = Guid.NewGuid();
+        var customer2 = Guid.NewGuid();
+
+        await CreateRequest(repositories.Service, customer1, "Issue 1");
+        await CreateRequest(repositories.Service, customer2, "Issue 2");
+
+        var results = await repositories.Service.GetAllForAdminAsync();
+
+        Assert.Equal(2, results.Count);
+    }
+
+    [Fact]
+    public async Task GetAllForAdminAsync_FiltersCorrectly()
+    {
+        var repositories = CreateService();
+        var c1 = Guid.NewGuid();
+        var req1 = await CreateRequest(repositories.Service, c1, "Plumbing request");
+        var req2 = await CreateRequest(repositories.Service, c1, "Electrical request");
+
+        repositories.Requests.Single(x => x.Id == req1.ServiceRequestId).Category = "Plumbing";
+        repositories.Requests.Single(x => x.Id == req1.ServiceRequestId).Status = ServiceRequestStatus.Analyzed;
+        repositories.Requests.Single(x => x.Id == req1.ServiceRequestId).Urgency = ServiceRequestUrgency.High;
+
+        repositories.Requests.Single(x => x.Id == req2.ServiceRequestId).Category = "Electrical";
+        repositories.Requests.Single(x => x.Id == req2.ServiceRequestId).Status = ServiceRequestStatus.Created;
+        repositories.Requests.Single(x => x.Id == req2.ServiceRequestId).Urgency = ServiceRequestUrgency.Low;
+
+        var plumbingOnly = await repositories.Service.GetAllForAdminAsync(category: "Plumbing");
+        Assert.Single(plumbingOnly);
+        Assert.Equal(req1.ServiceRequestId, plumbingOnly[0].ServiceRequestId);
+
+        var analyzedOnly = await repositories.Service.GetAllForAdminAsync(status: "Analyzed");
+        Assert.Single(analyzedOnly);
+        Assert.Equal(req1.ServiceRequestId, analyzedOnly[0].ServiceRequestId);
+
+        var highOnly = await repositories.Service.GetAllForAdminAsync(urgency: "High");
+        Assert.Single(highOnly);
+        Assert.Equal(req1.ServiceRequestId, highOnly[0].ServiceRequestId);
+
+        var combined = await repositories.Service.GetAllForAdminAsync(status: "Analyzed", category: "Plumbing", urgency: "High");
+        Assert.Single(combined);
+
+        var nonMatching = await repositories.Service.GetAllForAdminAsync(status: "Cancelled");
+        Assert.Empty(nonMatching);
+    }
+
+    [Theory]
+    [InlineData("InvalidStatus", null, null)]
+    [InlineData(null, "InvalidCategory", null)]
+    [InlineData(null, null, "InvalidUrgency")]
+    public async Task GetAllForAdminAsync_InvalidFilters_ThrowArgumentException(string? status, string? category, string? urgency)
+    {
+        var repositories = CreateService();
+
+        await Assert.ThrowsAsync<ArgumentException>(() =>
+            repositories.Service.GetAllForAdminAsync(status, category, urgency));
+    }
+
+    [Fact]
+    public async Task GetByIdForAdminAsync_ReturnsDetail_RegardlessOfCustomer()
+    {
+        var repositories = CreateService();
+        var customerId = Guid.NewGuid();
+        var created = await CreateRequest(repositories.Service, customerId, "Test request");
+
+        var result = await repositories.Service.GetByIdForAdminAsync(created.ServiceRequestId);
+
+        Assert.NotNull(result);
+        Assert.Equal(created.ServiceRequestId, result.ServiceRequestId);
+        Assert.Equal(customerId, result.CustomerId);
+    }
+
+    [Fact]
+    public async Task GetByIdForAdminAsync_NotFound_ThrowsKeyNotFoundException()
+    {
+        var repositories = CreateService();
+
+        await Assert.ThrowsAsync<KeyNotFoundException>(() =>
+            repositories.Service.GetByIdForAdminAsync(Guid.NewGuid()));
     }
 
     private static (ServiceRequestService Service, List<ServiceRequest> Requests, List<ProblemAnalysis> Analyses) CreateService()
@@ -439,6 +531,38 @@ public class ServiceRequestServiceTests
 
         public Task<IReadOnlyList<ServiceRequest>> GetByStatusAsync(ServiceRequestStatus status, CancellationToken cancellationToken = default) =>
             Task.FromResult<IReadOnlyList<ServiceRequest>>(_requests.Where(x => x.Status == status).ToArray());
+
+        public Task<IReadOnlyList<ServiceRequest>> GetAllForAdminAsync(
+            ServiceRequestStatus? status = null,
+            string? category = null,
+            ServiceRequestUrgency? urgency = null,
+            CancellationToken cancellationToken = default)
+        {
+            var query = _requests.AsEnumerable();
+
+            if (status.HasValue)
+            {
+                query = query.Where(x => x.Status == status.Value);
+            }
+
+            if (!string.IsNullOrWhiteSpace(category))
+            {
+                query = query.Where(x => string.Equals(x.Category, category, StringComparison.OrdinalIgnoreCase));
+            }
+
+            if (urgency.HasValue)
+            {
+                query = query.Where(x => x.Urgency == urgency.Value);
+            }
+
+            foreach (var req in query)
+            {
+                req.ProblemAnalyses = _analyses.Where(a => a.ServiceRequestId == req.Id).ToList();
+            }
+
+            return Task.FromResult<IReadOnlyList<ServiceRequest>>(
+                query.OrderByDescending(x => x.CreatedAt).ToArray());
+        }
 
         public Task AddAsync(ServiceRequest serviceRequest, CancellationToken cancellationToken = default)
         {

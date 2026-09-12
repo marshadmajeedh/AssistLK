@@ -12,6 +12,7 @@ namespace AssistLK.Api.Tests;
 /// Unit and integration tests verifying physical .env loading, path resolution,
 /// configuration precedence, User Secrets coexistence, and security isolation.
 /// </summary>
+[Collection("EnvironmentTests")]
 public class DotenvConfigurationTests
 {
     [Fact]

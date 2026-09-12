@@ -1,12 +1,20 @@
+import '../models/location_source.dart';
+import '../widgets/location_attribution.dart';
+import '../providers/location_selection_controller.dart';
+import '../services/location_geocoding_service.dart';
+import '../widgets/location_selection.dart';
+
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
+import '../../../../shared/theme/app_assets.dart';
 import '../../../../shared/theme/app_colors.dart';
 import '../../../../shared/theme/app_radius.dart';
 import '../../../../shared/theme/app_spacing.dart';
 import '../../../../shared/theme/app_text_styles.dart';
 import '../../../../shared/widgets/app_button.dart';
 import '../../../../shared/widgets/app_card.dart';
+import '../../../../shared/widgets/app_image_asset.dart';
 import '../../../../shared/widgets/app_text_field.dart';
 import '../models/canonical_service_category.dart';
 import '../models/create_service_request_dto.dart';
@@ -18,11 +26,13 @@ import 'service_request_detail_screen.dart';
 class CreateServiceRequestScreen extends StatefulWidget {
   final String? initialCategoryPreference;
   final LocationService? locationService;
+  final LocationGeocodingService? geocodingService;
 
   const CreateServiceRequestScreen({
     super.key,
     this.initialCategoryPreference,
     this.locationService,
+    this.geocodingService,
   });
 
   @override
@@ -34,31 +44,49 @@ class _CreateServiceRequestScreenState
     extends State<CreateServiceRequestScreen> {
   int _currentStep = 0;
   String? _selectedPreference;
-  late final LocationService _locationService;
-
-  double? _latitude;
-  double? _longitude;
-  bool _isObtainingLocation = false;
-  String? _locationFeedbackMessage;
-  bool _isLocationError = false;
+  late final LocationSelectionController _location;
 
   final _detailsFormKey = GlobalKey<FormState>();
   final _locationFormKey = GlobalKey<FormState>();
   final _descriptionController = TextEditingController();
-  final _locationController = TextEditingController();
 
   @override
   void initState() {
     super.initState();
     _selectedPreference = widget.initialCategoryPreference;
-    _locationService = widget.locationService ?? GeolocatorLocationService();
+    _location = LocationSelectionController(
+      gps: widget.locationService ?? GeolocatorLocationService(),
+      geocoding:
+          widget.geocodingService ??
+          LocationGeocodingService(
+            apiClient: context
+                .read<ServiceRequestProvider>()
+                .serviceRequestService
+                .apiClient,
+          ),
+    );
   }
 
   @override
   void dispose() {
     _descriptionController.dispose();
-    _locationController.dispose();
+    _location.dispose();
     super.dispose();
+  }
+
+  String _getCategoryAssetPath(CanonicalServiceCategory category) {
+    switch (category.canonicalName) {
+      case 'Plumbing':
+        return AppAssets.plumbingService;
+      case 'Electrical':
+        return AppAssets.electricalService;
+      case 'Vehicle Repair':
+        return AppAssets.vehicleService;
+      case 'Appliance Repair':
+        return AppAssets.applianceService;
+      default:
+        return AppAssets.plumbingService;
+    }
   }
 
   void _showChangePreferenceSheet() {
@@ -95,10 +123,32 @@ class _CreateServiceRequestScreenState
                   ],
                 ),
                 const SizedBox(height: AppSpacing.sm),
-                for (final cat in CanonicalServiceCategory.canonicalShortcuts) ...[
+                for (final cat
+                    in CanonicalServiceCategory.canonicalShortcuts) ...[
                   ListTile(
-                    leading: Icon(cat.icon, color: AppColors.primary),
-                    title: Text(cat.displayName, style: AppTextStyles.cardHeading),
+                    leading: Container(
+                      width: 40,
+                      height: 40,
+                      padding: const EdgeInsets.all(AppSpacing.xs),
+                      decoration: BoxDecoration(
+                        color: AppColors.primarySurface,
+                        borderRadius: BorderRadius.circular(AppRadius.medium),
+                      ),
+                      child: Center(
+                        child: AppImageAsset(
+                          assetPath: _getCategoryAssetPath(cat),
+                          width: 28,
+                          height: 28,
+                          fit: BoxFit.contain,
+                          fallbackIcon: cat.icon,
+                          semanticLabel: cat.displayName,
+                        ),
+                      ),
+                    ),
+                    title: Text(
+                      cat.displayName,
+                      style: AppTextStyles.cardHeading,
+                    ),
                     subtitle: Text(cat.description, style: AppTextStyles.small),
                     trailing: _selectedPreference == cat.canonicalName
                         ? const Icon(Icons.check, color: AppColors.primary)
@@ -113,11 +163,29 @@ class _CreateServiceRequestScreenState
                   const Divider(height: 1, color: AppColors.border),
                 ],
                 ListTile(
-                  leading: const Icon(
-                    Icons.auto_awesome_rounded,
-                    color: AppColors.primary,
+                  leading: Container(
+                    width: 40,
+                    height: 40,
+                    padding: const EdgeInsets.all(AppSpacing.xs),
+                    decoration: BoxDecoration(
+                      color: AppColors.aiSurface,
+                      borderRadius: BorderRadius.circular(AppRadius.medium),
+                    ),
+                    child: const Center(
+                      child: AppImageAsset(
+                        assetPath: AppAssets.aiDiagnosisSpark,
+                        width: 28,
+                        height: 28,
+                        fit: BoxFit.contain,
+                        fallbackIcon: Icons.auto_awesome_rounded,
+                        semanticLabel: 'AssistLK AI Problem Understanding',
+                      ),
+                    ),
                   ),
-                  title: const Text('Let AI identify', style: AppTextStyles.cardHeading),
+                  title: const Text(
+                    'Let AssistLK AI identify',
+                    style: AppTextStyles.cardHeading,
+                  ),
                   subtitle: const Text(
                     'AssistLK AI will determine the service category',
                     style: AppTextStyles.small,
@@ -159,6 +227,7 @@ class _CreateServiceRequestScreenState
   }
 
   void _backToDetails() {
+    _location.cancelPending();
     setState(() {
       _currentStep = 0;
     });
@@ -170,65 +239,18 @@ class _CreateServiceRequestScreenState
     });
   }
 
-  Future<void> _useCurrentLocation() async {
-    setState(() {
-      _isObtainingLocation = true;
-      _locationFeedbackMessage = null;
-      _isLocationError = false;
-    });
-
-    try {
-      final result = await _locationService.getCurrentLocation();
-      if (!mounted) return;
-
-      if (result.isSuccess) {
-        setState(() {
-          _latitude = result.coordinates!.latitude;
-          _longitude = result.coordinates!.longitude;
-          _locationFeedbackMessage = 'GPS location captured';
-          _isLocationError = false;
-        });
-      } else {
-        setState(() {
-          _locationFeedbackMessage = result.message ??
-              'Could not retrieve location. Please enter address manually.';
-          _isLocationError = true;
-        });
-      }
-    } catch (_) {
-      if (!mounted) return;
-      setState(() {
-        _locationFeedbackMessage =
-            'Could not retrieve your current location. Please enter the location manually.';
-        _isLocationError = true;
-      });
-    } finally {
-      if (mounted) {
-        setState(() {
-          _isObtainingLocation = false;
-        });
-      }
-    }
-  }
-
-  void _clearGpsLocation() {
-    setState(() {
-      _latitude = null;
-      _longitude = null;
-      _locationFeedbackMessage = null;
-      _isLocationError = false;
-    });
-  }
-
   Future<void> _submit() async {
+    if (_location.validate() != null) return;
     final provider = context.read<ServiceRequestProvider>();
-    final canonicalHint =
-        CanonicalServiceCategory.toCanonicalCategoryHint(_selectedPreference);
+    final canonicalHint = CanonicalServiceCategory.toCanonicalCategoryHint(
+      _selectedPreference,
+    );
     final dto = CreateServiceRequestDto(
       description: _descriptionController.text.trim(),
-      locationText: _locationController.text.trim(),
-      latitude: _latitude,
-      longitude: _longitude,
+      locationText: _location.text.text.trim(),
+      locationSource: _location.source,
+      latitude: _location.latitude,
+      longitude: _location.longitude,
       categoryHint: canonicalHint,
     );
 
@@ -247,19 +269,15 @@ class _CreateServiceRequestScreenState
       // Navigate to detail screen so customer can trigger AI analysis
       Navigator.of(context).pushReplacement(
         MaterialPageRoute(
-          builder: (_) => ServiceRequestDetailScreen(
-            requestId: created.serviceRequestId,
-          ),
+          builder: (_) =>
+              ServiceRequestDetailScreen(requestId: created.serviceRequestId),
         ),
       );
     } else {
       final errorMessage =
           provider.error ?? 'Failed to create request. Please try again.';
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(errorMessage),
-          backgroundColor: AppColors.error,
-        ),
+        SnackBar(content: Text(errorMessage), backgroundColor: AppColors.error),
       );
     }
   }
@@ -267,9 +285,7 @@ class _CreateServiceRequestScreenState
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(
-        title: const Text('Create Service Request'),
-      ),
+      appBar: AppBar(title: const Text('Create Service Request')),
       body: SafeArea(
         child: Column(
           children: [
@@ -301,7 +317,9 @@ class _CreateServiceRequestScreenState
 
   Widget _buildDetailsStep() {
     final selectedCategory =
-        CanonicalServiceCategory.fromCanonicalOrDisplayName(_selectedPreference);
+        CanonicalServiceCategory.fromCanonicalOrDisplayName(
+          _selectedPreference,
+        );
 
     return Form(
       key: _detailsFormKey,
@@ -320,15 +338,29 @@ class _CreateServiceRequestScreenState
             child: Row(
               children: [
                 Container(
-                  padding: const EdgeInsets.all(AppSpacing.sm),
+                  width: 44,
+                  height: 44,
+                  padding: const EdgeInsets.all(AppSpacing.xs),
                   decoration: BoxDecoration(
-                    color: AppColors.primary.withValues(alpha: 0.08),
+                    color: selectedCategory != null
+                        ? AppColors.primarySurface
+                        : AppColors.aiSurface,
                     borderRadius: BorderRadius.circular(AppRadius.medium),
                   ),
-                  child: Icon(
-                    selectedCategory?.icon ?? Icons.auto_awesome_rounded,
-                    color: AppColors.primary,
-                    size: 22,
+                  child: Center(
+                    child: AppImageAsset(
+                      assetPath: selectedCategory != null
+                          ? _getCategoryAssetPath(selectedCategory)
+                          : AppAssets.aiDiagnosisSpark,
+                      width: 32,
+                      height: 32,
+                      fit: BoxFit.contain,
+                      fallbackIcon:
+                          selectedCategory?.icon ?? Icons.auto_awesome_rounded,
+                      semanticLabel:
+                          selectedCategory?.displayName ??
+                          'AssistLK AI Problem Understanding',
+                    ),
                   ),
                 ),
                 const SizedBox(width: AppSpacing.md),
@@ -342,7 +374,8 @@ class _CreateServiceRequestScreenState
                       ),
                       const SizedBox(height: 2),
                       Text(
-                        selectedCategory?.displayName ?? 'Let AI identify',
+                        selectedCategory?.displayName ??
+                            'Let AssistLK AI identify',
                         style: AppTextStyles.cardHeading,
                       ),
                     ],
@@ -367,9 +400,7 @@ class _CreateServiceRequestScreenState
           const SizedBox(height: AppSpacing.xs),
           Text(
             'AssistLK AI will analyze your description to understand the service requirements and urgency.',
-            style: AppTextStyles.body.copyWith(
-              color: AppColors.textSecondary,
-            ),
+            style: AppTextStyles.body.copyWith(color: AppColors.textSecondary),
           ),
           const SizedBox(height: AppSpacing.lg),
 
@@ -377,8 +408,7 @@ class _CreateServiceRequestScreenState
           AppTextField(
             controller: _descriptionController,
             label: 'Problem Description',
-            hint:
-                'e.g., Water is leaking heavily from the pipe under my kitchen sink...',
+            hint: 'e.g., Water is leaking heavily from the pipe under my kitchen sink...',
             maxLines: 5,
             validator: (value) {
               if (value == null || value.trim().isEmpty) {
@@ -395,207 +425,46 @@ class _CreateServiceRequestScreenState
           ),
           const SizedBox(height: AppSpacing.xl),
 
-          AppButton(
-            text: 'Next: Location',
-            onPressed: _nextFromDetails,
-          ),
+          AppButton(text: 'Next: Location', onPressed: _nextFromDetails),
         ],
       ),
     );
   }
 
-  Widget _buildLocationStep() {
-    return Form(
-      key: _locationFormKey,
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          const Text(
-            'Service Location',
-            style: AppTextStyles.sectionHeading,
-          ),
-          const SizedBox(height: AppSpacing.xs),
-          Text(
-            'Enter the location or address where service is required.',
-            style: AppTextStyles.body.copyWith(
-              color: AppColors.textSecondary,
-            ),
-          ),
-          const SizedBox(height: AppSpacing.lg),
-
-          // GPS Location Action Button
-          SizedBox(
-            width: double.infinity,
-            child: OutlinedButton.icon(
-              key: const Key('use_current_location_button'),
-              onPressed: _isObtainingLocation ? null : _useCurrentLocation,
-              icon: _isObtainingLocation
-                  ? const SizedBox(
-                      width: 18,
-                      height: 18,
-                      child: CircularProgressIndicator(strokeWidth: 2),
-                    )
-                  : const Icon(Icons.my_location_rounded, size: 18),
-              label: Text(
-                _isObtainingLocation
-                    ? 'Acquiring GPS location...'
-                    : 'Use Current Location',
-              ),
-              style: OutlinedButton.styleFrom(
-                foregroundColor: AppColors.primary,
-                side: const BorderSide(color: AppColors.primary),
-                padding: const EdgeInsets.symmetric(
-                  horizontal: AppSpacing.md,
-                  vertical: AppSpacing.sm + 4,
-                ),
+  Widget _buildLocationStep() => Form(
+    key: _locationFormKey,
+    child: Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        LocationSelection(controller: _location),
+        const SizedBox(height: AppSpacing.md),
+        Row(
+          children: [
+            Expanded(
+              child: OutlinedButton(
+                onPressed: _backToDetails,
+                child: const Text('Back'),
               ),
             ),
-          ),
-
-          if (_latitude != null && _longitude != null) ...[
-            const SizedBox(height: AppSpacing.sm),
-            Container(
-              padding: const EdgeInsets.symmetric(
-                horizontal: AppSpacing.md,
-                vertical: AppSpacing.sm,
-              ),
-              decoration: BoxDecoration(
-                color: AppColors.success.withValues(alpha: 0.08),
-                borderRadius: BorderRadius.circular(AppRadius.medium),
-                border: Border.all(
-                  color: AppColors.success.withValues(alpha: 0.3),
-                ),
-              ),
-              child: Row(
-                children: [
-                  const Icon(
-                    Icons.check_circle_rounded,
-                    color: AppColors.success,
-                    size: 18,
-                  ),
-                  const SizedBox(width: AppSpacing.xs),
-                  Expanded(
-                    child: Text(
-                      'GPS location captured (${_latitude!.toStringAsFixed(4)}, ${_longitude!.toStringAsFixed(4)})',
-                      style: AppTextStyles.small.copyWith(
-                        color: AppColors.success,
-                        fontWeight: FontWeight.w600,
-                      ),
-                    ),
-                  ),
-                  TextButton(
-                    onPressed: _clearGpsLocation,
-                    child: const Text(
-                      'Remove GPS',
-                      style: TextStyle(
-                        color: AppColors.error,
-                        fontSize: 12,
-                        fontWeight: FontWeight.w600,
-                      ),
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ] else if (_locationFeedbackMessage != null) ...[
-            const SizedBox(height: AppSpacing.sm),
-            Container(
-              padding: const EdgeInsets.all(AppSpacing.sm),
-              decoration: BoxDecoration(
-                color: (_isLocationError ? AppColors.warning : AppColors.primary)
-                    .withValues(alpha: 0.08),
-                borderRadius: BorderRadius.circular(AppRadius.medium),
-                border: Border.all(
-                  color:
-                      (_isLocationError ? AppColors.warning : AppColors.primary)
-                          .withValues(alpha: 0.3),
-                ),
-              ),
-              child: Row(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Icon(
-                    _isLocationError
-                        ? Icons.info_outline_rounded
-                        : Icons.check_circle_outline_rounded,
-                    color:
-                        _isLocationError ? AppColors.warning : AppColors.primary,
-                    size: 18,
-                  ),
-                  const SizedBox(width: AppSpacing.xs),
-                  Expanded(
-                    child: Text(
-                      _locationFeedbackMessage!,
-                      style: AppTextStyles.small.copyWith(
-                        color: AppColors.textPrimary,
-                      ),
-                    ),
-                  ),
-                ],
+            const SizedBox(width: AppSpacing.md),
+            Expanded(
+              child: AppButton(
+                text: 'Next: Review',
+                onPressed: _nextFromLocation,
               ),
             ),
           ],
-          const SizedBox(height: AppSpacing.md),
-
-          // Divider
-          const Row(
-            children: [
-              Expanded(child: Divider(color: AppColors.border)),
-              Padding(
-                padding: EdgeInsets.symmetric(horizontal: AppSpacing.sm),
-                child: Text(
-                  'or enter address manually',
-                  style: AppTextStyles.small,
-                ),
-              ),
-              Expanded(child: Divider(color: AppColors.border)),
-            ],
-          ),
-          const SizedBox(height: AppSpacing.md),
-
-          // Location Text Field
-          AppTextField(
-            controller: _locationController,
-            label: 'Location / Address',
-            hint: 'e.g., Colombo 03, Havelock Road',
-            validator: (value) {
-              if (value == null || value.trim().isEmpty) {
-                return 'Please provide the service location.';
-              }
-              if (value.trim().length > 255) {
-                return 'Location cannot exceed 255 characters.';
-              }
-              return null;
-            },
-          ),
-          const SizedBox(height: AppSpacing.xl),
-
-          Row(
-            children: [
-              Expanded(
-                child: OutlinedButton(
-                  onPressed: _backToDetails,
-                  child: const Text('Back'),
-                ),
-              ),
-              const SizedBox(width: AppSpacing.md),
-              Expanded(
-                child: AppButton(
-                  text: 'Next: Review',
-                  onPressed: _nextFromLocation,
-                ),
-              ),
-            ],
-          ),
-        ],
-      ),
-    );
-  }
+        ),
+      ],
+    ),
+  );
 
   Widget _buildReviewStep(BuildContext context) {
     final provider = context.watch<ServiceRequestProvider>();
     final selectedCategory =
-        CanonicalServiceCategory.fromCanonicalOrDisplayName(_selectedPreference);
+        CanonicalServiceCategory.fromCanonicalOrDisplayName(
+          _selectedPreference,
+        );
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -607,9 +476,7 @@ class _CreateServiceRequestScreenState
         const SizedBox(height: AppSpacing.xs),
         Text(
           'Verify your request details before submitting.',
-          style: AppTextStyles.body.copyWith(
-            color: AppColors.textSecondary,
-          ),
+          style: AppTextStyles.body.copyWith(color: AppColors.textSecondary),
         ),
         const SizedBox(height: AppSpacing.lg),
 
@@ -618,11 +485,54 @@ class _CreateServiceRequestScreenState
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              const Text('Service preference', style: AppTextStyles.small),
-              const SizedBox(height: 2),
-              Text(
-                selectedCategory?.displayName ?? 'Let AI identify',
-                style: AppTextStyles.cardHeading,
+              Row(
+                children: [
+                  Container(
+                    width: 36,
+                    height: 36,
+                    padding: const EdgeInsets.all(AppSpacing.xs),
+                    decoration: BoxDecoration(
+                      color: selectedCategory != null
+                          ? AppColors.primarySurface
+                          : AppColors.aiSurface,
+                      borderRadius: BorderRadius.circular(AppRadius.medium),
+                    ),
+                    child: Center(
+                      child: AppImageAsset(
+                        assetPath: selectedCategory != null
+                            ? _getCategoryAssetPath(selectedCategory)
+                            : AppAssets.aiDiagnosisSpark,
+                        width: 24,
+                        height: 24,
+                        fit: BoxFit.contain,
+                        fallbackIcon:
+                            selectedCategory?.icon ??
+                            Icons.auto_awesome_rounded,
+                        semanticLabel:
+                            selectedCategory?.displayName ??
+                            'AssistLK AI Problem Understanding',
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: AppSpacing.sm),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        const Text(
+                          'Service preference',
+                          style: AppTextStyles.small,
+                        ),
+                        const SizedBox(height: 2),
+                        Text(
+                          selectedCategory?.displayName ??
+                              'Let AssistLK AI identify',
+                          style: AppTextStyles.cardHeading,
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
               ),
               const SizedBox(height: AppSpacing.md),
               const Divider(height: 1, color: AppColors.border),
@@ -638,11 +548,11 @@ class _CreateServiceRequestScreenState
               const SizedBox(height: AppSpacing.md),
               const Text('Location', style: AppTextStyles.small),
               const SizedBox(height: 2),
-              Text(
-                _locationController.text.trim(),
-                style: AppTextStyles.body,
-              ),
-              if (_latitude != null && _longitude != null) ...[
+              Text(_location.text.text.trim(), style: AppTextStyles.body),
+              if (_location.source == LocationSource.openStreetMap)
+                const LocationAttribution(),
+              if (_location.latitude != null &&
+                  _location.longitude != null) ...[
                 const SizedBox(height: AppSpacing.xs),
                 Row(
                   children: [
@@ -653,7 +563,7 @@ class _CreateServiceRequestScreenState
                     ),
                     const SizedBox(width: AppSpacing.xs),
                     Text(
-                      'GPS location captured (${_latitude!.toStringAsFixed(4)}, ${_longitude!.toStringAsFixed(4)})',
+                      'GPS location captured',
                       style: AppTextStyles.small.copyWith(
                         color: AppColors.success,
                         fontWeight: FontWeight.w600,
@@ -674,9 +584,7 @@ class _CreateServiceRequestScreenState
           decoration: BoxDecoration(
             color: AppColors.primary.withValues(alpha: 0.05),
             borderRadius: BorderRadius.circular(AppRadius.medium),
-            border: Border.all(
-              color: AppColors.primary.withValues(alpha: 0.2),
-            ),
+            border: Border.all(color: AppColors.primary.withValues(alpha: 0.2)),
           ),
           child: Row(
             crossAxisAlignment: CrossAxisAlignment.start,

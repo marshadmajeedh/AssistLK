@@ -43,7 +43,8 @@ public class MigrationPostgreSqlTests
                 "AddAgentExecutionMetrics",
                 "AddServiceRequestAndProblemAnalysis",
                 "AddCategoryHintToServiceRequests",
-                "AddServiceRequestClarifications"
+                "AddServiceRequestClarifications",
+                "AddServiceRequestLocationSource"
             };
 
             Assert.Equal(expectedMigrations.Length, appliedMigrations.Count);

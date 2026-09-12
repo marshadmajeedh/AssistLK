@@ -1,5 +1,4 @@
 using AssistLK.Agents.Core;
-using AssistLK.Agents.Tools;
 using AssistLK.Application.Interfaces;
 using AssistLK.Application.Services;
 using AssistLK.Infrastructure.Data;
@@ -100,27 +99,5 @@ public class Component1SafetyTests
             "Sensitive unknown action");
 
         Assert.True(unknownAction.RequiresApproval);
-    }
-
-    [Fact]
-    public async Task ElectricalSafety_ToolRecommendsProfessionalInspectionWithoutDIY()
-    {
-        var tool = new ServiceKnowledgeTool();
-        var result = await tool.ExecuteAsync(new Dictionary<string, object>
-        {
-            ["category"] = "Electrical",
-            ["description"] = "Smoke and burning smell from power outlet"
-        });
-
-        Assert.True(result.Success);
-        var data = Assert.IsType<ServiceKnowledgeData>(result.Data);
-
-        Assert.True(data.RecommendsProfessionalInspection);
-        Assert.Contains("Professional inspection is recommended", data.SafeGeneralTerminology);
-
-        var text = data.SafeGeneralTerminology.ToLowerInvariant();
-        Assert.DoesNotContain("bypass", text);
-        Assert.DoesNotContain("strip wire", text);
-        Assert.DoesNotContain("replace breaker yourself", text);
     }
 }

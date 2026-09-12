@@ -1,7 +1,6 @@
-using AssistLK.Agents.Agents;
+using AssistLK.Agents.Adapters;
 using AssistLK.Agents.Core;
-using AssistLK.Agents.Services;
-using AssistLK.Agents.Tools;
+using AssistLK.Agents.DTOs;
 using AssistLK.Application.Common.Exceptions;
 using AssistLK.Application.ServiceRequests.DTOs;
 using AssistLK.Application.Services;
@@ -9,6 +8,7 @@ using AssistLK.Domain.Entities;
 using AssistLK.Domain.Enums;
 using AssistLK.Infrastructure.Data;
 using AssistLK.Infrastructure.Repositories;
+using AssistLK.IntegrationTests.TestDoubles;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging.Abstractions;
 
@@ -21,7 +21,7 @@ public class ClarificationWorkflowPostgreSqlTests : PostgreSqlIntegrationTestBas
     {
     }
 
-    private ProblemUnderstandingWorkflowService CreateWorkflowService(AssistLKDbContext context)
+    private ProblemUnderstandingWorkflowService CreateWorkflowService(AssistLKDbContext context, FakeProblemUnderstandingClient? client = null)
     {
         var workflowService = new AgentWorkflowService(context);
         var memoryService = new AgentMemoryService(context);
@@ -29,19 +29,13 @@ public class ClarificationWorkflowPostgreSqlTests : PostgreSqlIntegrationTestBas
         var monitoringService = new AgentMonitoringService(context);
         var safetyService = new AgentSafetyService(new AgentSafetyPolicyEngine(), context);
 
-        var toolRegistry = new ToolRegistry();
-        toolRegistry.Register(new ProblemClassificationTool());
-        toolRegistry.Register(new LocationExtractionTool());
-        toolRegistry.Register(new ServiceKnowledgeTool());
-
-        var toolExecutor = new ToolExecutor(toolRegistry);
-        var agent = new ProblemUnderstandingAgent(
-            toolExecutor,
-            new GeminiService(),
-            NullLogger<ProblemUnderstandingAgent>.Instance);
+        var fakeClient = client ?? new FakeProblemUnderstandingClient();
+        var adapter = new ExternalProblemUnderstandingAgentAdapter(
+            fakeClient,
+            NullLogger<ExternalProblemUnderstandingAgentAdapter>.Instance);
 
         var registry = new AgentRegistry();
-        registry.Register(agent);
+        registry.Register(adapter);
 
         var orchestrator = new AgentOrchestrator(registry);
 
@@ -58,6 +52,102 @@ public class ClarificationWorkflowPostgreSqlTests : PostgreSqlIntegrationTestBas
             orchestrator,
             registry,
             requestService);
+    }
+
+    [Theory]
+    [InlineData(false, true)]
+    [InlineData(true, true)]
+    [InlineData(true, false)]
+    public async Task Round2_FinalAnalysisProcessesAnswers_WithoutCreatingRound3(
+        bool finalNeedsInformation, bool answerRound2)
+    {
+        var customer = await CreateUserAsync(email: $"round2-{Guid.NewGuid():N}@assistlk.com");
+        var requestId = Guid.NewGuid();
+        await using (var context = CreateDbContext())
+        {
+            context.ServiceRequests.Add(new ServiceRequest
+            {
+                Id = requestId, CustomerId = customer.Id,
+                Description = "Something is wrong with my refrigerator.",
+                LocationText = "Colombo", Category = "Unclassified",
+                Status = ServiceRequestStatus.Created
+            });
+            await context.SaveChangesAsync();
+        }
+
+        var calls = 0;
+        var fake = new FakeProblemUnderstandingClient
+        {
+            CustomHandler = input =>
+            {
+                calls++;
+                var history = input.Input.ClarificationHistory;
+                Assert.Equal(calls - 1, history.Count);
+                Assert.Equal(Enumerable.Range(1, calls - 1), history.Select(c => c.Round));
+                Assert.All(history, c => Assert.False(string.IsNullOrWhiteSpace(c.Answer)));
+                var needsInformation = calls < 3 || finalNeedsInformation;
+                return new AgentExecutionResponseDto
+                {
+                    RequestId = input.RequestId, Success = true,
+                    Result = new ProblemUnderstandingOutputPayloadDto
+                    {
+                        Category = "Appliance Repair", Urgency = "Medium", Confidence = 0.85m,
+                        ProblemSummary = "Possible refrigerator fault based on the supplied symptoms.",
+                        NeedsMoreInformation = needsInformation,
+                        FollowUpQuestions = needsInformation ? new List<string> { $"Question after analysis {calls}?" } : new List<string>()
+                    }
+                };
+            }
+        };
+
+        for (var round = 1; round <= 2; round++)
+        {
+            await using var context = CreateDbContext();
+            var workflow = CreateWorkflowService(context, fake);
+            var result = await workflow.AnalyzeAsync(requestId, customer.Id);
+            Assert.True(result.Success);
+            Assert.Equal(ServiceRequestStatus.AwaitingInformation, result.Status);
+            var service = new ServiceRequestService(new ServiceRequestRepository(context), new ProblemAnalysisRepository(context));
+            var request = await service.GetByIdAsync(requestId, customer.Id);
+            var question = Assert.Single(request.Clarifications.Where(c => c.ClarificationRound == round));
+            Assert.Null(question.Answer);
+            if (round == 2 && !answerRound2)
+            {
+                await Assert.ThrowsAsync<ConflictException>(() => workflow.AnalyzeAsync(requestId, customer.Id));
+                Assert.Equal(2, calls);
+                return;
+            }
+            var answers = await service.SubmitClarificationAnswersAsync(customer.Id, requestId,
+                new SubmitClarificationAnswersRequest
+                {
+                    ClarificationRound = round,
+                    Answers = new() { new() { ClarificationId = question.Id, Answer = $"Symptoms for round {round}" } }
+                });
+            Assert.Contains(answers, c => c.Id == question.Id && c.Answer == $"Symptoms for round {round}" && c.AnsweredAt != null);
+        }
+
+        await using (var context = CreateDbContext())
+        {
+            var result = await CreateWorkflowService(context, fake).AnalyzeAsync(requestId, customer.Id);
+            Assert.True(result.Success);
+            Assert.Equal(finalNeedsInformation ? ServiceRequestStatus.AwaitingInformation : ServiceRequestStatus.Analyzed, result.Status);
+            Assert.Equal(3, calls);
+        }
+        await using (var context = CreateDbContext())
+        {
+            var service = new ServiceRequestService(new ServiceRequestRepository(context), new ProblemAnalysisRepository(context));
+            var request = await service.GetByIdAsync(requestId, customer.Id);
+            Assert.Equal(finalNeedsInformation ? ServiceRequestStatus.AwaitingInformation : ServiceRequestStatus.Analyzed, request.Status);
+            Assert.Equal(2, request.Clarifications.Count);
+            Assert.Equal(new[] { 1, 2 }, request.Clarifications.Select(c => c.ClarificationRound));
+            Assert.All(request.Clarifications, c =>
+            {
+                Assert.Equal($"Symptoms for round {c.ClarificationRound}", c.Answer);
+                Assert.Null(c.SupersededAt);
+                Assert.True(request.LatestAnalysis!.CreatedAt > c.AnsweredAt);
+            });
+            Assert.Equal(3, await context.ProblemAnalyses.CountAsync(a => a.ServiceRequestId == requestId));
+        }
     }
 
     [Fact]

@@ -1,3 +1,5 @@
+import '../models/location_source.dart';
+import '../widgets/location_attribution.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
@@ -301,7 +303,8 @@ class _ServiceRequestDetailScreenState
                     if (request.status != ServiceRequestStatus.analyzed &&
                         request.status != ServiceRequestStatus.readyForMatching) ...[
                       const SizedBox(height: AppSpacing.xs + 2),
-                      Row(
+                      Wrap(
+                        crossAxisAlignment: WrapCrossAlignment.center,
                         children: [
                           const Text(
                             'Service preference: ',
@@ -311,47 +314,44 @@ class _ServiceRequestDetailScreenState
                               fontWeight: FontWeight.w500,
                             ),
                           ),
-                          Expanded(
-                            child: Text(
-                              CanonicalServiceCategory.fromCanonicalOrDisplayName(request.categoryHint)?.displayName ??
-                                  (request.categoryHint == null ? 'Let AI identify' : request.categoryHint!),
-                              style: const TextStyle(
-                                fontSize: 12,
-                                fontWeight: FontWeight.w600,
-                                color: AppColors.textPrimary,
-                              ),
-                              overflow: TextOverflow.ellipsis,
+                          Text(
+                            CanonicalServiceCategory.fromCanonicalOrDisplayName(request.categoryHint)?.displayName ??
+                                (request.categoryHint == null ? 'Let AssistLK AI identify' : request.categoryHint!),
+                            style: const TextStyle(
+                              fontSize: 12,
+                              fontWeight: FontWeight.w600,
+                              color: AppColors.textPrimary,
                             ),
                           ),
                         ],
                       ),
                       const SizedBox(height: AppSpacing.xs),
-                      Row(
+                      Wrap(
+                        crossAxisAlignment: WrapCrossAlignment.center,
                         children: [
                           const Text(
-                            'AI classification: ',
+                            'AssistLK AI classification: ',
                             style: TextStyle(
                               fontSize: 12,
                               color: AppColors.textSecondary,
                               fontWeight: FontWeight.w500,
                             ),
                           ),
-                          Expanded(
-                            child: Text(
-                              _getAiClassificationText(request),
-                              style: const TextStyle(
-                                fontSize: 12,
-                                fontWeight: FontWeight.w600,
-                                color: AppColors.textPrimary,
-                              ),
-                              overflow: TextOverflow.ellipsis,
+                          Text(
+                            _getAiClassificationText(request),
+                            style: const TextStyle(
+                              fontSize: 12,
+                              fontWeight: FontWeight.w600,
+                              color: AppColors.textPrimary,
                             ),
                           ),
                         ],
                       ),
                     ],
                     const SizedBox(height: AppSpacing.xs + 2),
-                    Row(
+                    Wrap(
+                      crossAxisAlignment: WrapCrossAlignment.center,
+                      spacing: AppSpacing.xs,
                       children: [
                         const Text(
                           'Urgency Level: ',
@@ -408,6 +408,7 @@ class _ServiceRequestDetailScreenState
                                   fontWeight: FontWeight.w500,
                                 ),
                               ),
+                              if (request.locationSource == LocationSource.openStreetMap) const LocationAttribution(),
                               if (request.latitude != null &&
                                   request.longitude != null) ...[
                                 const SizedBox(height: 2),
@@ -420,7 +421,7 @@ class _ServiceRequestDetailScreenState
                                     ),
                                     const SizedBox(width: 4),
                                     Text(
-                                      'GPS location captured (${request.latitude!.toStringAsFixed(4)}, ${request.longitude!.toStringAsFixed(4)})',
+                                      'GPS location captured',
                                       style: AppTextStyles.small.copyWith(
                                         color: AppColors.success,
                                         fontSize: 12,
@@ -506,7 +507,7 @@ class _ServiceRequestDetailScreenState
             ),
             SizedBox(width: AppSpacing.md),
             Text(
-              'AI analysis in progress',
+              'AssistLK AI analysis in progress',
               style: AppTextStyles.body,
             ),
           ],
@@ -529,7 +530,7 @@ class _ServiceRequestDetailScreenState
                 SizedBox(width: AppSpacing.md),
                 Expanded(
                   child: Text(
-                    'AI analysis in progress',
+                    'AssistLK AI analysis in progress',
                     style: AppTextStyles.cardHeading,
                   ),
                 ),
@@ -559,19 +560,19 @@ class _ServiceRequestDetailScreenState
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             const Text(
-              'Next Step: AI Understanding',
+              'Next Step: AssistLK AI Analysis',
               style: AppTextStyles.cardHeading,
             ),
             const SizedBox(height: AppSpacing.xs),
             Text(
-              'Trigger Gemini AI to categorize the issue, determine urgency, and verify if further information is required.',
+              'Use AssistLK AI to identify the service category, estimate urgency, and check whether more information is needed.',
               style: AppTextStyles.body.copyWith(
                 color: AppColors.textSecondary,
               ),
             ),
             const SizedBox(height: AppSpacing.md),
             AppButton(
-              text: 'Analyze with Gemini AI',
+              text: 'Analyze with AssistLK AI',
               isLoading: provider.isAnalyzing,
               onPressed: () => _triggerAnalysis(request.serviceRequestId),
             ),
@@ -590,7 +591,7 @@ class _ServiceRequestDetailScreenState
               ),
               SizedBox(width: AppSpacing.md),
               Text(
-                'AI analysis in progress',
+                'AssistLK AI analysis in progress',
                 style: AppTextStyles.body,
               ),
             ],
@@ -601,7 +602,7 @@ class _ServiceRequestDetailScreenState
         return ClarificationSection(
           followUpQuestions: analysis?.followUpQuestions ?? const [],
           clarifications: request.clarifications,
-          hasReachedMaxRounds: request.hasReachedMaxRounds,
+          hasReachedMaxRounds: request.hasCompletedFinalClarificationAnalysis,
           isReanalyzing: provider.isAnalyzing,
           isSubmitting: provider.isLoading,
           onEditDetails: () => _navigateToEdit(request),

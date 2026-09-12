@@ -22,4 +22,17 @@ class AppColors {
   // UI
   static const Color border = Color(0xFFD1D5DB);
   static const Color disabled = Color(0xFF9CA3AF);
+
+  // Semantic Surfaces
+  static const Color primarySurface = Color(0xFFEFF6FF);
+  static const Color secondarySurface = Color(0xFFF0FDFA);
+  static const Color successSurface = Color(0xFFF0FDF4);
+  static const Color warningSurface = Color(0xFFFFFBEB);
+  static const Color aiSurface = Color(0xFFF5F3FF);
+
+  // Category Tints
+  static const Color plumbingTint = Color(0xFFEBF5FF);
+  static const Color electricalTint = Color(0xFFFFF7ED);
+  static const Color vehicleTint = Color(0xFFF0FDF4);
+  static const Color applianceTint = Color(0xFFF5F3FF);
 }

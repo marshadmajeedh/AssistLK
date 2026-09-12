@@ -348,6 +348,13 @@ namespace AssistLK.Infrastructure.Data.Migrations
                         .HasPrecision(9, 6)
                         .HasColumnType("numeric(9,6)");
 
+                    b.Property<string>("LocationSource")
+                        .IsRequired()
+                        .ValueGeneratedOnAdd()
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)")
+                        .HasDefaultValue("Manual");
+
                     b.Property<string>("LocationText")
                         .IsRequired()
                         .HasMaxLength(255)

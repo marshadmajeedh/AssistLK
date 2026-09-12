@@ -1,22 +1,26 @@
 import 'package:flutter/material.dart';
+import 'package:url_launcher/link.dart';
+import '../../../../shared/theme/app_text_styles.dart';
+import '../../../../shared/theme/app_colors.dart';
 
-/// Text attribution for compact address containers; never an imitation logo.
+/// One accessible link shared by every displayed OSM-derived address.
 class LocationAttribution extends StatelessWidget {
   const LocationAttribution({super.key});
+
   @override
-  Widget build(BuildContext context) => const Padding(
-    padding: EdgeInsets.only(top: 8),
-    child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [Text(
-      '\u00a9 OpenStreetMap contributors',
-      style: TextStyle(
-        fontSize: 12,
-        fontWeight: FontWeight.w400,
-        fontStyle: FontStyle.normal,
-        color: Color(0xFF1F1F1F),
+  Widget build(BuildContext context) => Link(
+    uri: Uri.parse('https://www.openstreetmap.org/copyright'),
+    target: LinkTarget.blank,
+    builder: (context, followLink) => TextButton(
+      onPressed: followLink,
+      style: TextButton.styleFrom(
+        minimumSize: const Size(48, 48),
+        padding: EdgeInsets.zero,
+        alignment: Alignment.centerLeft,
+        foregroundColor: AppColors.primary,
+        textStyle: AppTextStyles.small.copyWith(decoration: TextDecoration.underline),
       ),
+      child: const Text('\u00a9 OpenStreetMap contributors'),
     ),
-      SelectableText('Open Database License (ODbL)\nhttps://www.openstreetmap.org/copyright',
-        style: TextStyle(fontSize: 12, color: Color(0xFF1F1F1F))),
-    ]),
   );
 }

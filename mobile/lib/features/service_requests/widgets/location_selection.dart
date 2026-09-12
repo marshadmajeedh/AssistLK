@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../../../../shared/theme/app_spacing.dart';
 import '../../../../shared/theme/app_text_styles.dart';
 import '../../../../shared/widgets/app_card.dart';
+import '../../../../shared/widgets/app_button.dart';
 import '../../../../shared/widgets/app_text_field.dart';
 import '../models/location_source.dart';
 import '../providers/location_selection_controller.dart';
@@ -27,32 +28,8 @@ class LocationSelection extends StatelessWidget {
         children: [
           const Text('Service Location', style: AppTextStyles.sectionHeading),
           const SizedBox(height: AppSpacing.sm),
-          Wrap(
-            spacing: AppSpacing.sm,
-            runSpacing: AppSpacing.xs,
-            children: [
-              OutlinedButton.icon(
-                key: Key(
-                  editing
-                      ? 'edit_update_gps_button'
-                      : 'use_current_location_button',
-                ),
-                onPressed: c.capture,
-                icon: const Icon(Icons.my_location_rounded),
-                label: Text(
-                  editing
-                      ? 'Refresh Current Location'
-                      : c.hasGps
-                      ? 'Refresh'
-                      : 'Use Current Location',
-                ),
-              ),
-              TextButton(
-                onPressed: c.enterManually,
-                child: const Text('Enter location manually'),
-              ),
-            ],
-          ),
+          _buildActions(context, c),
+          const SizedBox(height: AppSpacing.sm),
           if (c.busy) ...[
             const LinearProgressIndicator(),
             const Text(
@@ -69,10 +46,9 @@ class LocationSelection extends StatelessWidget {
                     'Current service location',
                     style: AppTextStyles.cardHeading,
                   ),
+                  const SizedBox(height: AppSpacing.xs),
                   Text(c.preview!.formattedAddress, style: AppTextStyles.body),
-                  const LocationAttribution(),
-                  const SizedBox(height: AppSpacing.sm),
-                  const Text('Location captured', style: AppTextStyles.small),
+                  const SizedBox(height: AppSpacing.xs),
                   if (c.accuracy != null &&
                       c.accuracy!.isFinite &&
                       c.accuracy! >= 0)
@@ -80,11 +56,13 @@ class LocationSelection extends StatelessWidget {
                       'Accuracy approximately ${c.accuracy!.round()} m',
                       style: AppTextStyles.small,
                     ),
-                  FilledButton(
+                  const LocationAttribution(),
+                  AppButton(
+                    text: 'Use This Location',
+                    maxLines: 1,
                     onPressed: c.preview!.formattedAddress.length <= 255
                         ? c.confirm
                         : null,
-                    child: const Text('Use This Location'),
                   ),
                 ],
               ),
@@ -105,7 +83,8 @@ class LocationSelection extends StatelessWidget {
           if (c.source == LocationSource.openStreetMap)
             const LocationAttribution(),
           if (c.hasGps) ...[
-            const Text('GPS location captured', style: AppTextStyles.small),
+            if (c.preview == null)
+              const Text('GPS location captured', style: AppTextStyles.small),
             if (c.needsGpsChoice && c.preview == null && !c.busy) ...[
               const Text(
                 'Address changed with attached GPS',
@@ -131,4 +110,46 @@ class LocationSelection extends StatelessWidget {
       );
     },
   );
+  Widget _buildActions(BuildContext context, LocationSelectionController c) {
+    final label = editing || c.hasGps ? 'Refresh Location' : 'Use Current Location';
+    double textWidth(String value) {
+      final painter = TextPainter(
+        text: TextSpan(text: value, style: AppTextStyles.button),
+        textDirection: Directionality.of(context),
+        textScaler: MediaQuery.textScalerOf(context),
+      )..layout();
+      final width = painter.width;
+      painter.dispose();
+      return width;
+    }
+    // Reserve the themed padding and icon space; respect accessibility text size.
+    final refreshWidth = textWidth(label) + 2 * AppSpacing.md + 32;
+    final manualWidth = textWidth('Enter Manually') + 2 * AppSpacing.md;
+    final minimumButtonWidth = refreshWidth > manualWidth ? refreshWidth : manualWidth;
+    return LayoutBuilder(builder: (context, constraints) {
+      final refresh = OutlinedButton.icon(
+        key: Key(editing ? 'edit_update_gps_button' : 'use_current_location_button'),
+        onPressed: c.capture,
+        icon: const Icon(Icons.my_location_rounded),
+        label: Text(label, maxLines: 1, softWrap: false),
+      );
+      final manual = OutlinedButton(
+        onPressed: c.enterManually,
+        child: const Text('Enter Manually', maxLines: 1, softWrap: false),
+      );
+      if (constraints.maxWidth < minimumButtonWidth * 2 + AppSpacing.sm) {
+        return Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+          refresh,
+          const SizedBox(height: AppSpacing.sm),
+          manual,
+        ]);
+      }
+      return Row(children: [
+        Expanded(child: refresh),
+        const SizedBox(width: AppSpacing.sm),
+        Expanded(child: manual),
+      ]);
+    });
+  }
+
 }

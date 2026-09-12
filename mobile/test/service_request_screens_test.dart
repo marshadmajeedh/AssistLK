@@ -1175,6 +1175,7 @@ void main() {
         'Updated description with more specific details',
       );
 
+      await tester.ensureVisible(find.text('Save Changes'));
       await tester.tap(find.text('Save Changes'));
       await tester.pumpAndSettle();
 
@@ -1379,6 +1380,7 @@ void main() {
         find.widgetWithText(TextFormField, 'Problem Description'),
         'Updated description for plumbing problem',
       );
+      await tester.ensureVisible(find.text('Save Changes'));
       await tester.tap(find.text('Save Changes'));
       await tester.pumpAndSettle();
 
@@ -1408,6 +1410,7 @@ void main() {
         find.widgetWithText(TextFormField, 'Location / Address'),
         'New Address Colombo 03',
       );
+      await tester.ensureVisible(find.text('Save Changes'));
       await tester.tap(find.text('Save Changes'));
       await tester.pumpAndSettle();
 
@@ -1440,6 +1443,7 @@ void main() {
       await tester.tap(find.text('Electrical'));
       await tester.pumpAndSettle();
 
+      await tester.ensureVisible(find.text('Save Changes'));
       await tester.tap(find.text('Save Changes'));
       await tester.pumpAndSettle();
 
@@ -1471,6 +1475,7 @@ void main() {
       await tester.tap(find.text('Vehicle Assistance'));
       await tester.pumpAndSettle();
 
+      await tester.ensureVisible(find.text('Save Changes'));
       await tester.tap(find.text('Save Changes'));
       await tester.pumpAndSettle();
 
@@ -1502,6 +1507,7 @@ void main() {
       await tester.tap(find.text('Let AssistLK AI identify'));
       await tester.pumpAndSettle();
 
+      await tester.ensureVisible(find.text('Save Changes'));
       await tester.tap(find.text('Save Changes'));
       await tester.pumpAndSettle();
 
@@ -2069,7 +2075,7 @@ void main() {
       await tester.tap(find.byKey(const Key('use_current_location_button')));
       await tester.pumpAndSettle();
 
-      expect(find.textContaining('GPS location captured'), findsOneWidget);
+      expect(find.textContaining('GPS location captured'), findsNothing);
       expect(mockLocationService.getCurrentLocationCallCount, 1);
 
       // Provide human-readable address
@@ -2116,7 +2122,7 @@ void main() {
       // Capture GPS
       await tester.tap(find.byKey(const Key('use_current_location_button')));
       await tester.pumpAndSettle();
-      expect(find.textContaining('GPS location captured'), findsOneWidget);
+      expect(find.textContaining('GPS location captured'), findsNothing);
 
       // Remove GPS
       await tester.tap(find.text('Remove captured GPS'));

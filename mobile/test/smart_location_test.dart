@@ -1,3 +1,4 @@
+import 'package:url_launcher/link.dart';
 import 'dart:async';
 
 import 'package:dio/dio.dart';
@@ -42,6 +43,60 @@ void main() {
       ),
     ),
   );
+
+  for (final width in [320.0, 600.0]) {
+    testWidgets('preview polish and responsive actions at width $width', (tester) async {
+      tester.view.physicalSize = Size(width, 1000);
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.resetPhysicalSize);
+      addTearDown(tester.view.resetDevicePixelRatio);
+      gps.customResult = const LocationResult(status: LocationAccessStatus.granted,
+        coordinates: LocationCoordinates(latitude: 6, longitude: 79, accuracy: 40));
+      await selection.capture();
+      await tester.pumpWidget(locationWidget());
+      expect(find.text('Example Road, Kotte'), findsOneWidget);
+      expect(find.text('Accuracy approximately 40 m'), findsOneWidget);
+      expect(find.text('Location captured'), findsNothing);
+      expect(find.text('GPS location captured'), findsNothing);
+      expect(find.text('\u00a9 OpenStreetMap contributors'), findsOneWidget);
+      expect(find.textContaining('Open Database License'), findsNothing);
+      expect(find.textContaining('https://'), findsNothing);
+      final link = tester.widget<Link>(find.byType(Link));
+      expect(link.uri.toString(), 'https://www.openstreetmap.org/copyright');
+      final refresh = find.widgetWithText(OutlinedButton, 'Refresh Location');
+      final manual = find.widgetWithText(OutlinedButton, 'Enter Manually');
+      final refreshRect = tester.getRect(refresh);
+      final manualRect = tester.getRect(manual);
+      if (width == 320) {
+        expect(manualRect.top, greaterThan(refreshRect.bottom));
+        expect(manualRect.width, refreshRect.width);
+      } else {
+        expect(manualRect.top, refreshRect.top);
+        expect(manualRect.left, greaterThan(refreshRect.right));
+      }
+      expect(refreshRect.height, greaterThanOrEqualTo(48));
+      final confirm = find.widgetWithText(ElevatedButton, 'Use This Location');
+      expect(tester.getSize(confirm).width, closeTo(width - 32, 1));
+      expect(tester.getSize(confirm).height, greaterThanOrEqualTo(48));
+      expect(tester.widget<Text>(find.text('Use This Location')).maxLines, 1);
+      expect(tester.takeException(), isNull);
+      await tester.ensureVisible(refresh);
+      await tester.tap(refresh);
+      await tester.pumpAndSettle();
+      expect(geocoding.calls, 2);
+      await tester.ensureVisible(confirm);
+      await tester.tap(confirm);
+      await tester.pumpAndSettle();
+      expect(selection.source, LocationSource.openStreetMap);
+      expect(selection.latitude, 6);
+      await tester.ensureVisible(manual);
+      await tester.tap(manual);
+      await tester.pumpAndSettle();
+      expect(selection.source, LocationSource.manual);
+      expect(selection.needsGpsChoice, isTrue);
+      expect(find.text('\u00a9 OpenStreetMap contributors'), findsNothing);
+    });
+  }
 
   test('GPS calls geocoding and requires confirmation before selecting text and source', () async {
     await selection.capture();
@@ -264,7 +319,7 @@ void main() {
     (tester) async {
       await tester.pumpWidget(locationWidget());
       expect(find.text('Use Current Location'), findsOneWidget);
-      expect(find.text('Enter location manually'), findsOneWidget);
+      expect(find.text('Enter Manually'), findsOneWidget);
       expect(find.text('\u00a9 OpenStreetMap contributors'), findsNothing);
       gps.customResult = const LocationResult(
         status: LocationAccessStatus.granted,
@@ -307,11 +362,11 @@ void main() {
           ResolvedLocation(formattedAddress: 'Long address ' * 30);
       await selection.capture();
       await tester.pumpWidget(locationWidget());
-      final button = tester.widget<FilledButton>(
-        find.widgetWithText(FilledButton, 'Use This Location'),
+      final button = tester.widget<ElevatedButton>(
+        find.widgetWithText(ElevatedButton, 'Use This Location'),
       );
       expect(button.onPressed, isNull);
-      expect(find.text('Enter location manually'), findsOneWidget);
+      expect(find.text('Enter Manually'), findsOneWidget);
       expect(find.textContaining('exceeds 255'), findsOneWidget);
     },
   );

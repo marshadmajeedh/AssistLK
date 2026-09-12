@@ -1,4 +1,5 @@
 import '../models/location_source.dart';
+import '../../customer/models/location_suggestion.dart';
 import '../widgets/location_attribution.dart';
 import '../providers/location_selection_controller.dart';
 import '../services/location_geocoding_service.dart';
@@ -27,12 +28,14 @@ class CreateServiceRequestScreen extends StatefulWidget {
   final String? initialCategoryPreference;
   final LocationService? locationService;
   final LocationGeocodingService? geocodingService;
+  final LocationSuggestion? initialLocationSuggestion;
 
   const CreateServiceRequestScreen({
     super.key,
     this.initialCategoryPreference,
     this.locationService,
     this.geocodingService,
+    this.initialLocationSuggestion,
   });
 
   @override
@@ -55,6 +58,7 @@ class _CreateServiceRequestScreenState
     super.initState();
     _selectedPreference = widget.initialCategoryPreference;
     _location = LocationSelectionController(
+      initialSuggestion: widget.initialLocationSuggestion,
       gps: widget.locationService ?? GeolocatorLocationService(),
       geocoding:
           widget.geocodingService ??

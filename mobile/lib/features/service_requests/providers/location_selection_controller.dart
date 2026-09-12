@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 
+import '../../customer/models/location_suggestion.dart';
+
 import '../models/location_source.dart';
 import '../models/resolved_location.dart';
 import '../services/location_service.dart';
@@ -21,6 +23,11 @@ class LocationSelectionController extends ChangeNotifier {
   bool _settingText = false;
   late String _lastText;
   String? _resolvedAddress;
+  LocationSuggestion? _suggestion;
+  LocationSource _previewSource = LocationSource.openStreetMap;
+  final DateTime Function() clock;
+  bool get isSuggested => preview != null && _suggestion != null;
+  LocationSource get previewSource => _previewSource;
 
   LocationSelectionController({
     required this.gps,
@@ -29,10 +36,25 @@ class LocationSelectionController extends ChangeNotifier {
     this.latitude,
     this.longitude,
     this.source = LocationSource.manual,
-  }) : text = TextEditingController(text: initialText) {
+    LocationSuggestion? initialSuggestion,
+    DateTime Function()? clock,
+  }) : clock = clock ?? DateTime.now,
+       text = TextEditingController(text: initialText) {
     _lastText = initialText;
     if (source == LocationSource.openStreetMap) _resolvedAddress = initialText;
     text.addListener(_edited);
+    if (initialSuggestion != null && initialSuggestion.isFresh(this.clock())) {
+      _suggestion = initialSuggestion;
+      preview = initialSuggestion.location;
+      _previewSource = initialSuggestion.source;
+      latitude = initialSuggestion.latitude;
+      longitude = initialSuggestion.longitude;
+      accuracy = initialSuggestion.accuracyMeters;
+      needsGpsChoice = hasGps;
+      if (preview!.formattedAddress.length > 255) {
+        message = 'This address exceeds 255 characters. Enter a shorter location manually.';
+      }
+    }
   }
 
   bool get hasGps => latitude != null && longitude != null;
@@ -45,6 +67,7 @@ class LocationSelectionController extends ChangeNotifier {
     _generation++;
     busy = false;
     preview = null;
+    _suggestion = null;
     // Editing a Provider-derived address does not erase its provenance. A fresh
     // manual entry (or explicit GPS removal) is a separate choice below.
     if (text.text.isEmpty) source = LocationSource.manual;
@@ -61,6 +84,8 @@ class LocationSelectionController extends ChangeNotifier {
   }
 
   Future<void> capture() async {
+    _suggestion = null;
+    _previewSource = LocationSource.openStreetMap;
     final generation = ++_generation;
     busy = true;
     preview = null;
@@ -101,16 +126,23 @@ class LocationSelectionController extends ChangeNotifier {
   void confirm() {
     final address = preview?.formattedAddress;
     if (busy || address == null || address.length > 255) return;
+    if (_suggestion != null && !_suggestion!.isFresh(clock())) {
+      message = 'This location suggestion has expired. Refresh Location or Change Location.';
+      notifyListeners();
+      return;
+    }
     _setText(address);
-    source = LocationSource.openStreetMap;
+    source = _previewSource;
     _resolvedAddress = address;
     preview = null;
+    _suggestion = null;
     needsGpsChoice = false;
     message = 'Location confirmed';
     notifyListeners();
   }
 
   void enterManually() {
+    _suggestion = null;
     _generation++;
     busy = false;
     preview = null;
@@ -130,11 +162,13 @@ class LocationSelectionController extends ChangeNotifier {
   }
 
   void removeGps() {
+    _suggestion = null;
     _generation++;
     busy = false;
     preview = null;
     latitude = longitude = accuracy = null;
-    if (source == LocationSource.openStreetMap && text.text == _resolvedAddress) {
+    if (source == LocationSource.openStreetMap &&
+        text.text == _resolvedAddress) {
       _setText('');
     }
     source = LocationSource.manual;
@@ -144,6 +178,7 @@ class LocationSelectionController extends ChangeNotifier {
   }
 
   void cancelPending() {
+    _suggestion = null;
     _generation++;
     busy = false;
     preview = null;

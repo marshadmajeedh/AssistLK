@@ -46,11 +46,13 @@ class _CustomerAppShellState extends State<CustomerAppShell> {
           bottom: false,
           child: IndexedStack(
             index: _selectedIndex,
-            children: const [
-              CustomerHomeScreen(),
-              CustomerServicesScreen(),
-              CustomerActivityScreen(),
-              CustomerAccountScreen(),
+            children: [
+              CustomerHomeScreen(
+                onViewAll: () => setState(() => _selectedIndex = 2),
+              ),
+              const CustomerServicesScreen(),
+              const CustomerActivityScreen(),
+              const CustomerAccountScreen(),
             ],
           ),
         ),

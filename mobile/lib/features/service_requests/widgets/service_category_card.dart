@@ -98,8 +98,6 @@ class ServiceCategoryCard extends StatelessWidget {
                 style: AppTextStyles.cardHeading.copyWith(
                   fontWeight: FontWeight.w600,
                 ),
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
               ),
               const SizedBox(height: AppSpacing.xs),
               Text(

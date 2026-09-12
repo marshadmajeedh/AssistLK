@@ -42,8 +42,10 @@ class LocationSelection extends StatelessWidget {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  const Text(
-                    'Current service location',
+                  Text(
+                    c.isSuggested
+                        ? 'Suggested service location'
+                        : 'Current service location',
                     style: AppTextStyles.cardHeading,
                   ),
                   const SizedBox(height: AppSpacing.xs),
@@ -56,7 +58,8 @@ class LocationSelection extends StatelessWidget {
                       'Accuracy approximately ${c.accuracy!.round()} m',
                       style: AppTextStyles.small,
                     ),
-                  const LocationAttribution(),
+                  if (c.previewSource == LocationSource.openStreetMap)
+                    const LocationAttribution(),
                   AppButton(
                     text: 'Use This Location',
                     maxLines: 1,
@@ -64,6 +67,11 @@ class LocationSelection extends StatelessWidget {
                         ? c.confirm
                         : null,
                   ),
+                  if (c.isSuggested)
+                    OutlinedButton(
+                      onPressed: c.enterManually,
+                      child: const Text('Change Location'),
+                    ),
                 ],
               ),
             ),
@@ -111,7 +119,9 @@ class LocationSelection extends StatelessWidget {
     },
   );
   Widget _buildActions(BuildContext context, LocationSelectionController c) {
-    final label = editing || c.hasGps ? 'Refresh Location' : 'Use Current Location';
+    final label = editing || c.hasGps
+        ? 'Refresh Location'
+        : 'Use Current Location';
     double textWidth(String value) {
       final painter = TextPainter(
         text: TextSpan(text: value, style: AppTextStyles.button),
@@ -122,34 +132,45 @@ class LocationSelection extends StatelessWidget {
       painter.dispose();
       return width;
     }
+
     // Reserve the themed padding and icon space; respect accessibility text size.
     final refreshWidth = textWidth(label) + 2 * AppSpacing.md + 32;
     final manualWidth = textWidth('Enter Manually') + 2 * AppSpacing.md;
-    final minimumButtonWidth = refreshWidth > manualWidth ? refreshWidth : manualWidth;
-    return LayoutBuilder(builder: (context, constraints) {
-      final refresh = OutlinedButton.icon(
-        key: Key(editing ? 'edit_update_gps_button' : 'use_current_location_button'),
-        onPressed: c.capture,
-        icon: const Icon(Icons.my_location_rounded),
-        label: Text(label, maxLines: 1, softWrap: false),
-      );
-      final manual = OutlinedButton(
-        onPressed: c.enterManually,
-        child: const Text('Enter Manually', maxLines: 1, softWrap: false),
-      );
-      if (constraints.maxWidth < minimumButtonWidth * 2 + AppSpacing.sm) {
-        return Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
-          refresh,
-          const SizedBox(height: AppSpacing.sm),
-          manual,
-        ]);
-      }
-      return Row(children: [
-        Expanded(child: refresh),
-        const SizedBox(width: AppSpacing.sm),
-        Expanded(child: manual),
-      ]);
-    });
+    final minimumButtonWidth = refreshWidth > manualWidth
+        ? refreshWidth
+        : manualWidth;
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final refresh = OutlinedButton.icon(
+          key: Key(
+            editing ? 'edit_update_gps_button' : 'use_current_location_button',
+          ),
+          onPressed: c.capture,
+          icon: const Icon(Icons.my_location_rounded),
+          label: Text(label, maxLines: 1, softWrap: false),
+        );
+        final manual = OutlinedButton(
+          onPressed: c.enterManually,
+          child: const Text('Enter Manually', maxLines: 1, softWrap: false),
+        );
+        if (constraints.maxWidth < minimumButtonWidth * 2 + AppSpacing.sm) {
+          return Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              refresh,
+              const SizedBox(height: AppSpacing.sm),
+              manual,
+            ],
+          );
+        }
+        return Row(
+          children: [
+            Expanded(child: refresh),
+            const SizedBox(width: AppSpacing.sm),
+            Expanded(child: manual),
+          ],
+        );
+      },
+    );
   }
-
 }

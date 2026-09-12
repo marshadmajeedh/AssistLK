@@ -1,3 +1,4 @@
+import 'package:mobile/features/customer/providers/customer_location_provider.dart';
 import 'mocks/mock_location_geocoding_service.dart';
 import 'dart:async';
 import 'dart:ui';
@@ -159,6 +160,7 @@ void main() {
   Widget buildApp(Widget child) {
     return MultiProvider(
       providers: [
+        ChangeNotifierProvider<CustomerLocationProvider>(create: (_) => CustomerLocationProvider(gps: MockLocationService(), geocoding: MockLocationGeocodingService())),
         ChangeNotifierProvider<AuthProvider>.value(value: authProvider),
         ChangeNotifierProvider<ServiceRequestProvider>.value(
           value: requestProvider,
@@ -187,7 +189,7 @@ void main() {
       await tester.pumpWidget(buildApp(const Scaffold(body: CustomerHomeScreen())));
       await tester.pumpAndSettle();
       expect(find.text('Welcome, Kamal Perera'), findsOneWidget);
-      expect(find.text('kamal@assistlk.com'), findsOneWidget);
+      expect(find.text('kamal@assistlk.com'), findsNothing); // Email belongs to Account.
       await requestProvider.loadMyRequests();
       await tester.pumpWidget(buildApp(const Scaffold(body: CustomerActivityScreen())));
       await tester.pumpAndSettle();

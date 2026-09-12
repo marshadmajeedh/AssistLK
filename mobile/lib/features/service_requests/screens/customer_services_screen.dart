@@ -7,22 +7,15 @@ import '../../../../shared/theme/app_spacing.dart';
 import '../../../../shared/theme/app_text_styles.dart';
 import '../../../../shared/widgets/app_image_asset.dart';
 import '../../../../shared/widgets/section_header.dart';
-import '../models/canonical_service_category.dart';
-import '../widgets/service_category_card.dart';
-import 'create_service_request_screen.dart';
+import '../widgets/service_category_shortcuts.dart';
+import '../navigation/open_create_service_request.dart';
 
 class CustomerServicesScreen extends StatelessWidget {
   const CustomerServicesScreen({super.key});
   @override
   Widget build(BuildContext context) {
     void navigateToCreate({String? categoryPreference}) {
-      Navigator.of(context).push(
-        MaterialPageRoute<void>(
-          builder: (_) => CreateServiceRequestScreen(
-            initialCategoryPreference: categoryPreference,
-          ),
-        ),
-      );
+      openCreateServiceRequest(context, categoryHint: categoryPreference);
     }
 
     return SingleChildScrollView(
@@ -37,42 +30,9 @@ class CustomerServicesScreen extends StatelessWidget {
             subtitle: 'Choose a service category to get started quickly',
           ),
           const SizedBox(height: AppSpacing.md),
-          LayoutBuilder(
-            builder: (context, constraints) {
-              // Fit the longest existing label at the user's text scale.
-              final label = TextPainter(
-                text: const TextSpan(
-                  text: 'Vehicle Assistance',
-                  style: AppTextStyles.cardHeading,
-                ),
-                textDirection: Directionality.of(context),
-                textScaler: MediaQuery.textScalerOf(context),
-              )..layout();
-              final minimum = label.width + AppSpacing.md * 2;
-              label.dispose();
-              final columns =
-                  constraints.maxWidth >= minimum * 2 + AppSpacing.sm ? 2 : 1;
-              final width =
-                  (constraints.maxWidth - AppSpacing.sm * (columns - 1)) /
-                  columns;
-              return Wrap(
-                spacing: AppSpacing.sm,
-                runSpacing: AppSpacing.sm,
-                children: [
-                  for (final category
-                      in CanonicalServiceCategory.canonicalShortcuts)
-                    SizedBox(
-                      width: width,
-                      child: ServiceCategoryCard(
-                        category: category,
-                        onTap: () => navigateToCreate(
-                          categoryPreference: category.canonicalName,
-                        ),
-                      ),
-                    ),
-                ],
-              );
-            },
+          ServiceCategoryShortcuts(
+            onSelected: (category) =>
+                navigateToCreate(categoryPreference: category.canonicalName),
           ),
           const SizedBox(height: AppSpacing.lg),
           // 3. AI Assistance Option Card

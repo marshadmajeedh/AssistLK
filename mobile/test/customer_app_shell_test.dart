@@ -151,7 +151,7 @@ void main() {
   ) async {
     await mount(tester);
     await tester.pumpAndSettle();
-    await tapText(tester, 'Create Request');
+    await tapText(tester, 'Create Service Request');
     expect(find.byType(CreateServiceRequestScreen), findsOneWidget);
     expect(find.byType(NavigationBar), findsNothing);
     await tester.binding.handlePopRoute();

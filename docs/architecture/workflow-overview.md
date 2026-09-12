@@ -1,5 +1,12 @@
 # AssistLK Workflow Overview
 
+## Current C1 execution
+
+C1 follows [the Python-only architecture](../../agent-services/README.md). Initial analysis can request Round 1 answers, then Round 2 answers if needed. Answered Round 2 is still re-analyzed; no Round 3 is created. If insufficient, the customer improves the main description. ASP.NET persists rounds and controls lifecycle; Python returns structured analysis. Transport failure restores the valid pre-analysis state through workflow recovery, with no native fallback.
+
+Smart Location is Flutter GPS -> ASP.NET -> Nominatim infrastructure, separate from Python input location extraction. Later matching, quotation, booking, and tracking examples below are conceptual target workflows, not claims that all components are implemented.
+
+
 ## 1. Introduction
 
 This document explains how the parts of AssistLK communicate and how a complete service request moves through the system.
@@ -138,7 +145,7 @@ Problem Agent
 	-> Provider Agent reads memory
 ```
 
-The Agent Orchestrator controls execution order, retries, and workflow state.
+Application workflow services control domain state and recovery; the orchestrator dispatches registered agents. C1 provider retries belong to Python.
 
 ## 4. Error Handling Workflow
 

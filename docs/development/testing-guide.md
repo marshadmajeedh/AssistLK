@@ -10,7 +10,7 @@
 
 To ensure reliable, multi-developer collaboration across .NET, React, Flutter, and Python agents, all PRs must satisfy the following non-negotiable rules:
 
-1. **No Live External AI Dependencies in Tests:** Automated test suites must **never** make live HTTP calls to Google Gemini or external LLM providers. Use test fakes (`FakeGeminiService`) or deterministic offline simulation.
+1. **No Live External AI Dependencies in Tests:** Automated test suites must **never** make live HTTP calls to Google Gemini or external LLM providers. Use test fakes (`FakeProblemUnderstandingClient`) or deterministic offline simulation.
 2. **Real PostgreSQL Database Isolation for Backend:** Backend integration and API tests run against real PostgreSQL test instances (`assistlk_test_integration` and `assistlk_test_api`). EF InMemory database provider is **not** the integration standard.
 3. **Destructive Guard Protection:** Tests must **never** perform destructive drops or schema resets against the primary application database (`assistlk_db`).
 4. **All Tests Green Before PR:** Backend, Web, and Mobile test suites must pass cleanly without warnings or errors.
@@ -42,27 +42,9 @@ flowchart TD
 - **Connection String Resolution:** Tests resolve their PostgreSQL connection via `ASSISTLK_TEST_POSTGRESQL_CONNECTION`, `ConnectionStrings__TestConnection`, or local .NET User Secrets.
 - **Transactional / Clean Isolation:** Each test fixture initializes and resets tables within the dedicated test database without affecting developer data.
 
-### 2.2 Agent Reasoning & LLM Mocking
+### 2.2 Agent client isolation
 
-Agents must be tested using mocked or simulated LLM responses:
-
-```csharp
-// Example from AssistLK.IntegrationTests
-public class FakeGeminiService : IGeminiService
-{
-    public string? NextResponse { get; set; }
-
-    public Task<string?> GenerateContentAsync(
-        string prompt,
-        string? systemInstruction = null,
-        CancellationToken cancellationToken = default)
-    {
-        return Task.FromResult(NextResponse ?? "{\"category\": \"Plumbing\", \"confidence\": 0.9}");
-    }
-}
-```
-
-- In development/CI environments without a configured `GOOGLE_API_KEY`, `GeminiService` automatically engages its deterministic offline simulation engine (`SimulateOfflineReasoning`) ensuring test runs succeed offline.
+Normal .NET tests use `FakeProblemUnderstandingClient` instead of a running Python service. Adapter and workflow tests verify structured outputs, error handling, clarification, and recovery. They do not call live model providers. PostgreSQL fixtures still require their isolated test databases and credentials.
 
 ### 2.3 Running Backend Tests
 ```bash
@@ -130,26 +112,28 @@ Mobile tests reside in `mobile/test/` using standard Flutter test runners.
 ```bash
 cd mobile
 
-# Run all Flutter tests
+flutter analyze
 flutter test
 ```
 
 ---
 
-## 5. Python Agent Testing (`agent-services/`)
+## 5. Python agent tests and live smoke verification
 
-When developing out-of-process Python agents:
+From the repository root, with the service venv activated:
 
-### 5.1 What to Test
-- **Contract Schema Tests:** Verify outgoing payloads conform to [External Agent Contract](../architecture/external-agent-contract.md).
-- **Reasoning Tests with Mocked LLM:** Use `pytest` with `unittest.mock` or LangChain's `FakeListLLM`.
-- **Safety Policy Tests:** Verify prompts containing jailbreak patterns or toxic inputs are rejected.
-
-### 5.2 Running Python Tests
-```bash
-cd agent-services/<agent-name>
-pytest tests/
+```powershell
+cd agent-services/problem-understanding-agent
+python -m pytest
 ```
+
+Tests cover schemas, tools, providers, graph, guardrails, and FastAPI using controlled/offline dependencies. See the [service guide](../../agent-services/problem-understanding-agent/README.md#tests).
+
+### Opt-in live integration
+
+The .NET `LocalhostPythonSmokeIntegrationTests` live path requires `RUN_PYTHON_AGENT_SMOKE_TESTS=true` and a running Python service. It is separate from normal isolated testing. The test returns early when not opted in or when the service is unavailable; a green result alone is not proof of live execution. Capture actual request/result evidence and the active provider when deliberately verifying integration. Offline-provider execution also does not prove live model inference.
+
+No current passing totals are hardcoded here; report actual results for each verification run.
 
 ---
 

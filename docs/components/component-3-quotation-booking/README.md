@@ -1,5 +1,7 @@
 # Component 3: Quotation and Booking
 
+> **Scope:** This overview describes planned component responsibilities and completion criteria, not verified implementation status.
+
 ## Responsibility
 
 Owns quotation creation and revisions, customer approval or rejection, booking confirmation, provider assignment, coordination history, and cancellation rules.
@@ -13,7 +15,7 @@ The Service Coordination Agent supports quotation and booking workflow coordinat
 - Backend quotations and bookings
 - React staff workflows
 - Flutter customer and provider workflows
-- Agent service `agents/service_coordination/`
+- Agent integration location is not established by this overview; follow the shared internal-service boundary.
 
 ## Completion criteria
 

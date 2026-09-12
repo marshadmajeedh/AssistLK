@@ -12,12 +12,16 @@ class ServiceCategoryCard extends StatelessWidget {
   final CanonicalServiceCategory category;
   final VoidCallback onTap;
   final bool isSelected;
+  final double? titleHeight;
+  final double? descriptionHeight;
 
   const ServiceCategoryCard({
     super.key,
     required this.category,
     required this.onTap,
     this.isSelected = false,
+    this.titleHeight,
+    this.descriptionHeight,
   });
 
   String _getAssetPath() {
@@ -93,20 +97,24 @@ class ServiceCategoryCard extends StatelessWidget {
                 ),
               ),
               const SizedBox(height: AppSpacing.sm),
-              Text(
-                category.displayName,
-                style: AppTextStyles.cardHeading.copyWith(
-                  fontWeight: FontWeight.w600,
+              SizedBox(
+                height: titleHeight,
+                child: Text(
+                  category.displayName,
+                  style: AppTextStyles.cardHeading.copyWith(
+                    fontWeight: FontWeight.w600,
+                  ),
                 ),
               ),
               const SizedBox(height: AppSpacing.xs),
-              Text(
-                category.description,
-                style: AppTextStyles.small.copyWith(
-                  color: AppColors.textSecondary,
+              SizedBox(
+                height: descriptionHeight,
+                child: Text(
+                  category.description,
+                  style: AppTextStyles.small.copyWith(
+                    color: AppColors.textSecondary,
+                  ),
                 ),
-                maxLines: 2,
-                overflow: TextOverflow.ellipsis,
               ),
             ],
           ),

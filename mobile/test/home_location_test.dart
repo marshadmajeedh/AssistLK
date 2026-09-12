@@ -1,3 +1,4 @@
+import 'package:mobile/app/customer_bottom_navigation.dart';
 import 'dart:async';
 
 import 'package:flutter/material.dart';
@@ -22,6 +23,11 @@ import 'package:mobile/features/service_requests/services/location_service.dart'
 import 'package:mobile/features/service_requests/widgets/location_attribution.dart';
 import 'package:mobile/features/service_requests/widgets/location_selection.dart';
 import 'package:mobile/features/service_requests/widgets/service_request_card.dart';
+import 'package:mobile/shared/theme/app_spacing.dart';
+import 'package:mobile/shared/theme/app_theme.dart';
+import 'package:mobile/shared/widgets/app_button.dart';
+import 'package:mobile/features/service_requests/widgets/service_category_card.dart';
+import 'package:mobile/features/service_requests/widgets/service_category_shortcuts.dart';
 
 import 'session_foundation_test.dart'
     show AuthStub, MemoryStorage, ReplyAdapter, request;
@@ -254,7 +260,7 @@ void main() {
       expect(requests.loads, 1);
       await tap(tester, 'View All');
       expect(
-        tester.widget<NavigationBar>(find.byType(NavigationBar)).selectedIndex,
+        tester.widget<CustomerBottomNavigation>(find.byType(CustomerBottomNavigation)).selectedIndex,
         2,
       );
       expect(find.byType(Navigator), findsOneWidget);
@@ -335,11 +341,118 @@ void main() {
       of: find.byType(CustomerHomeScreen),
       matching: find.byType(Scrollable),
     );
-    await tester.drag(scroll, const Offset(0, 350));
+    await tester.drag(scroll.first, const Offset(0, 350));
     await tester.pumpAndSettle();
     expect(requests.loads, 2);
     expect(gps.calls, 0);
     expect(gps.permissionCalls, 0);
+  });
+
+  for (final width in [320.0, 393.0]) {
+    for (final scale in [1.0, 2.0]) {
+      testWidgets('category cells and location wizard fit $width at $scale', (
+        tester,
+      ) async {
+        tester.view.physicalSize = Size(width, 852);
+        tester.view.devicePixelRatio = 1;
+        tester.view.padding = const FakeViewPadding(bottom: 24);
+        tester.platformDispatcher.textScaleFactorTestValue = scale;
+        addTearDown(tester.view.resetPhysicalSize);
+        addTearDown(tester.view.resetDevicePixelRatio);
+        addTearDown(tester.view.resetPadding);
+        addTearDown(tester.view.resetViewInsets);
+        addTearDown(tester.platformDispatcher.clearTextScaleFactorTestValue);
+        await mount(tester);
+        final grid = find.descendant(
+          of: find.byType(ServiceCategoryShortcuts).first,
+          matching: find.byType(ServiceCategoryCard),
+        );
+        final sizes = tester.getSize(grid.first);
+        for (final card in grid.evaluate()) {
+          expect(tester.getSize(find.byWidget(card.widget)), sizes);
+        }
+        for (final title in ['Vehicle Assistance', 'Appliance Repair']) {
+          final text = find.descendant(of: grid, matching: find.text(title));
+          final paragraph = tester.renderObject<RenderParagraph>(text.first);
+          expect(paragraph.didExceedMaxLines, isFalse);
+        }
+        expect(tester.takeException(), isNull);
+        await capture(tester);
+        await openLocation(tester);
+        expect(tester.takeException(), isNull);
+        final actions = find.byKey(const Key('wizard_actions'));
+        expect(tester.getBottomRight(actions).dy, lessThanOrEqualTo(828));
+        tester.view.viewInsets = const FakeViewPadding(bottom: 300);
+        await tester.pumpAndSettle();
+        expect(tester.getBottomRight(actions).dy, lessThanOrEqualTo(552));
+        expect(tester.takeException(), isNull);
+        tester.view.viewInsets = const FakeViewPadding();
+        await tester.pumpAndSettle();
+        await tap(tester, 'Change Location');
+        expect(find.text('Address changed with attached GPS'), findsOneWidget);
+        expect(find.byKey(const Key('edit_keep_gps_button')), findsOneWidget);
+        expect(find.byKey(const Key('edit_remove_gps_button')), findsOneWidget);
+        final remove = find.byKey(const Key('edit_remove_gps_button'));
+        final field = find.widgetWithText(TextFormField, 'Location / Address');
+        expect(tester.getTopLeft(find.text('Remove captured GPS')).dx,
+            tester.getTopLeft(field).dx);
+        expect(tester.getSize(remove).width, tester.getSize(field).width);
+        expect(tester.getSize(remove).height, greaterThanOrEqualTo(48));
+        await tester.enterText(
+          find.widgetWithText(TextFormField, 'Location / Address'),
+          'Manual service address',
+        );
+        await tap(tester, 'Keep captured GPS for this edited address');
+        expect(draft(tester).needsGpsChoice, isFalse);
+        await tap(tester, 'Remove captured GPS');
+        expect(draft(tester).hasGps, isFalse);
+        await tap(tester, 'Next: Review');
+        expect(find.text('Review Service Request'), findsOneWidget);
+        await tap(tester, 'Back');
+        expect(find.text('Service Location'), findsOneWidget);
+        expect(tester.takeException(), isNull);
+        await unmount(tester);
+      });
+    }
+  }
+
+  testWidgets('suggested location actions have a gap on a narrow screen', (
+    tester,
+  ) async {
+    tester.view.physicalSize = const Size(393, 852);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    final c = LocationSelectionController(
+      gps: gps,
+      geocoding: geo,
+      initialSuggestion: snapshot(),
+      clock: () => now,
+    );
+    addTearDown(c.dispose);
+    await tester.pumpWidget(
+      MaterialApp(
+        theme: AppTheme.lightTheme,
+        home: Scaffold(
+          body: SingleChildScrollView(
+            padding: const EdgeInsets.all(AppSpacing.lg),
+            child: LocationSelection(controller: c),
+          ),
+        ),
+      ),
+    );
+    final primary = find.widgetWithText(AppButton, 'Use This Location');
+    final secondary = find.widgetWithText(OutlinedButton, 'Change Location');
+    expect(
+      tester.getTopLeft(secondary).dy - tester.getBottomLeft(primary).dy,
+      greaterThanOrEqualTo(AppSpacing.md),
+    );
+    expect(tester.getSize(primary).width, tester.getSize(secondary).width);
+    expect(tester.takeException(), isNull);
+    await tap(tester, 'Change Location');
+    expect(c.needsGpsChoice, isTrue);
+    expect(c.canSubmit, isFalse);
+    await unmount(tester);
   });
 
   testWidgets(
@@ -435,7 +548,7 @@ void main() {
     (tester) async {
       await mount(tester);
       await capture(tester);
-      await tester.tap(find.widgetWithText(NavigationDestination, 'Services'));
+      await tester.tap(find.byKey(const ValueKey('customer_navigation_Services')));
       await tester.pumpAndSettle();
       await tap(tester, 'Vehicle Assistance');
       final create = tester.widget<CreateServiceRequestScreen>(
@@ -568,7 +681,7 @@ void main() {
       await tester.ensureVisible(find.text('Recent Activity'));
       await tester.pumpAndSettle();
       expect(tester.takeException(), isNull);
-      expect(find.byType(NavigationBar).hitTestable(), findsOneWidget);
+      expect(find.byType(CustomerBottomNavigation).hitTestable(), findsOneWidget);
       await unmount(tester);
     });
   }

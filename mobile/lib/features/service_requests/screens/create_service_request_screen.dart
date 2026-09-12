@@ -300,9 +300,60 @@ class _CreateServiceRequestScreenState
                 child: _buildCurrentStep(context),
               ),
             ),
+            Padding(
+              key: const Key('wizard_actions'),
+              padding: const EdgeInsets.fromLTRB(
+                AppSpacing.lg,
+                AppSpacing.sm,
+                AppSpacing.lg,
+                AppSpacing.md,
+              ),
+              child: _buildWizardActions(context),
+            ),
           ],
         ),
       ),
+    );
+  }
+
+  Widget _buildWizardActions(BuildContext context) {
+    final provider = context.watch<ServiceRequestProvider>();
+    if (_currentStep == 0) {
+      return AppButton(text: 'Next: Location', onPressed: _nextFromDetails);
+    }
+    final back = OutlinedButton(
+      onPressed: _currentStep == 1
+          ? _backToDetails
+          : (provider.isLoading ? null : _backToLocation),
+      child: const Text('Back'),
+    );
+    final next = AppButton(
+      text: _currentStep == 1 ? 'Next: Review' : 'Submit Request',
+      isLoading: _currentStep == 2 && provider.isLoading,
+      onPressed: _currentStep == 1 ? _nextFromLocation : _submit,
+    );
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final scale = MediaQuery.textScalerOf(context).scale(14) / 14;
+        if (constraints.maxWidth < 280 * scale) {
+          return Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              next,
+              const SizedBox(height: AppSpacing.sm),
+              back,
+            ],
+          );
+        }
+        return Row(
+          children: [
+            Expanded(child: back),
+            const SizedBox(width: AppSpacing.md),
+            Expanded(child: next),
+          ],
+        );
+      },
     );
   }
 
@@ -339,52 +390,59 @@ class _CreateServiceRequestScreenState
               borderRadius: BorderRadius.circular(AppRadius.large),
               border: Border.all(color: AppColors.border),
             ),
-            child: Row(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Container(
-                  width: 44,
-                  height: 44,
-                  padding: const EdgeInsets.all(AppSpacing.xs),
-                  decoration: BoxDecoration(
-                    color: selectedCategory != null
-                        ? AppColors.primarySurface
-                        : AppColors.aiSurface,
-                    borderRadius: BorderRadius.circular(AppRadius.medium),
-                  ),
-                  child: Center(
-                    child: AppImageAsset(
-                      assetPath: selectedCategory != null
-                          ? _getCategoryAssetPath(selectedCategory)
-                          : AppAssets.aiDiagnosisSpark,
-                      width: 32,
-                      height: 32,
-                      fit: BoxFit.contain,
-                      fallbackIcon:
-                          selectedCategory?.icon ?? Icons.auto_awesome_rounded,
-                      semanticLabel:
-                          selectedCategory?.displayName ??
-                          'AssistLK AI Problem Understanding',
+                Row(
+                  children: [
+                    Container(
+                      width: 44,
+                      height: 44,
+                      padding: const EdgeInsets.all(AppSpacing.xs),
+                      decoration: BoxDecoration(
+                        color: selectedCategory != null
+                            ? AppColors.primarySurface
+                            : AppColors.aiSurface,
+                        borderRadius: BorderRadius.circular(AppRadius.medium),
+                      ),
+                      child: Center(
+                        child: AppImageAsset(
+                          assetPath: selectedCategory != null
+                              ? _getCategoryAssetPath(selectedCategory)
+                              : AppAssets.aiDiagnosisSpark,
+                          width: 32,
+                          height: 32,
+                          fit: BoxFit.contain,
+                          fallbackIcon:
+                              selectedCategory?.icon ??
+                              Icons.auto_awesome_rounded,
+                          semanticLabel:
+                              selectedCategory?.displayName ??
+                              'AssistLK AI Problem Understanding',
+                        ),
+                      ),
                     ),
-                  ),
-                ),
-                const SizedBox(width: AppSpacing.md),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      const Text(
-                        'Service preference',
-                        style: AppTextStyles.small,
+                    const SizedBox(width: AppSpacing.md),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          const Text(
+                            'Service preference',
+                            style: AppTextStyles.small,
+                          ),
+                          const SizedBox(height: 2),
+                          Text(
+                            selectedCategory?.displayName ??
+                                'Let AssistLK AI identify',
+                            style: AppTextStyles.cardHeading,
+                          ),
+                        ],
                       ),
-                      const SizedBox(height: 2),
-                      Text(
-                        selectedCategory?.displayName ??
-                            'Let AssistLK AI identify',
-                        style: AppTextStyles.cardHeading,
-                      ),
-                    ],
-                  ),
+                    ),
+                  ],
                 ),
+                const SizedBox(height: AppSpacing.sm),
                 TextButton(
                   onPressed: _showChangePreferenceSheet,
                   child: Text(
@@ -428,8 +486,6 @@ class _CreateServiceRequestScreenState
             },
           ),
           const SizedBox(height: AppSpacing.xl),
-
-          AppButton(text: 'Next: Location', onPressed: _nextFromDetails),
         ],
       ),
     );
@@ -439,32 +495,11 @@ class _CreateServiceRequestScreenState
     key: _locationFormKey,
     child: Column(
       crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        LocationSelection(controller: _location),
-        const SizedBox(height: AppSpacing.md),
-        Row(
-          children: [
-            Expanded(
-              child: OutlinedButton(
-                onPressed: _backToDetails,
-                child: const Text('Back'),
-              ),
-            ),
-            const SizedBox(width: AppSpacing.md),
-            Expanded(
-              child: AppButton(
-                text: 'Next: Review',
-                onPressed: _nextFromLocation,
-              ),
-            ),
-          ],
-        ),
-      ],
+      children: [LocationSelection(controller: _location)],
     ),
   );
 
   Widget _buildReviewStep(BuildContext context) {
-    final provider = context.watch<ServiceRequestProvider>();
     final selectedCategory =
         CanonicalServiceCategory.fromCanonicalOrDisplayName(
           _selectedPreference,
@@ -566,11 +601,13 @@ class _CreateServiceRequestScreenState
                       color: AppColors.success,
                     ),
                     const SizedBox(width: AppSpacing.xs),
-                    Text(
-                      'GPS location captured',
-                      style: AppTextStyles.small.copyWith(
-                        color: AppColors.success,
-                        fontWeight: FontWeight.w600,
+                    Flexible(
+                      child: Text(
+                        'GPS location captured',
+                        style: AppTextStyles.small.copyWith(
+                          color: AppColors.success,
+                          fontWeight: FontWeight.w600,
+                        ),
                       ),
                     ),
                   ],
@@ -612,25 +649,6 @@ class _CreateServiceRequestScreenState
           ),
         ),
         const SizedBox(height: AppSpacing.xl),
-
-        Row(
-          children: [
-            Expanded(
-              child: OutlinedButton(
-                onPressed: provider.isLoading ? null : _backToLocation,
-                child: const Text('Back'),
-              ),
-            ),
-            const SizedBox(width: AppSpacing.md),
-            Expanded(
-              child: AppButton(
-                text: 'Submit Request',
-                isLoading: provider.isLoading,
-                onPressed: _submit,
-              ),
-            ),
-          ],
-        ),
       ],
     );
   }

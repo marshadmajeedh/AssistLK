@@ -1,3 +1,5 @@
+import 'package:mobile/app/customer_bottom_navigation.dart';
+import 'package:mobile/features/service_requests/widgets/service_request_category_asset.dart';
 import 'dart:async';
 
 import 'package:flutter/material.dart';
@@ -73,14 +75,14 @@ void main() {
   }
 
   Finder destination(String label) =>
-      find.widgetWithText(NavigationDestination, label);
+      find.byKey(ValueKey('customer_navigation_$label'));
   Future<void> tab(WidgetTester tester, String label) async {
     await tester.tap(destination(label));
     await tester.pumpAndSettle();
   }
 
   int selected(WidgetTester tester) =>
-      tester.widget<NavigationBar>(find.byType(NavigationBar)).selectedIndex;
+      tester.widget<CustomerBottomNavigation>(find.byType(CustomerBottomNavigation)).selectedIndex;
   Future<void> tapText(WidgetTester tester, String label) async {
     final finder = find.text(label).first;
     await tester.ensureVisible(finder);
@@ -94,9 +96,8 @@ void main() {
       await mount(tester);
       await tester.pumpAndSettle();
       expect(find.byType(CustomerAppShell), findsOneWidget);
-      final nav = tester.widget<NavigationBar>(find.byType(NavigationBar));
       expect(
-        nav.destinations.cast<NavigationDestination>().map((d) => d.label),
+        CustomerBottomNavigation.labels,
         ['Home', 'Services', 'Activity', 'Account'],
       );
       expect(selected(tester), 0);
@@ -107,6 +108,28 @@ void main() {
       expect(find.byType(Navigator), findsOneWidget);
     },
   );
+
+  testWidgets('Home recent activity and Activity share category artwork', (tester) async {
+    requests.items = [
+      request('one').copyWith(category: 'Unclassified'),
+      request('two').copyWith(category: 'Plumbing'),
+      request('three').copyWith(category: 'Appliance Repair'),
+    ];
+    await mount(tester);
+    await tester.pumpAndSettle();
+    for (final label in ['Home', 'Activity']) {
+      await tab(tester, label);
+      final cards = find.byType(ServiceRequestCard);
+      expect(cards, findsNWidgets(3));
+      for (final element in cards.evaluate()) {
+        final card = element.widget as ServiceRequestCard;
+        final image = tester.widget<Image>(find.descendant(
+          of: find.byWidget(card), matching: find.byType(Image)));
+        expect((image.image as AssetImage).assetName,
+          serviceRequestCategoryAsset(card.request.category));
+      }
+    }
+  });
 
   for (final entry in {'Services': 1, 'Activity': 2, 'Account': 3}.entries) {
     testWidgets(
@@ -153,7 +176,7 @@ void main() {
     await tester.pumpAndSettle();
     await tapText(tester, 'Create Service Request');
     expect(find.byType(CreateServiceRequestScreen), findsOneWidget);
-    expect(find.byType(NavigationBar), findsNothing);
+    expect(find.byType(CustomerBottomNavigation), findsNothing);
     await tester.binding.handlePopRoute();
     await tester.pumpAndSettle();
     expect(selected(tester), 0);
@@ -174,7 +197,7 @@ void main() {
       await tester.pumpAndSettle();
       await tab(tester, 'Services');
       await tapText(tester, entry.key);
-      expect(find.byType(NavigationBar), findsNothing);
+      expect(find.byType(CustomerBottomNavigation), findsNothing);
       expect(
         tester
             .widget<CreateServiceRequestScreen>(
@@ -196,7 +219,7 @@ void main() {
       await tapText(tester, 'Submit Request');
       expect(requests.submitted!.categoryHint, entry.value);
       expect(find.byType(ServiceRequestDetailScreen), findsOneWidget);
-      expect(find.byType(NavigationBar), findsNothing);
+      expect(find.byType(CustomerBottomNavigation), findsNothing);
       await tester.binding.handlePopRoute();
       await tester.pumpAndSettle();
       expect(selected(tester), 1);
@@ -250,10 +273,10 @@ void main() {
       await tester.tap(find.byType(ServiceRequestCard));
       await tester.pumpAndSettle();
       expect(find.byType(ServiceRequestDetailScreen), findsOneWidget);
-      expect(find.byType(NavigationBar), findsNothing);
+      expect(find.byType(CustomerBottomNavigation), findsNothing);
       await tapText(tester, 'Edit Details');
       expect(find.byType(EditServiceRequestScreen), findsOneWidget);
-      expect(find.byType(NavigationBar), findsNothing);
+      expect(find.byType(CustomerBottomNavigation), findsNothing);
       await tester.binding.handlePopRoute();
       await tester.pumpAndSettle();
       expect(find.byType(ServiceRequestDetailScreen), findsOneWidget);
@@ -416,7 +439,7 @@ void main() {
       await tester.pumpAndSettle();
       expect(find.byType(ProviderHomeScreen), findsOneWidget);
       expect(find.byType(CustomerAppShell), findsNothing);
-      expect(find.byType(NavigationBar), findsNothing);
+      expect(find.byType(CustomerBottomNavigation), findsNothing);
       expect(requests.loads, 0);
     },
   );
@@ -445,7 +468,7 @@ void main() {
           expect(tester.takeException(), isNull);
           expect(destination(label).hitTestable(), findsOneWidget);
           final labelFinder = find.descendant(
-            of: find.byType(NavigationBar),
+            of: find.byType(CustomerBottomNavigation),
             matching: find.text(label),
           );
           expect(

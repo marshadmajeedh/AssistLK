@@ -2138,6 +2138,7 @@ void main() {
       expect(find.textContaining('GPS location captured'), findsNothing);
 
       // Remove GPS
+      await tester.ensureVisible(find.text('Remove captured GPS'));
       await tester.tap(find.text('Remove captured GPS'));
       await tester.pumpAndSettle();
 

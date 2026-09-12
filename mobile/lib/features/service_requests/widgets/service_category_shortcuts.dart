@@ -1,3 +1,5 @@
+import 'dart:math' as math;
+
 import 'package:flutter/material.dart';
 
 import '../../../../shared/theme/app_spacing.dart';
@@ -8,38 +10,92 @@ import 'service_category_card.dart';
 class ServiceCategoryShortcuts extends StatelessWidget {
   final ValueChanged<CanonicalServiceCategory> onSelected;
   const ServiceCategoryShortcuts({super.key, required this.onSelected});
+
   @override
   Widget build(BuildContext context) => LayoutBuilder(
     builder: (context, constraints) {
-      // Fit the longest existing label at the user's text scale.
-      final label = TextPainter(
-        text: const TextSpan(
-          text: 'Vehicle Assistance',
-          style: AppTextStyles.cardHeading,
-        ),
-        textDirection: Directionality.of(context),
-        textScaler: MediaQuery.textScalerOf(context),
-      )..layout();
-      final minimum = label.width + AppSpacing.md * 2;
-      label.dispose();
-      final columns = constraints.maxWidth >= minimum * 2 + AppSpacing.sm
-          ? 2
-          : 1;
-      final width =
-          (constraints.maxWidth - AppSpacing.sm * (columns - 1)) / columns;
-      return Wrap(
-        spacing: AppSpacing.sm,
-        runSpacing: AppSpacing.sm,
-        children: [
-          for (final category in CanonicalServiceCategory.canonicalShortcuts)
-            SizedBox(
-              width: width,
-              child: ServiceCategoryCard(
-                category: category,
-                onTap: () => onSelected(category),
-              ),
+      final categories = CanonicalServiceCategory.canonicalShortcuts;
+      TextPainter measure(String text, TextStyle style, double width) =>
+          TextPainter(
+            text: TextSpan(
+              text: text,
+              style: DefaultTextStyle.of(context).style.merge(style),
             ),
-        ],
+            textDirection: Directionality.of(context),
+            textScaler: MediaQuery.textScalerOf(context),
+          )..layout(maxWidth: width);
+
+      double contentWidth(int columns) => math.max(
+        1,
+        (constraints.maxWidth - AppSpacing.sm * (columns - 1)) / columns -
+            2 * (AppSpacing.md + 1),
+      );
+      // Keep two columns when every label fits comfortably. At larger text
+      // scales, a single column preserves the full category wording.
+      var columns = 2;
+      for (final category in categories) {
+        final title = measure(
+          category.displayName,
+          AppTextStyles.cardHeading,
+          contentWidth(2),
+        );
+        final description = measure(
+          category.description,
+          AppTextStyles.small,
+          contentWidth(2),
+        );
+        if (title.computeLineMetrics().length > 2 ||
+            description.computeLineMetrics().length > 3) {
+          columns = 1;
+        }
+        title.dispose();
+        description.dispose();
+      }
+      var titleHeight = 0.0;
+      var descriptionHeight = 0.0;
+      for (final category in categories) {
+        final title = measure(
+          category.displayName,
+          AppTextStyles.cardHeading,
+          contentWidth(columns),
+        );
+        final description = measure(
+          category.description,
+          AppTextStyles.small,
+          contentWidth(columns),
+        );
+        titleHeight = math.max(titleHeight, title.height.ceilToDouble());
+        descriptionHeight = math.max(
+          descriptionHeight,
+          description.height.ceilToDouble(),
+        );
+        title.dispose();
+        description.dispose();
+      }
+      return GridView.builder(
+        shrinkWrap: true,
+        primary: false,
+        physics: const NeverScrollableScrollPhysics(),
+        padding: EdgeInsets.zero,
+        itemCount: categories.length,
+        gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+          crossAxisCount: columns,
+          crossAxisSpacing: AppSpacing.sm,
+          mainAxisSpacing: AppSpacing.sm,
+          mainAxisExtent:
+              2 * (AppSpacing.md + 1) +
+              48 +
+              AppSpacing.sm +
+              titleHeight +
+              AppSpacing.xs +
+              descriptionHeight,
+        ),
+        itemBuilder: (context, index) => ServiceCategoryCard(
+          category: categories[index],
+          titleHeight: titleHeight,
+          descriptionHeight: descriptionHeight,
+          onTap: () => onSelected(categories[index]),
+        ),
       );
     },
   );

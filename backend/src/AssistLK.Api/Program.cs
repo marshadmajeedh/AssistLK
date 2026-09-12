@@ -146,6 +146,21 @@ builder.Services.AddScoped<
 
 builder.Services.AddHttpClient();
 
+builder.Services.AddSingleton(sp =>
+{
+    var options = new AssistLK.Infrastructure.ExternalServices.GoogleMapsOptions();
+    sp.GetRequiredService<IConfiguration>().GetSection("GoogleMaps").Bind(options);
+    options.Validate();
+    return options;
+});
+builder.Services.AddHttpClient<ILocationGeocodingService, AssistLK.Infrastructure.ExternalServices.GoogleReverseGeocodingService>((sp, client) =>
+{
+    client.Timeout = TimeSpan.FromSeconds(sp.GetRequiredService<AssistLK.Infrastructure.ExternalServices.GoogleMapsOptions>().TimeoutSeconds);
+})
+    .ConfigurePrimaryHttpMessageHandler(() => new HttpClientHandler { AllowAutoRedirect = false })
+    // Factory defaults log outgoing URLs, which contain the Google key and coordinates.
+    .RemoveAllLoggers();
+
 
 // -----------------------------
 // Tools

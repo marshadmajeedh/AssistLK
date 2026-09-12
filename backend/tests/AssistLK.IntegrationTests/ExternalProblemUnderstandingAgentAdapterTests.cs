@@ -3,14 +3,11 @@ using System.Text;
 using System.Text.Json;
 using AssistLK.Agents.Abstractions;
 using AssistLK.Agents.Adapters;
-using AssistLK.Agents.Agents;
 using AssistLK.Agents.Clients;
 using AssistLK.Agents.Configuration;
 using AssistLK.Agents.Core;
 using AssistLK.Agents.DTOs;
 using AssistLK.Agents.Models;
-using AssistLK.Agents.Services;
-using AssistLK.Agents.Tools;
 using AssistLK.Domain.Enums;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
@@ -794,9 +791,9 @@ public class ExternalProblemUnderstandingAgentAdapterTests
     #region Section 15: Required Tests 24-25 & Strict Mode Validation
 
     [Fact]
-    public void Test24_ModeSwitch_NativeCSharpMode_RegistersNativeAgent()
+    public void Test24_ModeSwitch_NativeCSharpMode_FallsBackToExternalAdapter()
     {
-        // Item 24: NativeCSharp mode still registers native agent
+        // When NativeCSharp mode is configured, during migration it resolves the adapter as native agent is removed
         var services = new ServiceCollection();
 
         var configuration = new ConfigurationBuilder()
@@ -821,8 +818,6 @@ public class ExternalProblemUnderstandingAgentAdapterTests
 
         services.AddScoped<ToolRegistry>();
         services.AddScoped<ToolExecutor>();
-        services.AddScoped<IGeminiService, GeminiService>();
-        services.AddScoped<ProblemUnderstandingAgent>();
         services.AddScoped<IProblemUnderstandingClient, ProblemUnderstandingHttpClient>();
         services.AddScoped<ExternalProblemUnderstandingAgentAdapter>();
 
@@ -831,13 +826,10 @@ public class ExternalProblemUnderstandingAgentAdapterTests
             var registry = new AgentRegistry();
             var options = sp.GetRequiredService<AgentServicesOptions>();
 
-            if (string.Equals(options.ProblemUnderstandingMode, AgentServicesOptions.ExternalPythonMode, StringComparison.OrdinalIgnoreCase))
+            if (string.Equals(options.ProblemUnderstandingMode, AgentServicesOptions.ExternalPythonMode, StringComparison.OrdinalIgnoreCase) ||
+                string.Equals(options.ProblemUnderstandingMode, AgentServicesOptions.NativeCSharpMode, StringComparison.OrdinalIgnoreCase))
             {
                 registry.Register(sp.GetRequiredService<ExternalProblemUnderstandingAgentAdapter>());
-            }
-            else if (string.Equals(options.ProblemUnderstandingMode, AgentServicesOptions.NativeCSharpMode, StringComparison.OrdinalIgnoreCase))
-            {
-                registry.Register(sp.GetRequiredService<ProblemUnderstandingAgent>());
             }
             return registry;
         });
@@ -849,7 +841,7 @@ public class ExternalProblemUnderstandingAgentAdapterTests
         var registeredAgent = registry.Get("ProblemUnderstandingAgent");
 
         Assert.NotNull(registeredAgent);
-        Assert.IsType<ProblemUnderstandingAgent>(registeredAgent);
+        Assert.IsType<ExternalProblemUnderstandingAgentAdapter>(registeredAgent);
     }
 
     [Fact]
@@ -881,8 +873,6 @@ public class ExternalProblemUnderstandingAgentAdapterTests
 
         services.AddScoped<ToolRegistry>();
         services.AddScoped<ToolExecutor>();
-        services.AddScoped<IGeminiService, GeminiService>();
-        services.AddScoped<ProblemUnderstandingAgent>();
         services.AddScoped<IProblemUnderstandingClient, ProblemUnderstandingHttpClient>();
         services.AddScoped<ExternalProblemUnderstandingAgentAdapter>();
 
@@ -891,13 +881,10 @@ public class ExternalProblemUnderstandingAgentAdapterTests
             var registry = new AgentRegistry();
             var options = sp.GetRequiredService<AgentServicesOptions>();
 
-            if (string.Equals(options.ProblemUnderstandingMode, AgentServicesOptions.ExternalPythonMode, StringComparison.OrdinalIgnoreCase))
+            if (string.Equals(options.ProblemUnderstandingMode, AgentServicesOptions.ExternalPythonMode, StringComparison.OrdinalIgnoreCase) ||
+                string.Equals(options.ProblemUnderstandingMode, AgentServicesOptions.NativeCSharpMode, StringComparison.OrdinalIgnoreCase))
             {
                 registry.Register(sp.GetRequiredService<ExternalProblemUnderstandingAgentAdapter>());
-            }
-            else if (string.Equals(options.ProblemUnderstandingMode, AgentServicesOptions.NativeCSharpMode, StringComparison.OrdinalIgnoreCase))
-            {
-                registry.Register(sp.GetRequiredService<ProblemUnderstandingAgent>());
             }
             return registry;
         });

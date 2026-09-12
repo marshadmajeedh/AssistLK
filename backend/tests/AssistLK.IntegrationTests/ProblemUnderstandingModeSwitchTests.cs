@@ -1,11 +1,8 @@
 using AssistLK.Agents.Abstractions;
 using AssistLK.Agents.Adapters;
-using AssistLK.Agents.Agents;
 using AssistLK.Agents.Clients;
 using AssistLK.Agents.Configuration;
 using AssistLK.Agents.Core;
-using AssistLK.Agents.Services;
-using AssistLK.Agents.Tools;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
@@ -62,16 +59,9 @@ public class ProblemUnderstandingModeSwitchTests
             client.Timeout = TimeSpan.FromSeconds(options.TimeoutSeconds);
         });
 
-        // Tools
+        // Tools & Infrastructure
         services.AddScoped<ToolRegistry>();
         services.AddScoped<ToolExecutor>();
-        services.AddScoped<ProblemClassificationTool>();
-        services.AddScoped<LocationExtractionTool>();
-        services.AddScoped<ServiceKnowledgeTool>();
-
-        // Native Agent & Services
-        services.AddScoped<IGeminiService, GeminiService>();
-        services.AddScoped<ProblemUnderstandingAgent>();
 
         // External Adapter
         services.AddScoped<ExternalProblemUnderstandingAgentAdapter>();
@@ -85,13 +75,10 @@ public class ProblemUnderstandingModeSwitchTests
             var registry = new AgentRegistry();
             var options = sp.GetRequiredService<AgentServicesOptions>();
 
-            if (string.Equals(options.ProblemUnderstandingMode, AgentServicesOptions.ExternalPythonMode, StringComparison.OrdinalIgnoreCase))
+            if (string.Equals(options.ProblemUnderstandingMode, AgentServicesOptions.ExternalPythonMode, StringComparison.OrdinalIgnoreCase) ||
+                string.Equals(options.ProblemUnderstandingMode, AgentServicesOptions.NativeCSharpMode, StringComparison.OrdinalIgnoreCase))
             {
                 registry.Register(sp.GetRequiredService<ExternalProblemUnderstandingAgentAdapter>());
-            }
-            else if (string.Equals(options.ProblemUnderstandingMode, AgentServicesOptions.NativeCSharpMode, StringComparison.OrdinalIgnoreCase))
-            {
-                registry.Register(sp.GetRequiredService<ProblemUnderstandingAgent>());
             }
             else
             {

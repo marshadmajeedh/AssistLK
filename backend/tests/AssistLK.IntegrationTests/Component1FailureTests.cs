@@ -1,9 +1,6 @@
 using AssistLK.Agents.Adapters;
-using AssistLK.Agents.Agents;
 using AssistLK.Agents.Core;
 using AssistLK.Agents.Models;
-using AssistLK.Agents.Services;
-using AssistLK.Agents.Tools;
 using AssistLK.IntegrationTests.TestDoubles;
 using AssistLK.Application.Interfaces;
 using AssistLK.Application.ServiceRequests.DTOs;

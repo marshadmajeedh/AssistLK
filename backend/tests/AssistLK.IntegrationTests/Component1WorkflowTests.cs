@@ -1,10 +1,7 @@
 using AssistLK.Agents.Adapters;
-using AssistLK.Agents.Agents;
 using AssistLK.Agents.Clients;
 using AssistLK.Agents.Core;
 using AssistLK.Agents.Models;
-using AssistLK.Agents.Services;
-using AssistLK.Agents.Tools;
 using AssistLK.Application.Interfaces;
 using AssistLK.Application.Services;
 using AssistLK.Domain.Entities;

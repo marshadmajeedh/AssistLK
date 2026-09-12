@@ -1,10 +1,8 @@
 using AssistLK.Agents.Abstractions;
 using AssistLK.Agents.Adapters;
-using AssistLK.Agents.Agents;
 using AssistLK.Agents.Clients;
 using AssistLK.Agents.Configuration;
 using AssistLK.Agents.Core;
-using AssistLK.Agents.Services;
 using AssistLK.Agents.Tools;
 using AssistLK.Api.Middleware;
 using AssistLK.Api.Seed;
@@ -134,7 +132,6 @@ builder.Services.AddHttpClient<IProblemUnderstandingClient, ProblemUnderstanding
     client.Timeout = TimeSpan.FromSeconds(options.TimeoutSeconds > 0 ? options.TimeoutSeconds : 45);
 });
 
-builder.Services.AddScoped<ProblemUnderstandingAgent>();
 builder.Services.AddScoped<ExternalProblemUnderstandingAgentAdapter>();
 
 // Agent Registry (Mode-aware, Scoped, Lifetime-safe)
@@ -143,15 +140,11 @@ builder.Services.AddScoped<AgentRegistry>(sp =>
     var registry = new AgentRegistry();
     var options = sp.GetRequiredService<AgentServicesOptions>();
 
-    if (string.Equals(options.ProblemUnderstandingMode, AgentServicesOptions.ExternalPythonMode, StringComparison.OrdinalIgnoreCase))
+    if (string.Equals(options.ProblemUnderstandingMode, AgentServicesOptions.ExternalPythonMode, StringComparison.OrdinalIgnoreCase) ||
+        string.Equals(options.ProblemUnderstandingMode, AgentServicesOptions.NativeCSharpMode, StringComparison.OrdinalIgnoreCase))
     {
         registry.Register(
             sp.GetRequiredService<ExternalProblemUnderstandingAgentAdapter>());
-    }
-    else if (string.Equals(options.ProblemUnderstandingMode, AgentServicesOptions.NativeCSharpMode, StringComparison.OrdinalIgnoreCase))
-    {
-        registry.Register(
-            sp.GetRequiredService<ProblemUnderstandingAgent>());
     }
     else
     {
@@ -169,17 +162,10 @@ builder.Services.AddScoped<
 
 
 // -----------------------------
-// Gemini
+// HTTP Clients
 // -----------------------------
 
 builder.Services.AddHttpClient();
-
-builder.Services.AddScoped<
-    IGeminiService,
-    GeminiService>();
-
-builder.Services.AddScoped<
-    GeminiService>();
 
 
 // -----------------------------
@@ -192,15 +178,6 @@ builder.Services.AddScoped<ToolRegistry>(sp =>
 
     registry.Register(
         sp.GetRequiredService<DemoProviderSearchTool>());
-
-    registry.Register(
-        sp.GetRequiredService<ProblemClassificationTool>());
-
-    registry.Register(
-        sp.GetRequiredService<LocationExtractionTool>());
-
-    registry.Register(
-        sp.GetRequiredService<ServiceKnowledgeTool>());
 
     return registry;
 });
@@ -215,15 +192,6 @@ builder.Services.AddScoped<
 
 builder.Services.AddScoped<
     DemoProviderSearchTool>();
-
-builder.Services.AddScoped<
-    ProblemClassificationTool>();
-
-builder.Services.AddScoped<
-    LocationExtractionTool>();
-
-builder.Services.AddScoped<
-    ServiceKnowledgeTool>();
 
 
 // -----------------------------

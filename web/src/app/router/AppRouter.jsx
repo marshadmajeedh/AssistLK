@@ -17,6 +17,7 @@ import AdminLayout from "../../shared/layouts/AdminLayout";
 import CustomerLayout from "../../shared/layouts/CustomerLayout";
 import PlaceholderPage from "../../shared/components/PlaceholderPage";
 import AdminDashboardPage from "../../features/admin/pages/AdminDashboardPage";
+import AdminServiceRequestListPage from "../../features/admin/pages/AdminServiceRequestListPage";
 
 function RootRedirect() {
 	const user = useAuthStore((state) => state.user);
@@ -61,7 +62,7 @@ function AppRouter() {
 						<Route
 							path="/admin/service-requests"
 							element={
-								<PlaceholderPage title="Admin Service Requests" />
+								<AdminServiceRequestListPage />
 							}
 						/>
 

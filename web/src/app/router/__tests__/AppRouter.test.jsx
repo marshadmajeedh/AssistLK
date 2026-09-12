@@ -3,6 +3,10 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 import AppRouter from "../AppRouter";
 import { useAuthStore } from "../../../shared/auth/authStore";
 
+vi.mock("../../../features/admin/services/adminServiceRequestService", () => ({
+  default: { getAll: vi.fn().mockResolvedValue([]), getById: vi.fn() },
+}));
+
 vi.mock("../../../features/serviceRequests/services/serviceRequestService", () => ({
   default: {
     getMyRequests: vi.fn().mockResolvedValue([]),
@@ -95,8 +99,17 @@ describe("AppRouter Role Boundaries and Routing", () => {
     render(<AppRouter />);
 
     expect(
-      await screen.findByRole("heading", { name: /admin service requests/i })
+      await screen.findByRole("heading", { name: /service request monitoring/i })
     ).toBeInTheDocument();
     expect(window.location.pathname).toBe("/admin/service-requests");
+    expect(screen.queryByText(/assigned component owner/i)).not.toBeInTheDocument();
+  });
+
+  it.each(["Customer", "Provider", null])("rejects %s from Admin service request monitoring", async (role) => {
+    if (role) useAuthStore.setState({ user: { role }, token: "valid-token" });
+    window.history.pushState({}, "Test", "/admin/service-requests");
+    render(<AppRouter />);
+    await waitFor(() => expect(window.location.pathname).toBe(role ? "/unauthorized" : "/login"));
+    expect(screen.queryByRole("heading", { name: /service request monitoring/i })).not.toBeInTheDocument();
   });
 });

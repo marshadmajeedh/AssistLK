@@ -1,0 +1,32 @@
+.request-monitoring { container-type: inline-size; text-align: left; min-width: 0; overflow-wrap: anywhere; display: grid; gap: var(--monitoring-gap); }
+.request-monitoring h1 { margin: 0; letter-spacing: normal; }
+.request-monitoring h2, .request-monitoring h3, .request-monitoring h4 { color: inherit; margin: 0 0 var(--monitoring-gap); }
+.request-monitoring h2 { font-size: 20px; }
+.request-monitoring h3 { font-size: 16px; }
+.request-monitoring h4 { font-size: 14px; }
+.monitoring-muted, .request-monitoring dt { color: var(--monitoring-muted); }
+.monitoring-filters, .monitoring-fields { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 180px), 1fr)); gap: var(--monitoring-gap); }
+.monitoring-filters { align-items: end; }
+.request-monitoring select { margin-top: 8px; }
+.request-monitoring select:focus-visible, .request-monitoring button:focus-visible { outline: 2px solid var(--monitoring-focus); outline-offset: 2px; }
+.monitoring-table { width: 100%; border-collapse: collapse; table-layout: fixed; }
+.monitoring-table caption { text-align: left; padding-bottom: var(--monitoring-gap); color: var(--monitoring-muted); }
+.monitoring-table th, .monitoring-table td { padding: 12px 6px; text-align: left; border-bottom: 1px solid var(--monitoring-border); vertical-align: top; }
+.monitoring-table th { font-size: 12px; }
+.monitoring-table td span { white-space: normal !important; }
+.monitoring-table button { padding: 6px !important; }
+.monitoring-detail-header { display: flex; justify-content: space-between; align-items: center; gap: var(--monitoring-gap); margin-bottom: var(--monitoring-gap); }
+.monitoring-sections { display: grid; gap: var(--monitoring-gap); }
+.request-monitoring dl { margin: 0; }
+.request-monitoring dt { font-size: 12px; margin-top: 8px; }
+.request-monitoring dd { margin: 4px 0 0; }
+.monitoring-prose { white-space: pre-wrap; }
+.monitoring-history { padding-left: 24px; margin-bottom: 0; }
+.monitoring-history li { padding: var(--monitoring-gap) 0; border-top: 1px solid var(--monitoring-border); }
+@container (max-width: 900px) {
+  .monitoring-table, .monitoring-table tbody, .monitoring-table tr, .monitoring-table td { display: block; width: auto; }
+  .monitoring-table thead { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); }
+  .monitoring-table tr + tr { margin-top: var(--monitoring-gap); }
+  .monitoring-table td { display: grid; grid-template-columns: 90px minmax(0, 1fr); gap: 8px; }
+  .monitoring-table td::before { content: attr(data-label); color: var(--monitoring-muted); font-size: 12px; }
+}

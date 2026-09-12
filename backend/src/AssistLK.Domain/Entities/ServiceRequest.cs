@@ -16,6 +16,8 @@ public class ServiceRequest : BaseEntity
 
     public string LocationText { get; set; } = string.Empty;
 
+    public LocationSource LocationSource { get; set; } = LocationSource.Manual;
+
     public decimal? Latitude { get; set; }
 
     public decimal? Longitude { get; set; }

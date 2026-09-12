@@ -298,8 +298,10 @@ public class Component1LifecycleTests
         Assert.Single(analyses);
     }
 
-    [Fact]
-    public async Task MarkReadyForMatchingAsync_TransitionsAnalyzedToReadyForMatchingWhenValid()
+    [Theory]
+    [InlineData(LocationSource.Manual)]
+    [InlineData(LocationSource.OpenStreetMap)]
+    public async Task MarkReadyForMatchingAsync_TransitionsAnalyzedToReadyForMatchingWhenValid(LocationSource source)
     {
         var (service, requests, analyses) = CreateTestContext();
         var id = Guid.NewGuid();
@@ -310,6 +312,7 @@ public class Component1LifecycleTests
             CustomerId = customerId,
             Description = "Car engine won't start",
             LocationText = "Colombo",
+            LocationSource = source,
             Category = "Vehicle Repair",
             Urgency = ServiceRequestUrgency.High,
             Status = ServiceRequestStatus.Analyzed

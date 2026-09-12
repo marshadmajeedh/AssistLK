@@ -148,17 +148,18 @@ builder.Services.AddHttpClient();
 
 builder.Services.AddSingleton(sp =>
 {
-    var options = new AssistLK.Infrastructure.ExternalServices.GoogleMapsOptions();
-    sp.GetRequiredService<IConfiguration>().GetSection("GoogleMaps").Bind(options);
+    var options = new AssistLK.Infrastructure.ExternalServices.LocationGeocodingOptions();
+    sp.GetRequiredService<IConfiguration>().GetSection("LocationGeocoding").Bind(options);
     options.Validate();
     return options;
 });
-builder.Services.AddHttpClient<ILocationGeocodingService, AssistLK.Infrastructure.ExternalServices.GoogleReverseGeocodingService>((sp, client) =>
+builder.Services.AddSingleton<AssistLK.Infrastructure.ExternalServices.NominatimRequestCoordinator>();
+builder.Services.AddHttpClient<ILocationGeocodingService, AssistLK.Infrastructure.ExternalServices.NominatimReverseGeocodingService>((sp, client) =>
 {
-    client.Timeout = TimeSpan.FromSeconds(sp.GetRequiredService<AssistLK.Infrastructure.ExternalServices.GoogleMapsOptions>().TimeoutSeconds);
+    client.Timeout = TimeSpan.FromSeconds(sp.GetRequiredService<AssistLK.Infrastructure.ExternalServices.LocationGeocodingOptions>().TimeoutSeconds);
 })
     .ConfigurePrimaryHttpMessageHandler(() => new HttpClientHandler { AllowAutoRedirect = false })
-    // Factory defaults log outgoing URLs, which contain the Google key and coordinates.
+    // Factory URL logging would disclose precise coordinates.
     .RemoveAllLoggers();
 
 

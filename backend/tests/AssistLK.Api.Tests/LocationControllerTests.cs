@@ -20,10 +20,14 @@ public class LocationControllerTests
     {
         public int Calls { get; private set; }
         public string? Query { get; private set; }
+        public string? UserAgent { get; private set; }
+        public string? Path { get; private set; }
         protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)
         {
             Calls++;
             Query = request.RequestUri!.Query;
+            UserAgent = request.Headers.UserAgent.ToString();
+            Path = request.RequestUri.AbsolutePath;
             return send(request, cancellationToken);
         }
     }
@@ -33,25 +37,21 @@ public class LocationControllerTests
 
     private static string Address(params (string Type, string Name)[] components) => JsonSerializer.Serialize(new
     {
-        status = "OK",
-        results = new[] { new {
-            formatted_address = "  Example Road, Example City  ", place_id = "example-place",
-            geometry = new { location_type = "ROOFTOP" },
-            address_components = components.Select(c => new { long_name = c.Name, types = new[] { "political", c.Type } })
-        } }
+        display_name = "  Example Road, Example City  ", place_id = 123,
+        address = components.ToDictionary(c => c.Type, c => c.Name)
     });
 
-    // Run the real controller, JWT authorization, validation, and typed Google service.
+    // Run the real controller, JWT authorization, validation, and typed Nominatim service.
     // Any attempt to resolve the database fails; preview cannot read or write it.
     private static async Task<HttpResponseMessage> Send(Handler handler, object payload,
-        UserRole? role = UserRole.Customer, string key = Secret)
+        UserRole? role = UserRole.Customer)
     {
         using var parent = new AssistLKApiTestFactory();
         using var factory = parent.WithWebHostBuilder(builder => builder.ConfigureTestServices(services =>
         {
-            services.AddSingleton(new GoogleMapsOptions { ApiKey = key });
+            services.AddSingleton(new LocationGeocodingOptions());
             services.AddScoped<AssistLKDbContext>(_ => throw new InvalidOperationException("Preview accessed the database."));
-            services.AddHttpClient<ILocationGeocodingService, GoogleReverseGeocodingService>()
+            services.AddHttpClient<ILocationGeocodingService, NominatimReverseGeocodingService>()
                 .ConfigurePrimaryHttpMessageHandler(() => handler);
         }));
         using var client = factory.CreateClient();
@@ -63,15 +63,19 @@ public class LocationControllerTests
     [Fact]
     public async Task Customer_ZeroCoordinates_ReturnsNormalizedPreview_WithoutDatabaseAccess()
     {
-        var handler = Reply(Address(("route", "Example Road"), ("locality", "Example City")));
+        var handler = Reply(Address(("road", "Example Road"), ("city", "Example City")));
         using var response = await Send(handler, new { latitude = 0, longitude = 0 });
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
         Assert.True(response.Headers.CacheControl!.NoStore);
         var body = await response.Content.ReadFromJsonAsync<JsonElement>();
         Assert.Equal("Example Road, Example City", body.GetProperty("formattedAddress").GetString());
-        Assert.Equal("StreetAddress", body.GetProperty("resolutionLevel").GetString());
-        Assert.Equal("example-place", body.GetProperty("placeId").GetString());
-        Assert.Contains("latlng=0,0", handler.Query);
+        Assert.Equal("Approximate", body.GetProperty("resolutionLevel").GetString());
+        Assert.Equal("123", body.GetProperty("placeId").GetString());
+        Assert.Contains("lat=0&lon=0", handler.Query);
+        Assert.Contains("format=jsonv2&addressdetails=1", handler.Query);
+        Assert.DoesNotContain("key=", handler.Query);
+        Assert.Equal("/reverse", handler.Path);
+        Assert.Equal("AssistLK-SE3090/1.0", handler.UserAgent);
         Assert.Equal(1, handler.Calls);
     }
 
@@ -92,7 +96,7 @@ public class LocationControllerTests
     [InlineData(91, 0)]
     [InlineData(0, -181)]
     [InlineData(0, 181)]
-    public async Task InvalidCoordinates_Return400_WithoutCallingGoogle(int latitude, int longitude)
+    public async Task InvalidCoordinates_Return400_WithoutCallingNominatim(int latitude, int longitude)
     {
         var handler = Reply(Address());
         using var response = await Send(handler, new { latitude, longitude });
@@ -119,15 +123,15 @@ public class LocationControllerTests
     [InlineData(true)]
     public async Task Components_MapByType_RegardlessOfOrder(bool reverse)
     {
-        (string, string)[] components = [("route", "Road"), ("neighborhood", "Neighborhood"),
-            ("locality", "City"), ("administrative_area_level_1", "Province"), ("postal_code", "123"), ("country", "Country")];
+        (string, string)[] components = [("road", "Road"), ("neighbourhood", "Neighborhood"),
+            ("city", "City"), ("state", "Province"), ("postcode", "123"), ("country", "Country")];
         var handler = Reply(Address(reverse ? components.Reverse().ToArray() : components));
         using var response = await Send(handler, new { latitude = 6.9050m, longitude = 79.9195m });
         var body = await response.Content.ReadFromJsonAsync<JsonElement>();
         foreach (var pair in new[] { ("street", "Road"), ("neighborhood", "Neighborhood"), ("city", "City"),
             ("province", "Province"), ("postalCode", "123"), ("country", "Country") })
             Assert.Equal(pair.Item2, body.GetProperty(pair.Item1).GetString());
-        Assert.Contains("latlng=6.9050,79.9195", handler.Query);
+        Assert.Contains("lat=6.905&lon=79.9195", handler.Query);
     }
 
     [Fact]
@@ -139,20 +143,26 @@ public class LocationControllerTests
             Assert.Equal(JsonValueKind.Null, body.GetProperty(field).ValueKind);
     }
 
-    [Fact]
-    public async Task Fallbacks_UsePostalTownAndSmallestSublocality()
+    [Theory]
+    [InlineData("road", "neighbourhood", "city")]
+    [InlineData("pedestrian", "suburb", "town")]
+    [InlineData("residential", "quarter", "village")]
+    [InlineData("road", "suburb", "municipality")]
+    public async Task Fallbacks_HandleLocalAddressVariations(string road, string neighborhood, string city)
     {
-        using var response = await Send(Reply(Address(("postal_town", "Town"), ("administrative_area_level_2", "District"),
-            ("sublocality_level_1", "Large"), ("sublocality_level_2", "Small"))), new { latitude = 0, longitude = 0 });
+        using var response = await Send(Reply(Address((road, "Road"), (neighborhood, "Area"),
+            (city, "Town"), ("province", "Province"))), new { latitude = 0, longitude = 0 });
         var body = await response.Content.ReadFromJsonAsync<JsonElement>();
+        Assert.Equal("Road", body.GetProperty("street").GetString());
+        Assert.Equal("Area", body.GetProperty("neighborhood").GetString());
         Assert.Equal("Town", body.GetProperty("city").GetString());
-        Assert.Equal("Small", body.GetProperty("neighborhood").GetString());
+        Assert.Equal("Province", body.GetProperty("province").GetString());
     }
 
     [Theory]
-    [InlineData("{\"status\":\"ZERO_RESULTS\",\"results\":[]}")]
-    [InlineData("{\"status\":\"OK\",\"results\":[]}")]
-    [InlineData("{\"status\":\"OK\",\"results\":[{\"formatted_address\":\" \"}]}")]
+    [InlineData("{\"error\":\"Unable to geocode\"}")]
+    [InlineData("{}")]
+    [InlineData("{\"display_name\":\" \"}")]
     public async Task NoUsefulResult_Return404(string json)
     {
         using var response = await Send(Reply(json), new { latitude = 0, longitude = 0 });
@@ -175,26 +185,19 @@ public class LocationControllerTests
         Assert.Equal(1, handler.Calls);
     }
 
-    [Theory]
-    [InlineData("REQUEST_DENIED")]
-    [InlineData("OVER_QUERY_LIMIT")]
-    [InlineData("OVER_DAILY_LIMIT")]
-    [InlineData("UNKNOWN_ERROR")]
-    [InlineData("INVALID_REQUEST")]
-    public async Task GoogleStatusFailures_AreSafe(string status)
+    [Fact]
+    public async Task Http404_ReturnsManualFallback()
     {
-        var handler = Reply(JsonSerializer.Serialize(new { status, error_message = Secret }));
-        using var response = await Send(handler, new { latitude = 0, longitude = 0 });
-        await AssertUnavailable(response);
-        Assert.Equal(1, handler.Calls);
+        using var response = await Send(Reply("not returned to client", HttpStatusCode.NotFound), new { latitude = 0, longitude = 0 });
+        Assert.Equal(HttpStatusCode.NotFound, response.StatusCode);
     }
 
     [Theory]
     [InlineData("not json")]
     [InlineData("null")]
-    [InlineData("{}")]
-    [InlineData("{\"status\":\"OK\",\"results\":{}}")]
-    [InlineData("{\"status\":\"OK\",\"results\":[{\"formatted_address\":1}]}")]
+    [InlineData("[]")]
+    [InlineData("{\"display_name\":1}")]
+    [InlineData("{\"display_name\":\"Area\",\"address\":[]}")]
     public async Task MalformedResponse_IsSafe(string json)
     {
         using var response = await Send(Reply(json), new { latitude = 0, longitude = 0 });
@@ -214,12 +217,13 @@ public class LocationControllerTests
     }
 
     [Fact]
-    public async Task UnconfiguredKey_DisablesPreviewWithoutHttpCall()
+    public async Task DefaultConfiguration_NeedsNoCredentials()
     {
+        new LocationGeocodingOptions().Validate();
         var handler = Reply(Address());
-        using var response = await Send(handler, new { latitude = 0, longitude = 0 }, key: "");
-        await AssertUnavailable(response);
-        Assert.Equal(0, handler.Calls);
+        using var response = await Send(handler, new { latitude = 0, longitude = 0 });
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        Assert.Equal(1, handler.Calls);
     }
 
     private static async Task AssertUnavailable(HttpResponseMessage response)
@@ -228,7 +232,7 @@ public class LocationControllerTests
         var body = await response.Content.ReadAsStringAsync();
         Assert.Contains("manually", body);
         Assert.DoesNotContain(Secret, body);
-        Assert.DoesNotContain("maps.googleapis.com", body);
+        Assert.DoesNotContain("nominatim.openstreetmap.org", body);
         Assert.DoesNotContain("Exception", body);
     }
 }

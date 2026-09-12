@@ -86,6 +86,7 @@ public class ServiceRequestService : IServiceRequestService
             CategoryHint = normalizedCategoryHint,
             Description = request.Description.Trim(),
             LocationText = request.LocationText.Trim(),
+            LocationSource = request.LocationSource,
             Latitude = request.Latitude,
             Longitude = request.Longitude,
             Category = "Unclassified",
@@ -170,6 +171,7 @@ public class ServiceRequestService : IServiceRequestService
 
         serviceRequest.Description = request.Description.Trim();
         serviceRequest.LocationText = request.LocationText.Trim();
+        serviceRequest.LocationSource = request.LocationSource;
         serviceRequest.Latitude = request.Latitude;
         serviceRequest.Longitude = request.Longitude;
 
@@ -351,6 +353,7 @@ public class ServiceRequestService : IServiceRequestService
             Confidence = analysis.Confidence,
             Urgency = serviceRequest.Urgency,
             LocationText = serviceRequest.LocationText,
+            LocationSource = serviceRequest.LocationSource,
             Latitude = serviceRequest.Latitude,
             Longitude = serviceRequest.Longitude,
             Status = serviceRequest.Status,
@@ -833,6 +836,7 @@ public class ServiceRequestService : IServiceRequestService
             Category = serviceRequest.Category,
             Description = serviceRequest.Description,
             LocationText = serviceRequest.LocationText,
+            LocationSource = serviceRequest.LocationSource,
             Latitude = serviceRequest.Latitude,
             Longitude = serviceRequest.Longitude,
             Urgency = serviceRequest.Urgency,

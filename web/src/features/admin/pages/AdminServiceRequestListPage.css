@@ -7,6 +7,7 @@
 .monitoring-muted, .request-monitoring dt { color: var(--monitoring-muted); }
 .monitoring-filters, .monitoring-fields { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 180px), 1fr)); gap: var(--monitoring-gap); }
 .monitoring-filters { align-items: end; }
+.monitoring-filters label { font-size: 12px; font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase; }
 .request-monitoring select { margin-top: 8px; }
 .request-monitoring select:focus-visible, .request-monitoring button:focus-visible { outline: 2px solid var(--monitoring-focus); outline-offset: 2px; }
 .monitoring-table { width: 100%; border-collapse: collapse; table-layout: fixed; }
@@ -29,6 +30,7 @@
 .monitoring-coordinates h4 { margin-bottom: 0; }
 .monitoring-history { padding-left: 24px; margin-bottom: 0; }
 .monitoring-history li { padding: var(--monitoring-gap) 0; border-top: 1px solid var(--monitoring-border); }
+.request-monitoring .page-hero { margin-bottom: 4px; }
 @container (max-width: 900px) {
   .monitoring-table, .monitoring-table tbody, .monitoring-table tr, .monitoring-table td { display: block; width: auto; }
   .monitoring-table thead { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); }

@@ -1,31 +1,31 @@
 export const colors = {
   // Brand
-  primary: "#1F4E78",
-  primaryDark: "#173B5E",
-  secondary: "#0F6B66",
+  primary: "#E85D3F",
+  primaryDark: "#162235",
+  secondary: "#1E8A81",
 
   // Status
-  success: "#2E7D32",
-  warning: "#C45A11",
-  error: "#B42318",
+  success: "#227B4F",
+  warning: "#AF6A17",
+  error: "#B63A2B",
 
   // Status Light Tints (Badges, Alerts, Chips)
-  neutralLight: "#E5E7EB",
-  secondaryLight: "#E0F2F1",
-  warningLight: "#FEF3C7",
-  successLight: "#DCFCE7",
-  primaryLight: "#DBEAFE",
-  errorLight: "#FEE2E2",
+  neutralLight: "#E9EEF3",
+  secondaryLight: "#DDF5F1",
+  warningLight: "#FEF0C8",
+  successLight: "#DDF5E8",
+  primaryLight: "#FFE6DE",
+  errorLight: "#FDE4E1",
 
   // Backgrounds
-  background: "#F6F8FA",
-  surface: "#FFFFFF",
+  background: "#F5F1EA",
+  surface: "#FFFDF9",
 
   // Text
-  textPrimary: "#1F2937",
-  textSecondary: "#6B7280",
+  textPrimary: "#162235",
+  textSecondary: "#647083",
 
   // UI
-  border: "#D1D5DB",
-  disabled: "#9CA3AF",
+  border: "#D8D3C8",
+  disabled: "#A4AFB8",
 };

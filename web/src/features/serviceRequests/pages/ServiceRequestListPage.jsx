@@ -62,9 +62,29 @@ function ServiceRequestListPage() {
   }, []);
 
   return (
-    <div>
-      {/* Header section with Title, Subtitle, and Primary Action */}
+    <div className="feature-stack">
+      <section className="page-hero">
+        <div className="page-hero-content">
+          <div>
+            <div className="page-kicker">Customer Workspace</div>
+            <h1 className="page-hero-title">Manage every request from first report to provider-ready status.</h1>
+            <p className="page-hero-copy">Review progress, revisit details, and create the next request without leaving the shared workflow.</p>
+          </div>
+          <div className="page-hero-meta">
+            <div className="page-stat">
+              <strong>{requests.length}</strong>
+              <span>Requests in your current view</span>
+            </div>
+            <div className="page-stat">
+              <strong>{loading ? "..." : error ? "!" : requests.length === 0 ? "0" : "Live"}</strong>
+              <span>{loading ? "Loading portal state" : error ? "Needs attention" : "Customer portal ready"}</span>
+            </div>
+          </div>
+        </div>
+      </section>
+
       <div
+        className="section-intro"
         style={{
           display: "flex",
           justifyContent: "space-between",
@@ -116,6 +136,7 @@ function ServiceRequestListPage() {
       {/* Empty state */}
       {!loading && !error && requests.length === 0 && (
         <AppCard
+          className="section-card"
           style={{
             textAlign: "center",
             padding: `${spacing.xl}px ${spacing.lg}px`,

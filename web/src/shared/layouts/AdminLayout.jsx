@@ -30,21 +30,28 @@ function AdminLayout() {
       style={{
         minHeight: "100vh",
         display: "flex",
-        backgroundColor: colors.background,
+        backgroundColor: "transparent",
         fontFamily: typography.fontFamily,
       }}
     >
       <aside
+        className="admin-sidebar"
         style={{
-          width: "240px",
-          backgroundColor: colors.primaryDark,
+          width: "290px",
           color: colors.surface,
           padding: spacing.lg,
         }}
       >
-        <h2>AssistLK</h2>
+        <div className="admin-sidebar-brand">
+          <div>
+            <div className="admin-eyebrow">AssistLK Operations</div>
+            <h2>Trusted service coordination</h2>
+          </div>
+          <p>Requests, workflows, approvals, and tracking in one workspace.</p>
+        </div>
 
         <nav
+          className="admin-nav"
           style={{
             display: "flex",
             flexDirection: "column",
@@ -77,23 +84,29 @@ function AdminLayout() {
           </NavLink>
         </nav>
 
-        <div style={{ marginTop: spacing.xl }}>
-          <p>{user?.fullName}</p>
+        <div className="admin-sidebar-footer" style={{ marginTop: spacing.xl }}>
+          <div>
+            <div className="admin-eyebrow">Signed in</div>
+            <p>{user?.fullName}</p>
+          </div>
 
-          <button onClick={handleLogout}>
+          <button className="admin-logout" onClick={handleLogout}>
             Logout
           </button>
         </div>
       </aside>
 
       <main
+        className="admin-main"
         style={{
           flex: 1,
           minWidth: 0,
           padding: spacing.lg,
         }}
       >
-        <Outlet />
+        <div className="app-shell app-page">
+          <Outlet />
+        </div>
       </main>
     </div>
   );

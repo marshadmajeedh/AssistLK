@@ -49,7 +49,7 @@ function useDashboardCollection(load, label) {
 }
 
 function Metrics({ cards }) {
-  return <div className="dashboard-metrics">{cards.map(([label, value]) => <AppCard key={label}>
+  return <div className="dashboard-metrics metrics-grid">{cards.map(([label, value]) => <AppCard key={label} className="metric-card">
     <dl><dt>{label}</dt><dd style={typography.pageTitle}>{value}</dd></dl>
   </AppCard>)}</div>;
 }
@@ -72,17 +72,32 @@ export default function AdminDashboardPage() {
   return <div className="admin-dashboard" style={{ ...typography.body, color: colors.textPrimary,
     "--dashboard-gap": `${spacing.md}px`, "--dashboard-muted": colors.textSecondary,
     "--dashboard-border": colors.border, "--dashboard-focus": colors.primary }}>
-    <header><h1 style={{ ...typography.pageTitle, color: colors.textPrimary }}>Dashboard</h1>
-      <p className="dashboard-muted">Component 1 service request lifecycle and AssistLK AI execution monitoring.</p>
-      <p className="dashboard-muted">Metrics reflect all records returned by the monitoring APIs when this page loads.</p>
-    </header>
+    <section className="page-hero">
+      <div className="page-hero-content">
+        <div>
+          <div className="page-kicker">Admin Dashboard</div>
+          <h1 className="page-hero-title">See service demand and AI workflow health in one pass.</h1>
+          <p className="page-hero-copy">This dashboard keeps Component 1 lifecycle monitoring and AssistLK AI execution metrics visible without changing the backend aggregation rules.</p>
+        </div>
+        <div className="page-hero-meta">
+          <div className="page-stat">
+            <strong>{requests.data.length}</strong>
+            <span>Total service requests loaded</span>
+          </div>
+          <div className="page-stat">
+            <strong>{summary.total}</strong>
+            <span>AI execution records loaded</span>
+          </div>
+        </div>
+      </div>
+    </section>
     <section aria-labelledby="dashboard-requests-heading">
       <div className="dashboard-section-header"><h2 id="dashboard-requests-heading" style={typography.sectionHeading}>Service Request Overview</h2>
         <AppButton variant="outline" onClick={() => navigate("/admin/service-requests")}>View All Requests</AppButton>
       </div>
       <CollectionState result={requests} loadingMessage="Loading service request overview..." retryLabel="Retry Service Requests">
         <Metrics cards={requestCards} />
-        <AppCard>
+        <AppCard className="table-shell">
           <h3 style={typography.cardHeading}>Recent Service Requests</h3>
           {requests.data.length === 0 ? <p>No service requests found.</p> : <table className="dashboard-table">
             <caption>Latest {Math.min(5, requests.data.length)} service requests</caption>
@@ -104,7 +119,7 @@ export default function AdminDashboardPage() {
       </div>
       <CollectionState result={executions} loadingMessage="Loading AI execution overview..." retryLabel="Retry AI Metrics">
         <Metrics cards={agentCards} />
-        <AppCard>
+        <AppCard className="table-shell">
           <h3 style={typography.cardHeading}>Recent AI Executions</h3>
           {executions.data.length === 0 ? <p>No AI workflow executions have been recorded yet.</p> : <table className="dashboard-table">
             <caption>Latest {Math.min(5, executions.data.length)} AI executions</caption>
@@ -123,7 +138,7 @@ export default function AdminDashboardPage() {
         <p className="dashboard-muted">Tool Calls count deterministic tools. Duration is the backend-measured end-to-end execution time.</p>
       </CollectionState>
     </section>
-    <AppCard><details>
+    <AppCard className="section-card"><details>
       <summary>Component Boundaries — architecture reference</summary>
       <p className="dashboard-muted">Project responsibilities are listed for reference. This section does not report operational status.</p>
       <dl className="dashboard-boundaries">{boundaries.map(([name, scope]) => <div key={name}><dt>{name}</dt><dd>{scope}</dd></div>)}</dl>

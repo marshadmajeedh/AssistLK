@@ -12,11 +12,7 @@ class ServiceRequestCard extends StatelessWidget {
   final ServiceRequestModel request;
   final VoidCallback? onTap;
 
-  const ServiceRequestCard({
-    super.key,
-    required this.request,
-    this.onTap,
-  });
+  const ServiceRequestCard({super.key, required this.request, this.onTap});
 
   @override
   Widget build(BuildContext context) {
@@ -28,21 +24,20 @@ class ServiceRequestCard extends StatelessWidget {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             // Top row: Category and Status Badge
-            Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              crossAxisAlignment: CrossAxisAlignment.start,
+            Wrap(
+              alignment: WrapAlignment.spaceBetween,
+              crossAxisAlignment: WrapCrossAlignment.center,
+              spacing: AppSpacing.sm,
+              runSpacing: AppSpacing.sm,
               children: [
-                Expanded(
-                  child: Text(
-                    request.category.isEmpty
-                        ? 'General Request'
-                        : request.category,
-                    style: AppTextStyles.cardHeading,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                  ),
+                Text(
+                  request.category.isEmpty
+                      ? 'General Request'
+                      : request.category,
+                  style: AppTextStyles.cardHeading,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
                 ),
-                const SizedBox(width: AppSpacing.sm),
                 StatusBadge(status: request.status),
               ],
             ),
@@ -80,9 +75,11 @@ class ServiceRequestCard extends StatelessWidget {
                       color: AppColors.textSecondary,
                     ),
                     const SizedBox(width: AppSpacing.xs),
-                    Text(
-                      _formatDate(request.createdAt),
-                      style: AppTextStyles.small,
+                    Flexible(
+                      child: Text(
+                        _formatDate(request.createdAt),
+                        style: AppTextStyles.small,
+                      ),
                     ),
                   ],
                 ),

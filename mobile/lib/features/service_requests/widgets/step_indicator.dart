@@ -21,13 +21,41 @@ class StepIndicator extends StatelessWidget {
         horizontal: AppSpacing.sm,
         vertical: AppSpacing.md,
       ),
-      child: Row(
-        children: [
-          for (int i = 0; i < steps.length; i++) ...[
-            _buildStepItem(i),
-            if (i < steps.length - 1) _buildDivider(i),
-          ],
-        ],
+      child: LayoutBuilder(
+        builder: (context, constraints) {
+          var requiredWidth = (steps.length - 1) * AppSpacing.sm;
+          for (final step in steps) {
+            final label = TextPainter(
+              text: TextSpan(
+                text: step,
+                style: AppTextStyles.small.copyWith(
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+              textDirection: Directionality.of(context),
+              textScaler: MediaQuery.textScalerOf(context),
+            )..layout();
+            requiredWidth += 24 + AppSpacing.xs + label.width;
+            label.dispose();
+          }
+          if (constraints.maxWidth < requiredWidth) {
+            return Wrap(
+              spacing: AppSpacing.sm,
+              runSpacing: AppSpacing.sm,
+              children: [
+                for (int i = 0; i < steps.length; i++) _buildStepItem(i),
+              ],
+            );
+          }
+          return Row(
+            children: [
+              for (int i = 0; i < steps.length; i++) ...[
+                _buildStepItem(i),
+                if (i < steps.length - 1) _buildDivider(i),
+              ],
+            ],
+          );
+        },
       ),
     );
   }
@@ -74,10 +102,7 @@ class StepIndicator extends StatelessWidget {
         Container(
           width: 24,
           height: 24,
-          decoration: BoxDecoration(
-            color: circleColor,
-            shape: BoxShape.circle,
-          ),
+          decoration: BoxDecoration(color: circleColor, shape: BoxShape.circle),
           child: Center(child: content),
         ),
         const SizedBox(width: AppSpacing.xs),

@@ -18,6 +18,8 @@ import 'package:mobile/features/service_requests/models/update_service_request_d
 import 'package:mobile/features/service_requests/providers/service_request_provider.dart';
 import 'package:mobile/features/service_requests/screens/create_service_request_screen.dart';
 import 'package:mobile/features/service_requests/screens/customer_home_screen.dart';
+import 'package:mobile/features/service_requests/screens/customer_activity_screen.dart';
+import 'package:mobile/features/service_requests/screens/customer_services_screen.dart';
 import 'package:mobile/features/service_requests/screens/edit_service_request_screen.dart';
 import 'package:mobile/features/service_requests/screens/service_request_detail_screen.dart';
 import 'package:mobile/features/service_requests/services/location_service.dart';
@@ -179,15 +181,19 @@ void main() {
     authProvider = FakeAuthProvider();
   });
 
-  group('CustomerHomeScreen', () {
+  group('Customer Home and Activity', () {
     testWidgets('displays welcome banner and empty state when no requests exist',
         (tester) async {
-      await tester.pumpWidget(buildApp(const CustomerHomeScreen()));
+      await tester.pumpWidget(buildApp(const Scaffold(body: CustomerHomeScreen())));
+      await tester.pumpAndSettle();
+      expect(find.text('Welcome, Kamal Perera'), findsOneWidget);
+      expect(find.text('kamal@assistlk.com'), findsOneWidget);
+      await requestProvider.loadMyRequests();
+      await tester.pumpWidget(buildApp(const Scaffold(body: CustomerActivityScreen())));
       await tester.pumpAndSettle();
 
       expect(tester.takeException(), isNull);
-      expect(find.text('Welcome, Kamal Perera'), findsOneWidget);
-      expect(find.text('kamal@assistlk.com'), findsOneWidget);
+
       expect(find.text('No Service Requests Yet'), findsOneWidget);
       expect(find.text('Create Request'), findsNWidgets(2)); // header button + empty state button
     });
@@ -208,11 +214,12 @@ void main() {
         ),
       ];
 
-      await tester.pumpWidget(buildApp(const CustomerHomeScreen()));
+      await requestProvider.loadMyRequests();
+      await tester.pumpWidget(buildApp(const Scaffold(body: CustomerActivityScreen())));
       await tester.pumpAndSettle();
 
       expect(tester.takeException(), isNull);
-      expect(find.widgetWithText(ServiceCategoryCard, 'Plumbing'), findsOneWidget);
+      expect(find.widgetWithText(ServiceCategoryCard, 'Plumbing'), findsNothing); // Catalog moved to Services.
       expect(find.widgetWithText(ServiceRequestCard, 'Plumbing'), findsOneWidget);
       expect(find.text('Bathroom tap is dripping continuously'), findsOneWidget);
       expect(find.text('Created'), findsOneWidget);
@@ -228,7 +235,8 @@ void main() {
         tester.view.resetDevicePixelRatio();
       });
 
-      await tester.pumpWidget(buildApp(const CustomerHomeScreen()));
+      await requestProvider.loadMyRequests();
+      await tester.pumpWidget(buildApp(const Scaffold(body: CustomerActivityScreen())));
       await tester.pumpAndSettle();
 
       expect(tester.takeException(), isNull);
@@ -268,7 +276,8 @@ void main() {
         tester.view.resetDevicePixelRatio();
       });
 
-      await tester.pumpWidget(buildApp(const CustomerHomeScreen()));
+      await requestProvider.loadMyRequests();
+      await tester.pumpWidget(buildApp(const Scaffold(body: CustomerActivityScreen())));
       await tester.pumpAndSettle();
 
       expect(tester.takeException(), isNull);
@@ -299,7 +308,8 @@ void main() {
         ),
       ];
 
-      await tester.pumpWidget(buildApp(const CustomerHomeScreen()));
+      await requestProvider.loadMyRequests();
+      await tester.pumpWidget(buildApp(const Scaffold(body: CustomerActivityScreen())));
       await tester.pumpAndSettle();
 
       expect(tester.takeException(), isNull);
@@ -340,7 +350,8 @@ void main() {
         ),
       ];
 
-      await tester.pumpWidget(buildApp(const CustomerHomeScreen()));
+      await requestProvider.loadMyRequests();
+      await tester.pumpWidget(buildApp(const Scaffold(body: CustomerActivityScreen())));
       await tester.pumpAndSettle();
 
       final gesture = await tester.createGesture(kind: PointerDeviceKind.mouse);
@@ -526,10 +537,10 @@ void main() {
     });
   });
 
-  group('CustomerHomeScreen Service Shortcuts and AI Option', () {
+  group('CustomerServicesScreen Service Shortcuts and AI Option', () {
     testWidgets('renders exactly 4 canonical category shortcuts and no prohibited categories',
         (tester) async {
-      await tester.pumpWidget(buildApp(const CustomerHomeScreen()));
+      await tester.pumpWidget(buildApp(const Scaffold(body: CustomerServicesScreen())));
       await tester.pumpAndSettle();
 
       expect(find.text('What do you need help with?'), findsOneWidget);
@@ -548,7 +559,7 @@ void main() {
     });
 
     testWidgets('renders prominent AI problem understanding card', (tester) async {
-      await tester.pumpWidget(buildApp(const CustomerHomeScreen()));
+      await tester.pumpWidget(buildApp(const Scaffold(body: CustomerServicesScreen())));
       await tester.pumpAndSettle();
 
       expect(find.text('Not sure what service you need?'), findsOneWidget);
@@ -557,7 +568,7 @@ void main() {
 
     testWidgets('tapping Plumbing shortcut navigates with Plumbing preference',
         (tester) async {
-      await tester.pumpWidget(buildApp(const CustomerHomeScreen()));
+      await tester.pumpWidget(buildApp(const Scaffold(body: CustomerServicesScreen())));
       await tester.pumpAndSettle();
 
       await tester.tap(find.widgetWithText(ServiceCategoryCard, 'Plumbing'));
@@ -569,7 +580,7 @@ void main() {
 
     testWidgets('tapping Vehicle Assistance shortcut navigates with canonical Vehicle Repair',
         (tester) async {
-      await tester.pumpWidget(buildApp(const CustomerHomeScreen()));
+      await tester.pumpWidget(buildApp(const Scaffold(body: CustomerServicesScreen())));
       await tester.pumpAndSettle();
 
       await tester.tap(find.widgetWithText(ServiceCategoryCard, 'Vehicle Assistance'));
@@ -581,7 +592,7 @@ void main() {
 
     testWidgets('tapping AI option card navigates with Let AssistLK AI identify mode',
         (tester) async {
-      await tester.pumpWidget(buildApp(const CustomerHomeScreen()));
+      await tester.pumpWidget(buildApp(const Scaffold(body: CustomerServicesScreen())));
       await tester.pumpAndSettle();
 
       final aiCardFinder = find.text('Not sure what service you need?');

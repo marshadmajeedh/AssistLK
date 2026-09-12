@@ -37,6 +37,9 @@ class FakeAuthProvider extends ChangeNotifier implements AuthProvider {
   bool get isLoading => _isLoading;
 
   @override
+  bool get isInitializing => false;
+
+  @override
   String? get error => _error;
 
   @override

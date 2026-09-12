@@ -1,4 +1,6 @@
+using AssistLK.Agents.Adapters;
 using AssistLK.Agents.Agents;
+using AssistLK.Agents.Clients;
 using AssistLK.Agents.Core;
 using AssistLK.Agents.Models;
 using AssistLK.Agents.Services;
@@ -8,6 +10,7 @@ using AssistLK.Application.Services;
 using AssistLK.Domain.Entities;
 using AssistLK.Domain.Enums;
 using AssistLK.Infrastructure.Data;
+using AssistLK.IntegrationTests.TestDoubles;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging.Abstractions;
 
@@ -25,9 +28,8 @@ public class Component1WorkflowTests
         public AgentSafetyService SafetyService { get; }
         public AgentOrchestrator Orchestrator { get; }
         public AgentRegistry Registry { get; }
-        public ToolRegistry ToolReg { get; }
-        public ToolExecutor ToolExec { get; }
-        public ProblemUnderstandingAgent Agent { get; }
+        public FakeProblemUnderstandingClient FakeClient { get; }
+        public ExternalProblemUnderstandingAgentAdapter Adapter { get; }
         public ServiceRequestService RequestService { get; }
         public List<ServiceRequest> Requests { get; } = new();
         public List<ProblemAnalysis> Analyses { get; } = new();
@@ -47,16 +49,13 @@ public class Component1WorkflowTests
             MonitoringService = new AgentMonitoringService(Db);
             SafetyService = new AgentSafetyService(new AgentSafetyPolicyEngine(), Db);
 
-            ToolReg = new ToolRegistry();
-            ToolReg.Register(new ProblemClassificationTool());
-            ToolReg.Register(new LocationExtractionTool());
-            ToolReg.Register(new ServiceKnowledgeTool());
-
-            ToolExec = new ToolExecutor(ToolReg);
-            Agent = new ProblemUnderstandingAgent(ToolExec, new GeminiService(), NullLogger<ProblemUnderstandingAgent>.Instance);
+            FakeClient = new FakeProblemUnderstandingClient();
+            Adapter = new ExternalProblemUnderstandingAgentAdapter(
+                FakeClient,
+                NullLogger<ExternalProblemUnderstandingAgentAdapter>.Instance);
 
             Registry = new AgentRegistry();
-            Registry.Register(Agent);
+            Registry.Register(Adapter);
 
             Orchestrator = new AgentOrchestrator(Registry);
 
@@ -175,10 +174,10 @@ public class Component1WorkflowTests
     [Fact]
     public void Agent_DoesNotInjectDatabaseOrRepositoryDependencies()
     {
-        var ctors = typeof(ProblemUnderstandingAgent).GetConstructors();
+        var ctors = typeof(ExternalProblemUnderstandingAgentAdapter).GetConstructors();
         Assert.Single(ctors);
         var pTypes = ctors[0].GetParameters().Select(p => p.ParameterType.Name).ToArray();
-        Assert.Contains("ToolExecutor", pTypes);
+        Assert.Contains("IProblemUnderstandingClient", pTypes);
         Assert.DoesNotContain(pTypes, name => name.Contains("DbContext"));
         Assert.DoesNotContain(pTypes, name => name.Contains("Repository"));
     }

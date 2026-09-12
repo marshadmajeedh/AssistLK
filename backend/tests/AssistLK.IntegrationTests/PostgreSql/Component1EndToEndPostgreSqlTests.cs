@@ -1,3 +1,4 @@
+using AssistLK.Agents.Adapters;
 using AssistLK.Agents.Agents;
 using AssistLK.Agents.Core;
 using AssistLK.Agents.Services;
@@ -8,6 +9,7 @@ using AssistLK.Domain.Entities;
 using AssistLK.Domain.Enums;
 using AssistLK.Infrastructure.Data;
 using AssistLK.Infrastructure.Repositories;
+using AssistLK.IntegrationTests.TestDoubles;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging.Abstractions;
 
@@ -28,19 +30,13 @@ public class Component1EndToEndPostgreSqlTests : PostgreSqlIntegrationTestBase
         var monitoringService = new AgentMonitoringService(context);
         var safetyService = new AgentSafetyService(new AgentSafetyPolicyEngine(), context);
 
-        var toolRegistry = new ToolRegistry();
-        toolRegistry.Register(new ProblemClassificationTool());
-        toolRegistry.Register(new LocationExtractionTool());
-        toolRegistry.Register(new ServiceKnowledgeTool());
-
-        var toolExecutor = new ToolExecutor(toolRegistry);
-        var agent = new ProblemUnderstandingAgent(
-            toolExecutor,
-            new GeminiService(),
-            NullLogger<ProblemUnderstandingAgent>.Instance);
+        var fakeClient = new FakeProblemUnderstandingClient();
+        var adapter = new ExternalProblemUnderstandingAgentAdapter(
+            fakeClient,
+            NullLogger<ExternalProblemUnderstandingAgentAdapter>.Instance);
 
         var registry = new AgentRegistry();
-        registry.Register(agent);
+        registry.Register(adapter);
 
         var orchestrator = new AgentOrchestrator(registry);
 

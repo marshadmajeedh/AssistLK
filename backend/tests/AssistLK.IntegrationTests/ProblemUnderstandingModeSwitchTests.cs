@@ -114,7 +114,7 @@ public class ProblemUnderstandingModeSwitchTests
     public void DILifetimes_ValidateScopes_SucceedsWithoutSingletonCapturingScoped()
     {
         // ServiceProviderOptions.ValidateScopes = true guarantees no singleton captures a scoped dependency
-        var provider = CreateContainer(mode: "NativeCSharp");
+        var provider = CreateContainer(mode: "ExternalPython", url: "http://127.0.0.1:8001");
         using var scope = provider.CreateScope();
 
         var registry = scope.ServiceProvider.GetRequiredService<AgentRegistry>();
@@ -127,16 +127,16 @@ public class ProblemUnderstandingModeSwitchTests
     }
 
     [Fact]
-    public void ModeSwitch_NativeCSharp_ResolvesProblemUnderstandingAgent()
+    public void AgentRegistry_ResolvesExternalProblemUnderstandingAgentAdapter_AsIntendedC1Agent()
     {
-        var provider = CreateContainer(mode: "NativeCSharp");
+        var provider = CreateContainer(mode: "ExternalPython", url: "http://127.0.0.1:8001");
         using var scope = provider.CreateScope();
 
         var registry = scope.ServiceProvider.GetRequiredService<AgentRegistry>();
         var agent = registry.Get("ProblemUnderstandingAgent");
 
         Assert.NotNull(agent);
-        Assert.IsType<ProblemUnderstandingAgent>(agent);
+        Assert.IsType<ExternalProblemUnderstandingAgentAdapter>(agent);
         Assert.Equal("ProblemUnderstandingAgent", agent.Name);
     }
 
@@ -155,16 +155,17 @@ public class ProblemUnderstandingModeSwitchTests
     }
 
     [Fact]
-    public void ModeSwitch_DefaultWhenUnset_ResolvesNativeCSharp()
+    public void FinalArchitecture_ExternalAdapter_ImplementsIAgent_AndHasCorrectName()
     {
-        var provider = CreateContainer(mode: null);
+        var provider = CreateContainer(mode: "ExternalPython", url: "http://127.0.0.1:8001");
         using var scope = provider.CreateScope();
 
         var registry = scope.ServiceProvider.GetRequiredService<AgentRegistry>();
         var agent = registry.Get("ProblemUnderstandingAgent");
 
         Assert.NotNull(agent);
-        Assert.IsType<ProblemUnderstandingAgent>(agent);
+        var iAgent = Assert.IsAssignableFrom<IAgent>(agent);
+        Assert.Equal("ProblemUnderstandingAgent", iAgent.Name);
     }
 
     [Fact]

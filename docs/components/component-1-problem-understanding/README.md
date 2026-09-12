@@ -137,23 +137,26 @@ Stores immutable, structured analysis records produced by the Problem Understand
 
 ---
 
-## 6. Problem Understanding Agent Flow, Tools & Gemini Integration
+## 6. Problem Understanding Agent Architecture & Workflow
+
+Component 1 operates with a dedicated microservice architecture:
+- **ASP.NET Core Application Layer**: `ProblemUnderstandingWorkflowService` orchestrates request lifecycle, safety verification, and PostgreSQL persistence.
+- **Agent Adapter**: `ExternalProblemUnderstandingAgentAdapter` implements the `IAgent` contract and communicates via `ProblemUnderstandingHttpClient`.
+- **Python Agent Microservice (`agent-services/problem-understanding-agent`)**: A standalone FastAPI + LangGraph service performing multi-step reasoning, deterministic tool execution, and provider LLM inference (Offline provider, Gemini, or OpenAI).
 
 When `POST /api/service-requests/{id}/analyze` is invoked:
 
 1. **Context Initialization**: `ProblemUnderstandingWorkflowService` retrieves the request, verifies customer ownership, and initializes workflow execution, setting request status to `Analyzing`.
-2. **Google Gemini LLM Integration (`GeminiService`)**:
-   - `ProblemUnderstandingAgent` formats a domain prompt incorporating Sri Lankan context, common local transliterations (Sinhala/Tamil colloquialisms), and strict JSON output schema specifications.
-   - Invokes `_geminiService.GenerateStructuredOutputAsync<ProblemUnderstandingOutput>()` using Google Gemini 1.5 Flash.
-   - The LLM performs semantic reasoning, categorizing the problem, extracting entities, assessing urgency rationale, and determining if additional customer clarification is needed.
-3. **Deterministic Tool Execution via `IToolExecutor` (Hybrid & Fallback)**:
-   - **`ProblemClassificationTool`**: Pattern-matches symptoms against known domains (`Plumbing`, `Electrical`, `Vehicle Repair`, `Appliance Repair`) to calculate classification confidence and provide baseline validation or fallback if the LLM is unreachable.
-   - **`LocationExtractionTool`**: Scans input text for Sri Lankan districts, major cities (Colombo, Kandy, Galle, Gampaha, Kurunegala, etc.), suburbs, and landmark tokens, preserving GPS coordinate integrity.
-   - **`ServiceKnowledgeTool`**: Cross-references symptoms with domain safety guidelines. Detects emergency safety triggers (gas leaks, sparks, total brake failure) and formulates uncertainty-aware summaries without hazardous DIY advice.
-4. **Synthesis & Reasoning**: `ProblemUnderstandingAgent` aggregates Gemini reasoning and tool outputs into `ProblemUnderstandingOutput`.
-   - If confidence is below threshold (< 0.60) or vital technical/location details are missing, `NeedsMoreInformation` is set to `true`, and targeted follow-up questions are populated.
-5. **Memory Synchronization**: Writes the 8 standardized keys into `AgentMemories` in PostgreSQL.
-6. **State Finalization**:
+2. **Adapter Invocation**: Dispatches execution to `ExternalProblemUnderstandingAgentAdapter` (registered in `AgentRegistry` as `ProblemUnderstandingAgent`).
+3. **HTTP Dispatch**: `ProblemUnderstandingHttpClient` sends a structured `AgentExecutionRequestDto` payload to the Python agent service at `POST /agent/execute`.
+4. **Python LangGraph Reasoning & Tools**:
+   - **`classification_tool`**: Pattern-matches symptoms against known canonical domains (`Plumbing`, `Electrical`, `Vehicle Repair`, `Appliance Repair`, `Unclassified`).
+   - **`location_tool`**: Scans input text for Sri Lankan districts, major cities, suburbs, and landmark tokens, preserving and validating GPS coordinate integrity.
+   - **`service_knowledge_tool`**: Cross-references symptoms with domain safety guidelines and emergency hazard triggers without hazardous DIY advice.
+   - **LLM Reasoning**: Formulates uncertainty-aware problem synthesis, evaluates urgency, and determines if additional customer clarification is needed (`needs_more_information`).
+5. **Response Validation & Mapping**: The adapter maps `AgentExecutionResponseDto` into `ProblemUnderstandingOutput`, enforcing canonical category invariants, clamping confidence, and ensuring safety bounds.
+6. **Memory Synchronization**: Writes the 8 standardized keys into `AgentMemories` in PostgreSQL.
+7. **State Finalization**:
    - If `NeedsMoreInformation == true`: Transition to `AwaitingInformation`.
    - If information is complete: Transition to `Analyzed`.
    - A new immutable `ProblemAnalysis` entity is persisted in PostgreSQL.

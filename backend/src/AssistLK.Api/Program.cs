@@ -1,7 +1,8 @@
 using AssistLK.Agents.Abstractions;
-using AssistLK.Agents.Agents;
+using AssistLK.Agents.Adapters;
+using AssistLK.Agents.Clients;
+using AssistLK.Agents.Configuration;
 using AssistLK.Agents.Core;
-using AssistLK.Agents.Services;
 using AssistLK.Agents.Tools;
 using AssistLK.Api.Middleware;
 using AssistLK.Api.Seed;
@@ -100,14 +101,37 @@ builder.Services.AddSingleton<
     AgentSafetyPolicyEngine>();
 
 
-// Agent Registry
+// Agent Configuration & Services
+builder.Services.AddSingleton(sp =>
+{
+    var config = sp.GetRequiredService<IConfiguration>();
+    var options = new AgentServicesOptions();
+    config.GetSection(AgentServicesOptions.SectionName).Bind(options);
+
+    // Validate options
+    options.Validate();
+    return options;
+});
+
+// External Python Agent Client
+builder.Services.AddHttpClient<IProblemUnderstandingClient, ProblemUnderstandingHttpClient>((sp, client) =>
+{
+    var options = sp.GetRequiredService<AgentServicesOptions>();
+    var baseUrl = !string.IsNullOrWhiteSpace(options.ProblemUnderstandingUrl)
+        ? options.ProblemUnderstandingUrl.TrimEnd('/')
+        : "http://127.0.0.1:8001";
+    client.BaseAddress = new Uri(baseUrl);
+    client.Timeout = TimeSpan.FromSeconds(options.TimeoutSeconds > 0 ? options.TimeoutSeconds : 45);
+});
+
+builder.Services.AddScoped<ExternalProblemUnderstandingAgentAdapter>();
+
+// Agent Registry (Scoped, Lifetime-safe)
 builder.Services.AddScoped<AgentRegistry>(sp =>
 {
     var registry = new AgentRegistry();
-
     registry.Register(
-        sp.GetRequiredService<ProblemUnderstandingAgent>());
-
+        sp.GetRequiredService<ExternalProblemUnderstandingAgentAdapter>());
     return registry;
 });
 
@@ -117,21 +141,10 @@ builder.Services.AddScoped<
 
 
 // -----------------------------
-// Gemini
+// HTTP Clients
 // -----------------------------
 
 builder.Services.AddHttpClient();
-
-builder.Services.AddScoped<
-    IGeminiService,
-    GeminiService>();
-
-builder.Services.AddScoped<
-    GeminiService>();
-
-
-builder.Services.AddScoped<
-    ProblemUnderstandingAgent>();
 
 
 // -----------------------------
@@ -144,15 +157,6 @@ builder.Services.AddScoped<ToolRegistry>(sp =>
 
     registry.Register(
         sp.GetRequiredService<DemoProviderSearchTool>());
-
-    registry.Register(
-        sp.GetRequiredService<ProblemClassificationTool>());
-
-    registry.Register(
-        sp.GetRequiredService<LocationExtractionTool>());
-
-    registry.Register(
-        sp.GetRequiredService<ServiceKnowledgeTool>());
 
     return registry;
 });
@@ -167,15 +171,6 @@ builder.Services.AddScoped<
 
 builder.Services.AddScoped<
     DemoProviderSearchTool>();
-
-builder.Services.AddScoped<
-    ProblemClassificationTool>();
-
-builder.Services.AddScoped<
-    LocationExtractionTool>();
-
-builder.Services.AddScoped<
-    ServiceKnowledgeTool>();
 
 
 // -----------------------------

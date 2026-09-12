@@ -1,3 +1,4 @@
+import 'location_source.dart';
 import 'problem_analysis_summary_model.dart';
 import 'service_request_clarification_model.dart';
 import 'service_request_status.dart';
@@ -12,6 +13,7 @@ class ServiceRequestModel {
   final String category;
   final String description;
   final String locationText;
+  final LocationSource locationSource;
   final double? latitude;
   final double? longitude;
   final ServiceRequestUrgency urgency;
@@ -28,6 +30,7 @@ class ServiceRequestModel {
     required this.category,
     required this.description,
     required this.locationText,
+    this.locationSource = LocationSource.manual,
     this.latitude,
     this.longitude,
     required this.urgency,
@@ -41,8 +44,8 @@ class ServiceRequestModel {
   int get currentClarificationRound => clarifications.isEmpty
       ? 0
       : clarifications
-          .map((c) => c.clarificationRound)
-          .reduce((a, b) => a > b ? a : b);
+            .map((c) => c.clarificationRound)
+            .reduce((a, b) => a > b ? a : b);
 
   List<ServiceRequestClarificationModel> get currentRoundClarifications =>
       clarifications
@@ -64,7 +67,8 @@ class ServiceRequestModel {
     final analyzedAt = latestAnalysis?.createdAt;
     if (!hasReachedMaxRounds ||
         status != ServiceRequestStatus.awaitingInformation ||
-        analyzedAt == null || pendingQuestions.isNotEmpty) {
+        analyzedAt == null ||
+        pendingQuestions.isNotEmpty) {
       return false;
     }
     return currentRoundClarifications.every((question) {
@@ -80,9 +84,14 @@ class ServiceRequestModel {
       categoryHint: json['categoryHint'] as String?,
       category: json['category'] as String? ?? 'Unclassified',
       description: json['description'] as String? ?? '',
+      locationSource: LocationSource.fromJson(json['locationSource']),
       locationText: json['locationText'] as String? ?? '',
-      latitude: json['latitude'] != null ? (json['latitude'] as num).toDouble() : null,
-      longitude: json['longitude'] != null ? (json['longitude'] as num).toDouble() : null,
+      latitude: json['latitude'] != null
+          ? (json['latitude'] as num).toDouble()
+          : null,
+      longitude: json['longitude'] != null
+          ? (json['longitude'] as num).toDouble()
+          : null,
       urgency: ServiceRequestUrgency.fromJson(json['urgency']),
       status: ServiceRequestStatus.fromJson(json['status']),
       createdAt: json['createdAt'] != null
@@ -93,11 +102,16 @@ class ServiceRequestModel {
           : DateTime.now(),
       latestAnalysis: json['latestAnalysis'] != null
           ? ProblemAnalysisSummaryModel.fromJson(
-              Map<String, dynamic>.from(json['latestAnalysis'] as Map))
+              Map<String, dynamic>.from(json['latestAnalysis'] as Map),
+            )
           : null,
-      clarifications: (json['clarifications'] as List<dynamic>?)
-              ?.map((e) => ServiceRequestClarificationModel.fromJson(
-                  Map<String, dynamic>.from(e as Map)))
+      clarifications:
+          (json['clarifications'] as List<dynamic>?)
+              ?.map(
+                (e) => ServiceRequestClarificationModel.fromJson(
+                  Map<String, dynamic>.from(e as Map),
+                ),
+              )
               .toList() ??
           const [],
     );
@@ -110,6 +124,7 @@ class ServiceRequestModel {
       'categoryHint': categoryHint,
       'category': category,
       'description': description,
+      'locationSource': locationSource.value,
       'locationText': locationText,
       'latitude': latitude,
       'longitude': longitude,
@@ -129,6 +144,7 @@ class ServiceRequestModel {
     String? category,
     String? description,
     String? locationText,
+    LocationSource? locationSource,
     double? latitude,
     double? longitude,
     ServiceRequestUrgency? urgency,
@@ -147,6 +163,7 @@ class ServiceRequestModel {
       category: category ?? this.category,
       description: description ?? this.description,
       locationText: locationText ?? this.locationText,
+      locationSource: locationSource ?? this.locationSource,
       latitude: latitude ?? this.latitude,
       longitude: longitude ?? this.longitude,
       urgency: urgency ?? this.urgency,

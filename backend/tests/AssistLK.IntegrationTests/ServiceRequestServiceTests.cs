@@ -351,10 +351,17 @@ public class ServiceRequestServiceTests
         repositories.Requests.Single().Category = "Vehicle Repair";
         repositories.Requests.Single().Urgency = ServiceRequestUrgency.High;
         repositories.Requests.Single().Status = ServiceRequestStatus.ReadyForMatching;
+        repositories.Requests.Single().LocationSource = LocationSource.OpenStreetMap;
+        repositories.Requests.Single().Latitude = 6.905m;
+        repositories.Requests.Single().Longitude = 79.9195m;
 
         var matching = await repositories.Service.GetReadyForMatchingAsync(response.ServiceRequestId);
 
         Assert.NotNull(matching);
+        Assert.Equal("Colombo", matching.LocationText);
+        Assert.Equal(LocationSource.OpenStreetMap, matching.LocationSource);
+        Assert.Equal(6.905m, matching.Latitude);
+        Assert.Equal(79.9195m, matching.Longitude);
         Assert.Equal("Engine issue", matching!.ProblemSummary);
         Assert.Equal(ServiceRequestStatus.ReadyForMatching, matching.Status);
         Assert.DoesNotContain("CustomerId", matching.GetType().GetProperties().Select(x => x.Name));

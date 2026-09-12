@@ -1,5 +1,6 @@
 using AssistLK.Application.Interfaces;
 using AssistLK.Domain.Entities;
+using AssistLK.Domain.Enums;
 using Microsoft.EntityFrameworkCore;
 
 namespace AssistLK.Infrastructure.Data;
@@ -294,6 +295,12 @@ public class AssistLKDbContext : DbContext, IAgentWorkflowDbContext
 
         request.Property(x => x.Latitude)
             .HasPrecision(9, 6);
+
+        request.Property(x => x.LocationSource)
+            .HasConversion<string>()
+            .HasMaxLength(20)
+            .HasDefaultValue(LocationSource.Manual)
+            .IsRequired();
 
         request.Property(x => x.Longitude)
             .HasPrecision(9, 6);

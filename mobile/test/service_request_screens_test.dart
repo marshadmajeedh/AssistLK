@@ -1,3 +1,4 @@
+import 'mocks/mock_location_geocoding_service.dart';
 import 'dart:async';
 import 'dart:ui';
 import 'package:dio/dio.dart';
@@ -65,6 +66,7 @@ class MockServiceRequestService extends ServiceRequestService {
       categoryHint: dto.categoryHint,
       description: dto.description,
       locationText: dto.locationText,
+      locationSource: dto.locationSource,
       latitude: dto.latitude,
       longitude: dto.longitude,
       urgency: ServiceRequestUrgency.low,
@@ -84,6 +86,7 @@ class MockServiceRequestService extends ServiceRequestService {
       categoryHint: dto.categoryHint,
       description: dto.description,
       locationText: dto.locationText,
+      locationSource: dto.locationSource,
       latitude: dto.latitude,
       longitude: dto.longitude,
     );
@@ -1172,6 +1175,7 @@ void main() {
         'Updated description with more specific details',
       );
 
+      await tester.ensureVisible(find.text('Save Changes'));
       await tester.tap(find.text('Save Changes'));
       await tester.pumpAndSettle();
 
@@ -1376,6 +1380,7 @@ void main() {
         find.widgetWithText(TextFormField, 'Problem Description'),
         'Updated description for plumbing problem',
       );
+      await tester.ensureVisible(find.text('Save Changes'));
       await tester.tap(find.text('Save Changes'));
       await tester.pumpAndSettle();
 
@@ -1405,6 +1410,7 @@ void main() {
         find.widgetWithText(TextFormField, 'Location / Address'),
         'New Address Colombo 03',
       );
+      await tester.ensureVisible(find.text('Save Changes'));
       await tester.tap(find.text('Save Changes'));
       await tester.pumpAndSettle();
 
@@ -1437,6 +1443,7 @@ void main() {
       await tester.tap(find.text('Electrical'));
       await tester.pumpAndSettle();
 
+      await tester.ensureVisible(find.text('Save Changes'));
       await tester.tap(find.text('Save Changes'));
       await tester.pumpAndSettle();
 
@@ -1468,6 +1475,7 @@ void main() {
       await tester.tap(find.text('Vehicle Assistance'));
       await tester.pumpAndSettle();
 
+      await tester.ensureVisible(find.text('Save Changes'));
       await tester.tap(find.text('Save Changes'));
       await tester.pumpAndSettle();
 
@@ -1499,6 +1507,7 @@ void main() {
       await tester.tap(find.text('Let AssistLK AI identify'));
       await tester.pumpAndSettle();
 
+      await tester.ensureVisible(find.text('Save Changes'));
       await tester.tap(find.text('Save Changes'));
       await tester.pumpAndSettle();
 
@@ -2008,7 +2017,7 @@ void main() {
     testWidgets('1. Manual location flow works without GPS (coordinates remain null, zero GPS calls)',
         (tester) async {
       await tester.pumpWidget(
-        buildApp(CreateServiceRequestScreen(locationService: mockLocationService)),
+        buildApp(CreateServiceRequestScreen(geocodingService: MockLocationGeocodingService(), locationService: mockLocationService)),
       );
       await tester.pumpAndSettle();
 
@@ -2043,13 +2052,14 @@ void main() {
       expect(mockService.lastCreateDto!.locationText, '123 Galle Road, Colombo 03');
       expect(mockService.lastCreateDto!.latitude, isNull);
       expect(mockService.lastCreateDto!.longitude, isNull);
+      expect(mockService.lastCreateDto!.toJson()['locationSource'], 'Manual');
       expect(mockLocationService.getCurrentLocationCallCount, 0);
     });
 
     testWidgets('2. GPS success populates latitude and longitude into DTO and displays in review',
         (tester) async {
       await tester.pumpWidget(
-        buildApp(CreateServiceRequestScreen(locationService: mockLocationService)),
+        buildApp(CreateServiceRequestScreen(geocodingService: MockLocationGeocodingService(), locationService: mockLocationService)),
       );
       await tester.pumpAndSettle();
 
@@ -2065,7 +2075,7 @@ void main() {
       await tester.tap(find.byKey(const Key('use_current_location_button')));
       await tester.pumpAndSettle();
 
-      expect(find.textContaining('GPS location captured (6.9271, 79.8612)'), findsOneWidget);
+      expect(find.textContaining('GPS location captured'), findsNothing);
       expect(mockLocationService.getCurrentLocationCallCount, 1);
 
       // Provide human-readable address
@@ -2073,13 +2083,17 @@ void main() {
         find.widgetWithText(TextFormField, 'Location / Address'),
         'Colombo 03, Havelock Road',
       );
+      await tester.pumpAndSettle();
+      await tester.ensureVisible(find.byKey(const Key('edit_keep_gps_button')));
+      await tester.tap(find.byKey(const Key('edit_keep_gps_button')));
+      await tester.ensureVisible(find.text('Next: Review'));
       await tester.tap(find.text('Next: Review'));
       await tester.pumpAndSettle();
 
       // Step 3: Review displays GPS location captured
       expect(find.text('Review Service Request'), findsOneWidget);
       expect(find.text('Colombo 03, Havelock Road'), findsOneWidget);
-      expect(find.textContaining('GPS location captured (6.9271, 79.8612)'), findsOneWidget);
+      expect(find.textContaining('GPS location captured'), findsOneWidget);
 
       final submitBtn = find.text('Submit Request');
       await tester.ensureVisible(submitBtn);
@@ -2094,7 +2108,7 @@ void main() {
 
     testWidgets('3. Remove GPS button clears captured coordinates', (tester) async {
       await tester.pumpWidget(
-        buildApp(CreateServiceRequestScreen(locationService: mockLocationService)),
+        buildApp(CreateServiceRequestScreen(geocodingService: MockLocationGeocodingService(), locationService: mockLocationService)),
       );
       await tester.pumpAndSettle();
 
@@ -2108,10 +2122,10 @@ void main() {
       // Capture GPS
       await tester.tap(find.byKey(const Key('use_current_location_button')));
       await tester.pumpAndSettle();
-      expect(find.textContaining('GPS location captured (6.9271, 79.8612)'), findsOneWidget);
+      expect(find.textContaining('GPS location captured'), findsNothing);
 
       // Remove GPS
-      await tester.tap(find.text('Remove GPS'));
+      await tester.tap(find.text('Remove captured GPS'));
       await tester.pumpAndSettle();
 
       expect(find.textContaining('GPS location captured'), findsNothing);
@@ -2140,7 +2154,7 @@ void main() {
       mockLocationService.permissionStatus = LocationAccessStatus.denied;
 
       await tester.pumpWidget(
-        buildApp(CreateServiceRequestScreen(locationService: mockLocationService)),
+        buildApp(CreateServiceRequestScreen(geocodingService: MockLocationGeocodingService(), locationService: mockLocationService)),
       );
       await tester.pumpAndSettle();
 
@@ -2181,7 +2195,7 @@ void main() {
       mockLocationService.permissionStatus = LocationAccessStatus.deniedForever;
 
       await tester.pumpWidget(
-        buildApp(CreateServiceRequestScreen(locationService: mockLocationService)),
+        buildApp(CreateServiceRequestScreen(geocodingService: MockLocationGeocodingService(), locationService: mockLocationService)),
       );
       await tester.pumpAndSettle();
 
@@ -2208,7 +2222,7 @@ void main() {
       mockLocationService.serviceEnabled = false;
 
       await tester.pumpWidget(
-        buildApp(CreateServiceRequestScreen(locationService: mockLocationService)),
+        buildApp(CreateServiceRequestScreen(geocodingService: MockLocationGeocodingService(), locationService: mockLocationService)),
       );
       await tester.pumpAndSettle();
 
@@ -2237,7 +2251,7 @@ void main() {
       );
 
       await tester.pumpWidget(
-        buildApp(CreateServiceRequestScreen(locationService: mockLocationService)),
+        buildApp(CreateServiceRequestScreen(geocodingService: MockLocationGeocodingService(), locationService: mockLocationService)),
       );
       await tester.pumpAndSettle();
 
@@ -2261,7 +2275,7 @@ void main() {
       mockLocationService.shouldThrow = true;
 
       await tester.pumpWidget(
-        buildApp(CreateServiceRequestScreen(locationService: mockLocationService)),
+        buildApp(CreateServiceRequestScreen(geocodingService: MockLocationGeocodingService(), locationService: mockLocationService)),
       );
       await tester.pumpAndSettle();
 
@@ -2276,7 +2290,7 @@ void main() {
       await tester.pumpAndSettle();
 
       expect(
-        find.text('Could not retrieve your current location. Please enter the location manually.'),
+        find.text('Could not resolve your location. Please enter the location manually or retry.'),
         findsOneWidget,
       );
     });
@@ -2286,7 +2300,7 @@ void main() {
         buildApp(
           CreateServiceRequestScreen(
             initialCategoryPreference: 'Vehicle Assistance',
-            locationService: mockLocationService,
+            geocodingService: MockLocationGeocodingService(), locationService: mockLocationService,
           ),
         ),
       );
@@ -2306,6 +2320,10 @@ void main() {
         find.widgetWithText(TextFormField, 'Location / Address'),
         'Baseline Road, Dematagoda',
       );
+      await tester.pumpAndSettle();
+      await tester.ensureVisible(find.byKey(const Key('edit_keep_gps_button')));
+      await tester.tap(find.byKey(const Key('edit_keep_gps_button')));
+      await tester.ensureVisible(find.text('Next: Review'));
       await tester.tap(find.text('Next: Review'));
       await tester.pumpAndSettle();
 
@@ -2340,7 +2358,7 @@ void main() {
       await tester.pumpWidget(
         buildApp(EditServiceRequestScreen(
           request: existingReq,
-          locationService: mockLocationService,
+          geocodingService: MockLocationGeocodingService(), locationService: mockLocationService,
         )),
       );
       await tester.pumpAndSettle();
@@ -2384,7 +2402,7 @@ void main() {
       await tester.pumpWidget(
         buildApp(EditServiceRequestScreen(
           request: existingReq,
-          locationService: mockLocationService,
+          geocodingService: MockLocationGeocodingService(), locationService: mockLocationService,
         )),
       );
       await tester.pumpAndSettle();
@@ -2408,7 +2426,7 @@ void main() {
       // PUT was blocked!
       expect(mockService.lastUpdateDto, isNull);
       expect(
-        find.text('Please confirm how to handle the attached GPS coordinates.'),
+        find.text('Please confirm the location and attached GPS coordinates.'),
         findsOneWidget,
       );
     });
@@ -2433,7 +2451,7 @@ void main() {
       await tester.pumpWidget(
         buildApp(EditServiceRequestScreen(
           request: existingReq,
-          locationService: mockLocationService,
+          geocodingService: MockLocationGeocodingService(), locationService: mockLocationService,
         )),
       );
       await tester.pumpAndSettle();
@@ -2481,7 +2499,7 @@ void main() {
       await tester.pumpWidget(
         buildApp(EditServiceRequestScreen(
           request: existingReq,
-          locationService: mockLocationService,
+          geocodingService: MockLocationGeocodingService(), locationService: mockLocationService,
         )),
       );
       await tester.pumpAndSettle();
@@ -2529,7 +2547,7 @@ void main() {
       await tester.pumpWidget(
         buildApp(EditServiceRequestScreen(
           request: existingReq,
-          locationService: mockLocationService,
+          geocodingService: MockLocationGeocodingService(), locationService: mockLocationService,
         )),
       );
       await tester.pumpAndSettle();
@@ -2545,6 +2563,9 @@ void main() {
       await tester.ensureVisible(updateBtn);
       await tester.tap(updateBtn);
       await tester.pumpAndSettle();
+      await tester.ensureVisible(find.text('Use This Location'));
+      await tester.tap(find.text('Use This Location'));
+      await tester.pumpAndSettle();
 
       final saveBtn = find.text('Save Changes');
       await tester.ensureVisible(saveBtn);
@@ -2552,7 +2573,8 @@ void main() {
       await tester.pumpAndSettle();
 
       expect(mockService.lastUpdateDto, isNotNull);
-      expect(mockService.lastUpdateDto!.locationText, 'New Street Location');
+      expect(mockService.lastUpdateDto!.locationText, 'Example Road, Kotte');
+      expect(mockService.lastUpdateDto!.toJson()['locationSource'], 'OpenStreetMap');
       expect(mockService.lastUpdateDto!.latitude, 6.9271);
       expect(mockService.lastUpdateDto!.longitude, 79.8612);
     });
@@ -2580,7 +2602,7 @@ void main() {
       await tester.pumpAndSettle();
 
       expect(find.text('123 Galle Road, Colombo 03'), findsOneWidget);
-      expect(find.textContaining('GPS location captured (6.9271, 79.8612)'), findsOneWidget);
+      expect(find.textContaining('GPS location captured'), findsOneWidget);
     });
   });
 }

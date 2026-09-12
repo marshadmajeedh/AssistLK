@@ -8,6 +8,7 @@ import { colors, spacing, typography, inputStyles } from "../../../shared/theme"
 import getApiErrorMessage from "../../serviceRequests/utils/getApiErrorMessage";
 import adminServiceRequestService from "../services/adminServiceRequestService";
 import RequestMonitoringDetails, { UrgencyBadge } from "../components/RequestMonitoringDetails";
+import RequestLocation from "../components/RequestLocation";
 import { formatDate, formatConfidence } from "../utils/monitoringFormatters";
 import "./AdminServiceRequestListPage.css";
 
@@ -92,7 +93,7 @@ export default function AdminServiceRequestListPage() {
           <td data-label="Category">{request.category || "Unclassified"}</td>
           <td data-label="Urgency"><UrgencyBadge urgency={request.urgency} /></td>
           <td data-label="Status"><StatusBadge status={request.status} /></td>
-          <td data-label="Location">{request.locationText || "—"}</td>
+          <td data-label="Location"><RequestLocation locationText={request.locationText} locationSource={request.locationSource} /></td>
           <td data-label="Confidence">{formatConfidence(request.latestAnalysis)}</td>
           <td data-label="Created">{formatDate(request.createdAt)}</td>
           <td data-label="Action"><AppButton variant="outline" onClick={(event) => openDetails(request.serviceRequestId, event)}>View Details</AppButton></td>

@@ -10,6 +10,8 @@ public class ServiceRequestForMatchingResponse
     public decimal Confidence { get; set; }
     public ServiceRequestUrgency Urgency { get; set; }
     public string LocationText { get; set; } = string.Empty;
+
+    public LocationSource LocationSource { get; set; }
     public decimal? Latitude { get; set; }
     public decimal? Longitude { get; set; }
     public ServiceRequestStatus Status { get; set; }

@@ -5,10 +5,12 @@ import 'package:geolocator/geolocator.dart';
 class LocationCoordinates {
   final double latitude;
   final double longitude;
+  final double? accuracy;
 
   const LocationCoordinates({
     required this.latitude,
     required this.longitude,
+    this.accuracy,
   });
 
   @override
@@ -135,6 +137,7 @@ class GeolocatorLocationService implements LocationService {
         coordinates: LocationCoordinates(
           latitude: position.latitude,
           longitude: position.longitude,
+          accuracy: position.accuracy,
         ),
         message: 'GPS location captured',
       );

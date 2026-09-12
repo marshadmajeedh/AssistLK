@@ -9,6 +9,18 @@ namespace AssistLK.IntegrationTests;
 
 public class ServiceRequestModelConfigurationTests
 {
+    [Fact]
+    public void LocationSource_DefaultsToManual_WithoutStructuredAddressColumns()
+    {
+        var source = EntityType.FindProperty(nameof(ServiceRequest.LocationSource))!;
+        Assert.False(source.IsNullable);
+        Assert.Equal(LocationSource.Manual, source.GetDefaultValue());
+        Assert.Equal(typeof(string), source.GetTypeMapping().Converter!.ProviderClrType);
+        foreach (var name in new[] { "LocationStreet", "LocationNeighborhood", "LocationCity", "LocationProvince",
+            "LocationPostalCode", "LocationCountry", "GooglePlaceId", "Accuracy" })
+            Assert.Null(EntityType.FindProperty(name));
+    }
+
     private static readonly IEntityType EntityType = CreateModel()
         .FindEntityType(typeof(ServiceRequest))!;
 

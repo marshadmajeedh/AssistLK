@@ -1,6 +1,9 @@
+import 'location_source.dart';
+
 class CreateServiceRequestDto {
   final String description;
   final String locationText;
+  final LocationSource locationSource;
   final double? latitude;
   final double? longitude;
   final String? categoryHint;
@@ -8,6 +11,7 @@ class CreateServiceRequestDto {
   const CreateServiceRequestDto({
     required this.description,
     required this.locationText,
+    this.locationSource = LocationSource.manual,
     this.latitude,
     this.longitude,
     this.categoryHint,
@@ -16,6 +20,7 @@ class CreateServiceRequestDto {
   Map<String, dynamic> toJson() {
     return {
       'description': description.trim(),
+      'locationSource': locationSource.value,
       'locationText': locationText.trim(),
       if (latitude != null) 'latitude': latitude,
       if (longitude != null) 'longitude': longitude,

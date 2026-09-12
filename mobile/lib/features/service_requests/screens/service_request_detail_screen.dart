@@ -1,3 +1,5 @@
+import '../models/location_source.dart';
+import '../widgets/location_attribution.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
@@ -406,6 +408,7 @@ class _ServiceRequestDetailScreenState
                                   fontWeight: FontWeight.w500,
                                 ),
                               ),
+                              if (request.locationSource == LocationSource.openStreetMap) const LocationAttribution(),
                               if (request.latitude != null &&
                                   request.longitude != null) ...[
                                 const SizedBox(height: 2),
@@ -418,7 +421,7 @@ class _ServiceRequestDetailScreenState
                                     ),
                                     const SizedBox(width: 4),
                                     Text(
-                                      'GPS location captured (${request.latitude!.toStringAsFixed(4)}, ${request.longitude!.toStringAsFixed(4)})',
+                                      'GPS location captured',
                                       style: AppTextStyles.small.copyWith(
                                         color: AppColors.success,
                                         fontSize: 12,

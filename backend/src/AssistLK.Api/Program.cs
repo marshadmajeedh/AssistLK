@@ -146,6 +146,22 @@ builder.Services.AddScoped<
 
 builder.Services.AddHttpClient();
 
+builder.Services.AddSingleton(sp =>
+{
+    var options = new AssistLK.Infrastructure.ExternalServices.LocationGeocodingOptions();
+    sp.GetRequiredService<IConfiguration>().GetSection("LocationGeocoding").Bind(options);
+    options.Validate();
+    return options;
+});
+builder.Services.AddSingleton<AssistLK.Infrastructure.ExternalServices.NominatimRequestCoordinator>();
+builder.Services.AddHttpClient<ILocationGeocodingService, AssistLK.Infrastructure.ExternalServices.NominatimReverseGeocodingService>((sp, client) =>
+{
+    client.Timeout = TimeSpan.FromSeconds(sp.GetRequiredService<AssistLK.Infrastructure.ExternalServices.LocationGeocodingOptions>().TimeoutSeconds);
+})
+    .ConfigurePrimaryHttpMessageHandler(() => new HttpClientHandler { AllowAutoRedirect = false })
+    // Factory URL logging would disclose precise coordinates.
+    .RemoveAllLoggers();
+
 
 // -----------------------------
 // Tools

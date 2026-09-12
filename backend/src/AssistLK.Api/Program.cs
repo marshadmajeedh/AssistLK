@@ -110,24 +110,12 @@ builder.Services.AddSingleton(sp =>
     var options = new AgentServicesOptions();
     config.GetSection(AgentServicesOptions.SectionName).Bind(options);
 
-    var envMode = Environment.GetEnvironmentVariable("AGENT_SERVICES__PROBLEM_UNDERSTANDING_MODE")
-        ?? Environment.GetEnvironmentVariable("AgentServices__ProblemUnderstandingMode");
-    if (!string.IsNullOrWhiteSpace(envMode))
+    // Fallback for legacy cross-project AGENT_SERVICE_URL only if standard configuration key was not set
+    var legacyAgentServiceUrl = config["AGENT_SERVICE_URL"];
+    if (!string.IsNullOrWhiteSpace(legacyAgentServiceUrl) &&
+        string.IsNullOrWhiteSpace(config[$"{AgentServicesOptions.SectionName}:ProblemUnderstandingUrl"]))
     {
-        options.ProblemUnderstandingMode = envMode.Trim();
-    }
-
-    var envUrl = Environment.GetEnvironmentVariable("AGENT_SERVICE_URL")
-        ?? Environment.GetEnvironmentVariable("AgentServices__ProblemUnderstandingUrl");
-    if (!string.IsNullOrWhiteSpace(envUrl))
-    {
-        options.ProblemUnderstandingUrl = envUrl.Trim();
-    }
-
-    var envKey = Environment.GetEnvironmentVariable("AgentServices__InternalApiKey");
-    if (!string.IsNullOrWhiteSpace(envKey))
-    {
-        options.InternalApiKey = envKey.Trim();
+        options.ProblemUnderstandingUrl = legacyAgentServiceUrl.Trim();
     }
 
     // Strict mode validation

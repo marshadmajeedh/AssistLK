@@ -36,6 +36,14 @@ public class LocalhostPythonSmokeIntegrationTests
     [Trait("Category", "Smoke")]
     public async Task RealPythonIntegration_AnalyzeAsync_ExecutesLangGraphAndPersistsAnalysis()
     {
+        var optIn = Environment.GetEnvironmentVariable("RUN_PYTHON_AGENT_SMOKE_TESTS");
+        if (!string.Equals(optIn, "true", StringComparison.OrdinalIgnoreCase))
+        {
+            // Explicit opt-in required (RUN_PYTHON_AGENT_SMOKE_TESTS=true)
+            // Smoke test is skipped during ordinary test runs
+            return;
+        }
+
         // Check if Python service is reachable on localhost:8001
         var isRunning = await IsPythonServiceRunningAsync();
         if (!isRunning)

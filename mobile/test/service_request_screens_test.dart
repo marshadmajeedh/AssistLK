@@ -95,10 +95,9 @@ class MockServiceRequestService extends ServiceRequestService {
   Future<ProblemUnderstandingResultModel> analyze(String id) async {
     if (analyzeException != null) throw analyzeException!;
     if (shouldAnalyzeThrow) throw Exception('Analysis failed');
-    if (analyzeCompleter != null) {
-      return await analyzeCompleter!.future;
-    }
-    return mockAnalysis ??
+    final result = analyzeCompleter != null
+        ? await analyzeCompleter!.future
+        : mockAnalysis ??
         ProblemUnderstandingResultModel(
           workflowId: 'wf-1',
           executionId: 'ex-1',
@@ -111,6 +110,13 @@ class MockServiceRequestService extends ServiceRequestService {
           needsMoreInformation: false,
           followUpQuestions: const [],
         );
+    final index = mockRequests.indexWhere((request) => request.serviceRequestId == id);
+    if (index >= 0) {
+      mockRequests[index] = mockRequests[index].copyWith(
+        status: result.status, category: result.category, urgency: result.urgency,
+      );
+    }
+    return result;
   }
 
   @override

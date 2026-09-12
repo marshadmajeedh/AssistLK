@@ -223,6 +223,17 @@ class ServiceRequestProvider extends ChangeNotifier {
         }
       }
 
+      // The analyze response does not contain persisted questions or timestamps.
+      // Refresh once before ending the loading state; never repeat the POST if
+      // this read fails after a successful execution.
+      try {
+        final refreshed = await serviceRequestService.getById(id);
+        _currentRequest = refreshed;
+        _updateRequestInList(refreshed);
+      } catch (refreshError) {
+        _analysisStateNeedsRefresh = true;
+        _error = serviceRequestService.getErrorMessage(refreshError);
+      }
       return result;
     } catch (err) {
       final analysisError = serviceRequestService.getAnalysisErrorMessage(err);

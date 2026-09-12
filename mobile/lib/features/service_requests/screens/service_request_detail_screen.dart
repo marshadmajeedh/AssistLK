@@ -599,7 +599,7 @@ class _ServiceRequestDetailScreenState
         return ClarificationSection(
           followUpQuestions: analysis?.followUpQuestions ?? const [],
           clarifications: request.clarifications,
-          hasReachedMaxRounds: request.hasReachedMaxRounds,
+          hasReachedMaxRounds: request.hasCompletedFinalClarificationAnalysis,
           isReanalyzing: provider.isAnalyzing,
           isSubmitting: provider.isLoading,
           onEditDetails: () => _navigateToEdit(request),

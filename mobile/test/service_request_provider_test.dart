@@ -97,7 +97,7 @@ class FakeServiceRequestService extends ServiceRequestService {
     }
     if (analyzeException != null) throw analyzeException!;
     if (shouldThrow || shouldAnalyzeThrow) throw Exception('Analysis failed');
-    return fakeAnalysis ??
+    final result = fakeAnalysis ??
         ProblemUnderstandingResultModel(
           workflowId: 'wf-1',
           executionId: 'ex-1',
@@ -110,6 +110,13 @@ class FakeServiceRequestService extends ServiceRequestService {
           needsMoreInformation: false,
           followUpQuestions: const [],
         );
+    final index = fakeRequests.indexWhere((request) => request.serviceRequestId == id);
+    if (index >= 0) {
+      fakeRequests[index] = fakeRequests[index].copyWith(
+        status: result.status, category: result.category, urgency: result.urgency,
+      );
+    }
+    return result;
   }
 
   @override
@@ -702,6 +709,19 @@ void main() {
     expect(fakeService.getByIdCallCount - initialGetCount, 1);
     expect(provider.error, isNotNull);
     expect(provider.isAnalyzing, false);
+  });
+
+  test('successful analysis with failed detail GET never repeats the analysis POST', () async {
+    fakeService.fakeRequests = [sampleRequest];
+    await provider.loadRequestById('req-1');
+    fakeService.shouldGetByIdThrow = true;
+    final result = await provider.analyzeRequest('req-1');
+    expect(result, isNotNull);
+    expect(fakeService.analyzeCallCount, 1);
+    expect(provider.analysisStateNeedsRefresh, isTrue);
+    expect(provider.isAnalyzing, isFalse);
+    await provider.analyzeRequest('req-1');
+    expect(fakeService.analyzeCallCount, 1);
   });
 
   group('Clarification Answers Submission', () {

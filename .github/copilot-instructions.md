@@ -1,5 +1,7 @@
 # AssistLK GitHub Copilot Instructions
 
+> **Current C1 runtime:** Python-only FastAPI/LangGraph via the ASP.NET external adapter. .NET owns authorization, lifecycle, persistence, monitoring, and recovery. Python owns tools, reasoning, and provider secrets. C# interface and service lists below apply to the ASP.NET integration, not Python functions. See [canonical architecture](../agent-services/README.md). Future-component examples are conceptual.
+
 ## 1. Project Overview
 
 AssistLK is an Agentic AI powered multi-service platform designed to connect customers with service providers.
@@ -63,7 +65,7 @@ Do not skip architectural layers.
 
 ## 5. Agent Development Rules
 
-Every AI agent must:
+Every .NET agent adapter participates in the shared foundation:
 
 - Implement `IAgent`
 - Use `AgentContext`
@@ -107,7 +109,7 @@ The Agent Orchestrator controls agent execution order.
 
 ## 7. Memory Rules
 
-All agents must use `AgentMemoryService`. Do not create separate memory systems.
+ASP.NET workflows persist shared memory through `AgentMemoryService`. Python graph state is request-scoped; Python does not access persisted memory directly.
 
 Example workflow memory:
 
@@ -120,13 +122,7 @@ Another agent should read from workflow memory.
 
 ## 8. Tool Development Rules
 
-Agents must not directly access:
-
-- Database
-- External APIs
-- External services
-
-Correct flow:
+Python must not access the database. Provider HTTP calls belong in Python provider implementations; ASP.NET uses its external adapter/client. The following is a conceptual shared C# tool pattern, not the C1 Python persistence path:
 
 ```text
 Agent
@@ -135,7 +131,7 @@ Agent
 	-> Database or API
 ```
 
-All tools must implement `IAgentTool`.
+C# tools registered in the shared tool framework implement `IAgentTool`. Python C1 tools are Python functions and do not implement C# interfaces.
 
 ## 9. Safety Rules
 

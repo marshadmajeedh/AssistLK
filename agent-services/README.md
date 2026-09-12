@@ -1,74 +1,40 @@
-# AssistLK External Python Agent Services (`agent-services/`)
+# AssistLK Agentic AI Architecture
 
-This directory is the canonical location for out-of-process Python agent microservices in the AssistLK ecosystem.
+`agent-services/` contains internal Python reasoning services. Component 1 uses the [Problem Understanding service](problem-understanding-agent/README.md) as its only active reasoning runtime. The logical agent name is `ProblemUnderstandingAgent`.
 
----
-
-## Architectural Rules
-
-1. **Internal Microservices Only:**
-   Python agent services are internal reasoning workers. They are **never** directly accessible to React or Flutter frontend clients. All communication must pass through the ASP.NET Core Web API (`AssistLK.Api` / `AssistLK.Application`).
-
-2. **No Direct Database Access:**
-   Python agent services must **never** connect directly to the AssistLK PostgreSQL database, execute migrations, or instantiate EF Core models. All state and entity persistence is owned authoritatively by .NET.
-
-3. **Adherence to Shared Contract:**
-   All communication between .NET and Python services must adhere to the provider-neutral JSON specification defined in:
-   👉 **[docs/architecture/external-agent-contract.md](../docs/architecture/external-agent-contract.md)**
-
-4. **Authoritative Guide:**
-   For complete instructions on building, containerizing, and integrating Python agents, see:
-   👉 **[docs/architecture/external-python-agent-service.md](../docs/architecture/external-python-agent-service.md)**
-
----
-
-## Recommended Service Directory Layout
-
-When a teammate implements a Python agent (for example, for Component 2 Provider Matching), they should create their isolated service directory following this structure:
+## Trust and execution boundaries
 
 ```text
-agent-services/
-├── README.md                          # This file
-└── provider-matching-agent/           # Component 2 Python agent service (example)
-    ├── Dockerfile                     # Container definition
-    ├── requirements.txt               # Dependencies (FastAPI, pydantic, langchain, etc.)
-    ├── README.md                      # Local service documentation
-    ├── app/
-    │   ├── __init__.py
-    │   ├── main.py                    # FastAPI application entrypoint
-    │   ├── agent.py                   # Agent reasoning pipeline
-    │   ├── models/                    # Pydantic request/response schemas
-    │   │   ├── request.py
-    │   │   └── response.py
-    │   ├── tools/                     # Python-native tools / ML models
-    │   └── safety/                    # Input/output safety validation
-    └── tests/
-        ├── test_contract.py           # Contract compliance tests
-        └── test_agent.py              # Unit tests with mocked LLM
+Flutter / React -> ASP.NET Core -> Application workflow
+ -> AgentOrchestrator -> AgentRegistry -> .NET adapter / HTTP client
+ -> internal Python FastAPI service -> LangGraph
 ```
 
-> **Note for Teammates:** Do not commit empty placeholder logic or unverified dependencies. Only create a subfolder when you are actively implementing your component's agent service.
+ASP.NET owns authentication, authorization, lifecycle, deterministic domain validation, PostgreSQL persistence, monitoring, and failure recovery. Python owns request-scoped graph state, deterministic Python tools, provider abstraction, reasoning, ambiguity checks, and structured output guardrails. Frontends never call Python directly, and Python has no direct database ownership.
 
----
+C1 transport failures return through the adapter to workflow recovery. There is no native C# fallback or runtime mode switch. Detailed graph, contract, provider configuration, authentication, failure behavior, setup, and tests live in the [service README](problem-understanding-agent/README.md).
 
-## Component 1 Problem Understanding Agent
+## Shared foundation and integration principles
 
-The reference implementation for Component 1 is located at:
-`agent-services/problem-understanding-agent/`
+The .NET adapter implements `IAgent`, accepts `AgentContext`, and is registered with dependency injection and `AgentRegistry`. The orchestrator selects it by logical name. Shared C# `IAgentTool`, `ToolRegistry`, and `ToolExecutor` abstractions are distinct from Python tool functions; Python does not implement C# interfaces.
 
-### First-Time Setup
-```powershell
-cd agent-services/problem-understanding-agent
-python -m venv .venv
-.\.venv\Scripts\Activate.ps1
-pip install -r requirements.txt
-```
-Copy `.env.example` to `.env` and set your local provider credentials (gitignored).
+Application services load and persist concise workflow memory through `AgentMemoryService`/`AgentContextService`. Agents exchange approved structured context through application workflows, not direct agent-to-agent calls. Python graph state lasts for the request and is not persisted workflow memory.
 
-### One-Command Local Development Start
-From the repository root, start both the Python agent and ASP.NET Core backend simultaneously:
-```powershell
-.\scripts\start-c1-dev.ps1
-```
-This launcher automatically verifies Python virtual environment integrity, waits for `/health` to report HTTP 200, configures ASP.NET environment variables for the Python agent service, starts ASP.NET, and ensures graceful process termination upon `Ctrl+C`.
+ASP.NET safety services govern application actions and approval requirements. Python guardrails constrain analysis content. These are separate checks. Future sensitive booking/payment actions remain subject to their owning component's authorization and approval rules; C1 does not implement those operations.
 
+Monitoring records execution identity, status, duration, errors, and tool usage through the backend. Python returns execution metadata; ASP.NET records authoritative metrics and audit evidence. Illustrative metrics are not benchmark results. Hidden reasoning is neither persisted nor exposed.
+
+## Provider independence and testing
+
+C1 selects Gemini, OpenAI, or offline behavior behind a Python provider abstraction. Provider keys belong to Python, never React/Flutter. Internal service authentication is supported; see the service README for its optional-key behavior and unprotected health route.
+
+Normal .NET tests replace the Python client with a fake and do not require Python running. Python tests isolate providers. Frontend tests mock the public API. See the [testing guide](../docs/development/testing-guide.md) for exact commands and separate live smoke verification.
+
+## Documentation
+
+- [C1 service: setup, graph, providers, contract, security](problem-understanding-agent/README.md)
+- [C1 domain, clarification, location, and public API](../docs/components/component-1-problem-understanding/README.md)
+- [Historical architecture and viva evidence](../docs/agents/c1-architecture-evidence.md)
+- [Component ownership and boundaries](../docs/architecture/component-boundaries.md)
+
+Other component requirements describe planned responsibilities; this page does not prescribe or claim their implementation.

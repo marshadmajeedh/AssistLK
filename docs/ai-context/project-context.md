@@ -1,5 +1,7 @@
 # AssistLK Project Context
 
+> **Current C1 runtime:** Python-only FastAPI/LangGraph via the ASP.NET external adapter. .NET owns authorization, lifecycle, persistence, monitoring, and recovery. Python owns tools, reasoning, and provider secrets. C# interface and service lists below apply to the ASP.NET integration, not Python functions. See [canonical architecture](../../agent-services/README.md). Future-component examples are conceptual.
+
 ## 1. Project Overview
 
 AssistLK is an Agentic AI powered multi-service platform designed to connect customers with verified service providers.
@@ -162,7 +164,7 @@ AssistLK contains four main intelligent components.
 
 ## 9. Shared Agent Rules
 
-Every agent must implement or use:
+The .NET orchestration side uses:
 
 - `IAgent`
 - `AgentContext`
@@ -172,7 +174,7 @@ Every agent must implement or use:
 
 Agents must not directly call another agent, directly access the database, bypass safety checks, or create separate memory systems.
 
-Correct interaction:
+Conceptual shared C# tool interaction (not the Python C1 persistence path):
 
 ```text
 Agent
@@ -183,13 +185,13 @@ Agent
 
 ## 10. Memory Rules
 
-All workflow information must use `AgentMemoryService`. For example, Component 1 may store a battery issue and Colombo location, and Component 2 may read that information to find providers. Never create separate memory solutions.
+Persisted workflow information is managed by ASP.NET through `AgentMemoryService`; transient Python state is separate. For example, Component 1 may store a battery issue and Colombo location, and Component 2 may read that information to find providers. Never create separate memory solutions.
 
 ## 11. Tool Rules
 
 Tools perform external actions. Examples include `ProviderSearchTool`, `QuotationComparisonTool`, and `NotificationTool`.
 
-All tools should have a clear responsibility, implement `IAgentTool`, be reusable, and handle errors properly.
+Tools have a clear responsibility and handle errors. Only shared C# tools implement `IAgentTool`; Python tools follow the Python service architecture.
 
 ## 12. Safety Rules
 

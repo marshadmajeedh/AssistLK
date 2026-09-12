@@ -1,5 +1,7 @@
 # AssistLK Project Cleanup Audit Report
 
+> **Historical / Superseded:** This document records an earlier implementation state. Its original conclusions and verification results are retained as historical evidence, not current instructions. Component 1 is now Python-only. See [current Agentic AI architecture](../agent-services/README.md). References repaired during documentation consolidation point to replacement explanations, not the original historical implementation.
+
 **Date:** September 2026  
 **Auditor:** AssistLK Engineering Audit Agent  
 **Repository:** `AssistLK` (`SE3090_A1`)  

@@ -1,5 +1,7 @@
 # AssistLK Full System Understanding & UI Implementation Readiness Audit
 
+> **Historical / Superseded:** This document records an earlier implementation state. Its original conclusions and verification results are retained as historical evidence, not current instructions. Component 1 is now Python-only. See [current Agentic AI architecture](../../agent-services/README.md). References repaired during documentation consolidation point to replacement explanations, not the original historical implementation.
+
 **Status:** Complete Architectural Audit & Implementation Blueprint  
 **Scope:** Component 1 (Service Request & Problem Understanding), Auth, Flutter Mobile, React Web, Admin Portal  
 **Date:** September 2026  

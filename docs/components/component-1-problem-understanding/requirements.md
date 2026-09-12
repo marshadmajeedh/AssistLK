@@ -1,5 +1,7 @@
 # Component 1 Requirements Document
 
+> **Requirement versus implementation:** This document preserves assignment/conceptual requirements. Current C1 is Python-only behind the ASP.NET adapter. [Domain implementation](README.md) and [Python service](../../../agent-services/problem-understanding-agent/README.md) define current behavior. Workflow diagrams describe responsibility, not direct Python database access.
+
 # Smart Service Request & Problem Understanding Agent
 
 ## 1. Component Overview
@@ -179,7 +181,7 @@ The system shall convert customer input into structured data.
 
 ### FR-007 - Store Information in Memory
 
-The agent shall store extracted information using `AgentMemoryService`.
+The ASP.NET application workflow shall store the agent’s structured findings using `AgentMemoryService`.
 
 ### FR-008 - Provide Problem Summary
 
@@ -271,10 +273,10 @@ The ASP.NET Core API remains the public boundary. React and Flutter must not cal
 
 Component 1 must use:
 
-- `IAgent` for agent implementation.
+- `IAgent` for the ASP.NET external agent adapter.
 - `AgentContext` for workflow information.
 - `AgentMemoryService` for storing extracted knowledge.
-- `ToolExecutor` for external actions.
+- Python functions for C1 deterministic tools; shared C# ToolExecutor applies only to C# tools.
 - `AgentSafetyService` before risky actions.
 - `AgentMonitoringService` for performance and execution tracking.
 
@@ -294,11 +296,11 @@ Extracts and normalizes location information from customer input.
 
 Provides safe, basic service knowledge, such as possible causes of a battery failure, without claiming a confirmed diagnosis or providing dangerous repair instructions.
 
-All tools must implement `IAgentTool`, have a clear responsibility, handle errors, and be reusable.
+These are conceptual tool responsibilities. Current implementations are Python `problem_classification.py`, `location_extraction.py`, and `service_knowledge.py`; they do not implement C# `IAgentTool`. Location extraction is not Nominatim reverse geocoding. Tools must have clear responsibilities and handle errors.
 
 ## 18. Memory Usage
 
-All workflow information must use `AgentMemoryService`.
+Persisted workflow information is owned by ASP.NET through `AgentMemoryService`; Python state remains request-scoped.
 
 Example stored memory:
 
@@ -433,3 +435,7 @@ Create the pull request according to the repository workflow and target the team
 - [ ] Tests completed.
 - [ ] Documentation completed.
 - [ ] Pull request created and reviewed.
+
+## Current clarification requirement
+
+At most two persisted rounds are allowed. Round 1 answers are re-analyzed; Round 2 answers must also be re-analyzed. No Round 3 is created. If still insufficient, the customer improves the main description. ASP.NET owns these rules; Python returns structured analysis and questions.

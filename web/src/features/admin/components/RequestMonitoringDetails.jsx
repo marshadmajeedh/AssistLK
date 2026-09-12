@@ -3,6 +3,7 @@ import StatusBadge from "../../../shared/components/StatusBadge";
 import { badgeStyles, colors } from "../../../shared/theme";
 
 import { formatDate, formatConfidence } from "../utils/monitoringFormatters";
+import RequestLocation from "./RequestLocation";
 
 export function UrgencyBadge({ urgency }) {
   const tone = urgency === "Critical" ? [colors.error, colors.errorLight]
@@ -32,11 +33,15 @@ export default function RequestMonitoringDetails({ request }) {
     </AppCard>
     <AppCard><h3>Problem description</h3><p className="monitoring-prose">{request.description}</p></AppCard>
     <AppCard>
-      <h3>Location</h3><p>{request.locationText || "—"}</p>
-      <dl className="monitoring-fields">
+      <h3>Location</h3>
+      <RequestLocation locationText={request.locationText} locationSource={request.locationSource} />
+      {(request.latitude != null || request.longitude != null) && <div className="monitoring-coordinates">
+        <h4>GPS coordinates</h4>
+        <dl className="monitoring-fields">
         {request.latitude != null && <Field label="Latitude">{request.latitude}</Field>}
         {request.longitude != null && <Field label="Longitude">{request.longitude}</Field>}
-      </dl>
+        </dl>
+      </div>}
     </AppCard>
     <AppCard>
       <h3>Latest AssistLK AI analysis</h3>

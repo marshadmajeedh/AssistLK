@@ -24,6 +24,37 @@ public class ServiceRequestService : IServiceRequestService
         ServiceRequestStatus.Analyzed
     ];
 
+    private static readonly Dictionary<string, ServiceRequestStatus> ValidStatuses =
+        new(StringComparer.OrdinalIgnoreCase)
+        {
+            ["Created"] = ServiceRequestStatus.Created,
+            ["Analyzing"] = ServiceRequestStatus.Analyzing,
+            ["AwaitingInformation"] = ServiceRequestStatus.AwaitingInformation,
+            ["Analyzed"] = ServiceRequestStatus.Analyzed,
+            ["ReadyForMatching"] = ServiceRequestStatus.ReadyForMatching,
+            ["Cancelled"] = ServiceRequestStatus.Cancelled
+        };
+
+    private static readonly Dictionary<string, string> ValidCategories =
+        new(StringComparer.OrdinalIgnoreCase)
+        {
+            ["Plumbing"] = "Plumbing",
+            ["Electrical"] = "Electrical",
+            ["Vehicle Repair"] = "Vehicle Repair",
+            ["Appliance Repair"] = "Appliance Repair",
+            ["Unclassified"] = "Unclassified"
+        };
+
+    private static readonly Dictionary<string, ServiceRequestUrgency> ValidUrgencies =
+        new(StringComparer.OrdinalIgnoreCase)
+        {
+            ["Unknown"] = ServiceRequestUrgency.Unknown,
+            ["Low"] = ServiceRequestUrgency.Low,
+            ["Medium"] = ServiceRequestUrgency.Medium,
+            ["High"] = ServiceRequestUrgency.High,
+            ["Critical"] = ServiceRequestUrgency.Critical
+        };
+
     private readonly IServiceRequestRepository _serviceRequestRepository;
     private readonly IProblemAnalysisRepository _problemAnalysisRepository;
 
@@ -575,6 +606,75 @@ public class ServiceRequestService : IServiceRequestService
             .ThenBy(c => c.Sequence)
             .Select(MapClarificationResponse)
             .ToArray();
+    }
+
+    public async Task<IReadOnlyList<ServiceRequestResponse>> GetAllForAdminAsync(
+        string? status = null,
+        string? category = null,
+        string? urgency = null,
+        CancellationToken cancellationToken = default)
+    {
+        ServiceRequestStatus? parsedStatus = null;
+        if (!string.IsNullOrWhiteSpace(status))
+        {
+            var trimmed = status.Trim();
+            if (!ValidStatuses.TryGetValue(trimmed, out var s))
+            {
+                throw new ArgumentException(
+                    $"Status filter '{status}' is invalid. Allowed values are: Created, Analyzing, AwaitingInformation, Analyzed, ReadyForMatching, Cancelled.");
+            }
+            parsedStatus = s;
+        }
+
+        string? normalizedCategory = null;
+        if (!string.IsNullOrWhiteSpace(category))
+        {
+            var trimmed = category.Trim();
+            if (!ValidCategories.TryGetValue(trimmed, out var c))
+            {
+                throw new ArgumentException(
+                    $"Category filter '{category}' is invalid. Allowed values are: Plumbing, Electrical, Vehicle Repair, Appliance Repair, Unclassified.");
+            }
+            normalizedCategory = c;
+        }
+
+        ServiceRequestUrgency? parsedUrgency = null;
+        if (!string.IsNullOrWhiteSpace(urgency))
+        {
+            var trimmed = urgency.Trim();
+            if (!ValidUrgencies.TryGetValue(trimmed, out var u))
+            {
+                throw new ArgumentException(
+                    $"Urgency filter '{urgency}' is invalid. Allowed values are: Unknown, Low, Medium, High, Critical.");
+            }
+            parsedUrgency = u;
+        }
+
+        var requests = await _serviceRequestRepository.GetAllForAdminAsync(
+            parsedStatus,
+            normalizedCategory,
+            parsedUrgency,
+            cancellationToken);
+
+        return requests.Select(MapResponse).ToArray();
+    }
+
+    public async Task<ServiceRequestResponse> GetByIdForAdminAsync(
+        Guid serviceRequestId,
+        CancellationToken cancellationToken = default)
+    {
+        var serviceRequest = await _serviceRequestRepository.GetByIdAsync(
+            serviceRequestId,
+            includeProblemAnalyses: true,
+            includeClarifications: true,
+            cancellationToken: cancellationToken);
+
+        if (serviceRequest is null)
+        {
+            throw new KeyNotFoundException("Service request was not found.");
+        }
+
+        return MapResponse(serviceRequest);
     }
 
     private async Task<ServiceRequest> GetOwnedRequestAsync(

@@ -74,6 +74,39 @@ public class ServiceRequestRepository : IServiceRequestRepository
             .ToListAsync(cancellationToken);
     }
 
+    public async Task<IReadOnlyList<ServiceRequest>> GetAllForAdminAsync(
+        ServiceRequestStatus? status = null,
+        string? category = null,
+        ServiceRequestUrgency? urgency = null,
+        CancellationToken cancellationToken = default)
+    {
+        var query = _context.ServiceRequests
+            .AsNoTracking()
+            .AsSplitQuery()
+            .Include(x => x.ProblemAnalyses)
+            .Include(x => x.Clarifications)
+            .AsQueryable();
+
+        if (status.HasValue)
+        {
+            query = query.Where(x => x.Status == status.Value);
+        }
+
+        if (!string.IsNullOrWhiteSpace(category))
+        {
+            query = query.Where(x => x.Category == category);
+        }
+
+        if (urgency.HasValue)
+        {
+            query = query.Where(x => x.Urgency == urgency.Value);
+        }
+
+        return await query
+            .OrderByDescending(x => x.CreatedAt)
+            .ToListAsync(cancellationToken);
+    }
+
     public async Task AddAsync(
         ServiceRequest serviceRequest,
         CancellationToken cancellationToken = default)

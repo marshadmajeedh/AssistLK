@@ -4,6 +4,7 @@ import {
   useNavigate,
 } from "react-router-dom";
 import { useAuthStore } from "../auth/authStore";
+import "./AdminLayout.css";
 
 import {
   colors,
@@ -25,6 +26,7 @@ function AdminLayout() {
 
   return (
     <div
+      className="admin-layout"
       style={{
         minHeight: "100vh",
         display: "flex",
@@ -87,6 +89,7 @@ function AdminLayout() {
       <main
         style={{
           flex: 1,
+          minWidth: 0,
           padding: spacing.lg,
         }}
       >

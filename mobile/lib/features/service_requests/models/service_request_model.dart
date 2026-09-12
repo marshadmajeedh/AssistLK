@@ -58,6 +58,21 @@ class ServiceRequestModel {
 
   bool get hasReachedMaxRounds => currentClarificationRound >= 2;
 
+  // Round 2 existing is not proof that its answers have been analyzed.
+  // Use persisted server timestamps so reloads and failed attempts are safe.
+  bool get hasCompletedFinalClarificationAnalysis {
+    final analyzedAt = latestAnalysis?.createdAt;
+    if (!hasReachedMaxRounds ||
+        status != ServiceRequestStatus.awaitingInformation ||
+        analyzedAt == null || pendingQuestions.isNotEmpty) {
+      return false;
+    }
+    return currentRoundClarifications.every((question) {
+      final resolvedAt = question.answeredAt ?? question.supersededAt;
+      return resolvedAt != null && analyzedAt.isAfter(resolvedAt);
+    });
+  }
+
   factory ServiceRequestModel.fromJson(Map<String, dynamic> json) {
     return ServiceRequestModel(
       serviceRequestId: json['serviceRequestId']?.toString() ?? '',

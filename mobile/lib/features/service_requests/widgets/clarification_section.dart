@@ -110,7 +110,8 @@ class _ClarificationSectionState extends State<ClarificationSection> {
           roundClarifications.every((c) => c.isAnswered);
 
       // Max rounds reached and re-analysis still needs more info
-      if (widget.hasReachedMaxRounds && (isFullyAnswered || pendingQuestions.isEmpty)) {
+      if (widget.hasReachedMaxRounds && !widget.isReanalyzing &&
+          !widget.isSubmitting && (isFullyAnswered || pendingQuestions.isEmpty)) {
         return _buildMaxRoundsReachedCard(clarifications);
       }
 
@@ -183,6 +184,12 @@ class _ClarificationSectionState extends State<ClarificationSection> {
                 color: AppColors.primary,
               ),
             ),
+          ),
+          const SizedBox(height: AppSpacing.sm),
+          AppButton(
+            text: 'Re-analyze',
+            onPressed: widget.onReanalyze,
+            isLoading: widget.isReanalyzing,
           ),
         ],
       ),
@@ -456,44 +463,74 @@ class _ClarificationSectionState extends State<ClarificationSection> {
               );
             }),
             const SizedBox(height: AppSpacing.sm),
-            Row(
-              children: [
-                Expanded(
-                  child: OutlinedButton(
-                    onPressed: (widget.isSubmitting || widget.isReanalyzing)
-                        ? null
-                        : widget.onEditDetails,
-                    style: OutlinedButton.styleFrom(
-                      padding: const EdgeInsets.symmetric(vertical: 14),
-                      side: const BorderSide(color: AppColors.primary),
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(AppRadius.medium),
-                      ),
-                    ),
-                    child: const Text(
-                      'Edit Details',
-                      style: TextStyle(
-                        fontSize: 14,
-                        fontWeight: FontWeight.w600,
-                        color: AppColors.primary,
-                      ),
-                    ),
-                  ),
-                ),
-                const SizedBox(width: AppSpacing.md),
-                Expanded(
-                  child: AppButton(
-                    text: 'Submit & Re-analyze',
-                    onPressed: () => _handleSubmit(round, pending),
-                    isLoading: widget.isSubmitting || widget.isReanalyzing,
-                  ),
-                ),
-              ],
-            ),
+            _buildPendingActions(round, pending),
           ],
         ),
       ),
     );
+  }
+
+  Widget _buildPendingActions(
+    int round,
+    List<ServiceRequestClarificationModel> pending,
+  ) {
+    return LayoutBuilder(builder: (context, constraints) {
+      Size measureLabel(String label) {
+        final painter = TextPainter(
+          text: TextSpan(text: label, style: AppTextStyles.button),
+          textDirection: Directionality.of(context),
+          textScaler: MediaQuery.textScalerOf(context),
+          maxLines: 1,
+        )..layout();
+        final size = painter.size;
+        painter.dispose();
+        return size;
+      }
+
+      final editSize = measureLabel('Edit Details');
+      final submitSize = measureLabel('Submit & Re-analyze');
+      final editShare = (editSize.width + AppSpacing.md * 2) / 2;
+      final submitShare = (submitSize.width + AppSpacing.md * 2) / 3;
+      final requiredWidth = (editShare > submitShare ? editShare : submitShare) * 5
+          + AppSpacing.md + AppSpacing.sm;
+      final breakpoint = requiredWidth > 360 ? requiredWidth : 360.0;
+      final labelHeight = editSize.height > submitSize.height ? editSize.height : submitSize.height;
+      final height = labelHeight + AppSpacing.md > 48 ? labelHeight + AppSpacing.md : 48.0;
+      final edit = SizedBox(
+        width: double.infinity,
+        height: height,
+        child: OutlinedButton(
+          onPressed: (widget.isSubmitting || widget.isReanalyzing)
+              ? null : widget.onEditDetails,
+          style: OutlinedButton.styleFrom(
+            padding: const EdgeInsets.symmetric(horizontal: AppSpacing.md),
+            side: const BorderSide(color: AppColors.primary),
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(AppRadius.medium)),
+          ),
+          child: const Text('Edit Details', maxLines: 1, softWrap: false,
+            style: AppTextStyles.button),
+        ),
+      );
+      final submit = SizedBox(
+        height: height,
+        child: AppButton(
+          text: 'Submit & Re-analyze',
+          maxLines: 1,
+          onPressed: () => _handleSubmit(round, pending),
+          isLoading: widget.isSubmitting || widget.isReanalyzing,
+        ),
+      );
+      if (constraints.maxWidth < breakpoint) {
+        return Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+          submit, const SizedBox(height: AppSpacing.sm), edit,
+        ]);
+      }
+      return Row(children: [
+        Expanded(flex: 2, child: edit),
+        const SizedBox(width: AppSpacing.md),
+        Expanded(flex: 3, child: submit),
+      ]);
+    });
   }
 
   Widget _buildLegacyOrStringCard() {

@@ -1,0 +1,5 @@
+@media (max-width: 700px) {
+  .admin-layout { flex-direction: column; }
+  .admin-layout > aside { width: auto !important; }
+  .admin-layout > aside nav { flex-direction: row !important; flex-wrap: wrap; }
+}

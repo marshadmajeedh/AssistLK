@@ -65,5 +65,15 @@ public interface IServiceRequestService
         Guid serviceRequestId,
         SubmitClarificationAnswersRequest request,
         CancellationToken cancellationToken = default);
+
+    Task<IReadOnlyList<ServiceRequestResponse>> GetAllForAdminAsync(
+        string? status = null,
+        string? category = null,
+        string? urgency = null,
+        CancellationToken cancellationToken = default);
+
+    Task<ServiceRequestResponse> GetByIdForAdminAsync(
+        Guid serviceRequestId,
+        CancellationToken cancellationToken = default);
 }
 

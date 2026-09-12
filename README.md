@@ -157,6 +157,34 @@ Python agents reside in `agent-services/<name>/`. They operate strictly as out-o
 - 📖 **Python Agent Architecture:** [docs/architecture/external-python-agent-service.md](docs/architecture/external-python-agent-service.md)
 - 📖 **External Agent Contract & JSON Schema:** [docs/architecture/external-agent-contract.md](docs/architecture/external-agent-contract.md)
 
+#### Component 1 One-Command Development Launcher
+
+##### First-Time Setup
+```powershell
+cd agent-services/problem-understanding-agent
+python -m venv .venv
+.\.venv\Scripts\Activate.ps1
+pip install -r requirements.txt
+```
+Configure local gitignored Python `.env` (`agent-services/problem-understanding-agent/.env`).
+
+##### Normal Daily Start
+To start both the Python Agent and ASP.NET Core in a single command:
+```powershell
+.\scripts\start-c1-dev.ps1
+```
+This launcher:
+1. Starts the Python Agent on `http://127.0.0.1:8001` using `.venv/Scripts/python.exe`.
+2. Validates health check (`/health` returns HTTP 200) before starting ASP.NET.
+3. Automatically sets ASP.NET process environment variables (`AgentServices__ProblemUnderstandingMode=ExternalPython`, `AgentServices__ProblemUnderstandingUrl=http://127.0.0.1:8001`).
+4. Starts `dotnet run --project backend/src/AssistLK.Api`.
+5. Cleanly stops both processes upon `Ctrl+C` with no orphaned processes.
+
+Optional cleanup helper if a terminal was closed without `Ctrl+C`:
+```powershell
+.\scripts\stop-c1-dev.ps1
+```
+
 ---
 
 ### 9. Component Boundaries & Ownership

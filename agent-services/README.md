@@ -48,3 +48,27 @@ agent-services/
 ```
 
 > **Note for Teammates:** Do not commit empty placeholder logic or unverified dependencies. Only create a subfolder when you are actively implementing your component's agent service.
+
+---
+
+## Component 1 Problem Understanding Agent
+
+The reference implementation for Component 1 is located at:
+`agent-services/problem-understanding-agent/`
+
+### First-Time Setup
+```powershell
+cd agent-services/problem-understanding-agent
+python -m venv .venv
+.\.venv\Scripts\Activate.ps1
+pip install -r requirements.txt
+```
+Copy `.env.example` to `.env` and set your local provider credentials (gitignored).
+
+### One-Command Local Development Start
+From the repository root, start both the Python agent and ASP.NET Core backend simultaneously:
+```powershell
+.\scripts\start-c1-dev.ps1
+```
+This launcher automatically verifies Python virtual environment integrity, waits for `/health` to report HTTP 200, configures ASP.NET environment variables for `ExternalPython` mode, starts ASP.NET, and ensures graceful process termination upon `Ctrl+C`.
+

@@ -8,7 +8,7 @@
     2. Probes port 8001 for an existing healthy AssistLK Python agent instance.
     3. If not already running, starts the Python agent using the venv executable.
     4. Confirms Python /health reports HTTP 200 within a bounded timeout.
-    5. Configures process-level environment variables for ExternalPython mode.
+    5. Configures process-level environment variables for Python agent service.
     6. Starts ASP.NET Core backend.
     7. Cleanly terminates only processes started by this script upon Ctrl+C or exit.
 
@@ -239,12 +239,10 @@ if ($NoDotnet) {
 # -------------------------------------------------------------
 # 5. Configure ASP.NET Process Environment
 # -------------------------------------------------------------
-Write-Host "`n[2/2] Configuring ASP.NET environment for ExternalPython..." -ForegroundColor Cyan
+Write-Host "`n[2/2] Configuring ASP.NET environment for Python agent service..." -ForegroundColor Cyan
 
-$env:AgentServices__ProblemUnderstandingMode = "ExternalPython"
 $env:AgentServices__ProblemUnderstandingUrl = "http://${PythonHost}:${PythonPort}"
 
-Write-Host "  AgentServices__ProblemUnderstandingMode = ExternalPython" -ForegroundColor Green
 Write-Host "  AgentServices__ProblemUnderstandingUrl  = http://${PythonHost}:${PythonPort}" -ForegroundColor Green
 
 if (-not [string]::IsNullOrWhiteSpace($env:AgentServices__InternalApiKey)) {

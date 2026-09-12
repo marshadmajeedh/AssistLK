@@ -10,24 +10,25 @@ using Microsoft.Extensions.Logging;
 namespace AssistLK.IntegrationTests;
 
 /// <summary>
-/// Verifies Section 4 & 5 DI lifetimes and mode switching between NativeCSharp and ExternalPython.
-/// Confirms that AgentRegistry, AgentOrchestrator, and agents share matching Scoped lifetimes
+/// Verifies DI lifetimes and agent registration for Component 1's production architecture:
+/// ASP.NET Core -> ExternalProblemUnderstandingAgentAdapter -> ProblemUnderstandingHttpClient -> Python FastAPI.
+/// Confirms that AgentRegistry, AgentOrchestrator, and ExternalProblemUnderstandingAgentAdapter share matching Scoped lifetimes
 /// and that no singleton captures a scoped dependency.
 /// </summary>
-public class ProblemUnderstandingModeSwitchTests
+public class ProblemUnderstandingRegistrationTests
 {
-    private static IServiceProvider CreateContainer(string? mode = null, string? url = null)
+    private static IServiceProvider CreateContainer(string? url = null, int? timeoutSeconds = null)
     {
         var services = new ServiceCollection();
 
         var inMemory = new Dictionary<string, string?>();
-        if (mode != null)
-        {
-            inMemory["AgentServices:ProblemUnderstandingMode"] = mode;
-        }
         if (url != null)
         {
             inMemory["AgentServices:ProblemUnderstandingUrl"] = url;
+        }
+        if (timeoutSeconds != null)
+        {
+            inMemory["AgentServices:TimeoutSeconds"] = timeoutSeconds.Value.ToString();
         }
 
         var configuration = new ConfigurationBuilder()
@@ -69,24 +70,11 @@ public class ProblemUnderstandingModeSwitchTests
         // Orchestrator
         services.AddScoped<AgentOrchestrator>();
 
-        // Agent Registry (Mode Switch)
+        // Agent Registry
         services.AddScoped<AgentRegistry>(sp =>
         {
             var registry = new AgentRegistry();
-            var options = sp.GetRequiredService<AgentServicesOptions>();
-
-            if (string.Equals(options.ProblemUnderstandingMode, AgentServicesOptions.ExternalPythonMode, StringComparison.OrdinalIgnoreCase) ||
-                string.Equals(options.ProblemUnderstandingMode, AgentServicesOptions.NativeCSharpMode, StringComparison.OrdinalIgnoreCase))
-            {
-                registry.Register(sp.GetRequiredService<ExternalProblemUnderstandingAgentAdapter>());
-            }
-            else
-            {
-                throw new InvalidOperationException(
-                    $"Invalid AgentServices:ProblemUnderstandingMode '{options.ProblemUnderstandingMode}'. " +
-                    $"Supported modes are '{AgentServicesOptions.NativeCSharpMode}' and '{AgentServicesOptions.ExternalPythonMode}'.");
-            }
-
+            registry.Register(sp.GetRequiredService<ExternalProblemUnderstandingAgentAdapter>());
             return registry;
         });
 
@@ -101,7 +89,7 @@ public class ProblemUnderstandingModeSwitchTests
     public void DILifetimes_ValidateScopes_SucceedsWithoutSingletonCapturingScoped()
     {
         // ServiceProviderOptions.ValidateScopes = true guarantees no singleton captures a scoped dependency
-        var provider = CreateContainer(mode: "ExternalPython", url: "http://127.0.0.1:8001");
+        var provider = CreateContainer(url: "http://127.0.0.1:8001");
         using var scope = provider.CreateScope();
 
         var registry = scope.ServiceProvider.GetRequiredService<AgentRegistry>();
@@ -114,9 +102,9 @@ public class ProblemUnderstandingModeSwitchTests
     }
 
     [Fact]
-    public void AgentRegistry_ResolvesExternalProblemUnderstandingAgentAdapter_AsIntendedC1Agent()
+    public void AgentRegistry_ResolvesExternalProblemUnderstandingAgentAdapter_AsProblemUnderstandingAgent()
     {
-        var provider = CreateContainer(mode: "ExternalPython", url: "http://127.0.0.1:8001");
+        var provider = CreateContainer(url: "http://127.0.0.1:8001");
         using var scope = provider.CreateScope();
 
         var registry = scope.ServiceProvider.GetRequiredService<AgentRegistry>();
@@ -128,23 +116,9 @@ public class ProblemUnderstandingModeSwitchTests
     }
 
     [Fact]
-    public void ModeSwitch_ExternalPython_ResolvesExternalProblemUnderstandingAgentAdapter()
+    public void ExternalProblemUnderstandingAgentAdapter_ImplementsIAgent_AndExposesLogicalName()
     {
-        var provider = CreateContainer(mode: "ExternalPython", url: "http://127.0.0.1:8001");
-        using var scope = provider.CreateScope();
-
-        var registry = scope.ServiceProvider.GetRequiredService<AgentRegistry>();
-        var agent = registry.Get("ProblemUnderstandingAgent");
-
-        Assert.NotNull(agent);
-        Assert.IsType<ExternalProblemUnderstandingAgentAdapter>(agent);
-        Assert.Equal("ProblemUnderstandingAgent", agent.Name);
-    }
-
-    [Fact]
-    public void FinalArchitecture_ExternalAdapter_ImplementsIAgent_AndHasCorrectName()
-    {
-        var provider = CreateContainer(mode: "ExternalPython", url: "http://127.0.0.1:8001");
+        var provider = CreateContainer(url: "http://127.0.0.1:8001");
         using var scope = provider.CreateScope();
 
         var registry = scope.ServiceProvider.GetRequiredService<AgentRegistry>();
@@ -155,14 +129,34 @@ public class ProblemUnderstandingModeSwitchTests
         Assert.Equal("ProblemUnderstandingAgent", iAgent.Name);
     }
 
-    [Fact]
-    public void ModeSwitch_InvalidMode_ThrowsInvalidOperationExceptionDuringResolution()
+    [Theory]
+    [InlineData("")]
+    [InlineData("   ")]
+    [InlineData("not-a-url")]
+    [InlineData("ftp://127.0.0.1:8001")]
+    public void AgentServicesOptions_Validate_ThrowsOnInvalidUrl(string invalidUrl)
     {
-        Assert.Throws<InvalidOperationException>(() =>
+        var options = new AgentServicesOptions
         {
-            var provider = CreateContainer(mode: "DisallowedMode");
-            using var scope = provider.CreateScope();
-            _ = scope.ServiceProvider.GetRequiredService<AgentRegistry>();
-        });
+            ProblemUnderstandingUrl = invalidUrl
+        };
+
+        var ex = Assert.Throws<InvalidOperationException>(() => options.Validate());
+        Assert.Contains("ProblemUnderstandingUrl", ex.Message);
+    }
+
+    [Theory]
+    [InlineData(0)]
+    [InlineData(-1)]
+    [InlineData(-45)]
+    public void AgentServicesOptions_Validate_ThrowsOnNonPositiveTimeout(int invalidTimeout)
+    {
+        var options = new AgentServicesOptions
+        {
+            TimeoutSeconds = invalidTimeout
+        };
+
+        var ex = Assert.Throws<InvalidOperationException>(() => options.Validate());
+        Assert.Contains("TimeoutSeconds", ex.Message);
     }
 }

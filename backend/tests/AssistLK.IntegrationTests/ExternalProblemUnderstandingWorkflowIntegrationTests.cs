@@ -19,7 +19,7 @@ namespace AssistLK.IntegrationTests;
 
 /// <summary>
 /// End-to-end workflow tests for ProblemUnderstandingWorkflowService operating with
-/// the ExternalProblemUnderstandingAgentAdapter under ExternalPython mode.
+/// the ExternalProblemUnderstandingAgentAdapter.
 /// Uses mocked HTTP infrastructure to guarantee deterministic execution without requiring
 /// a running Python process during standard test runs.
 /// </summary>
@@ -63,7 +63,7 @@ public class ExternalProblemUnderstandingWorkflowIntegrationTests
 
             var client = new ProblemUnderstandingHttpClient(
                 httpClient,
-                new AgentServicesOptions { ProblemUnderstandingMode = "ExternalPython" },
+                new AgentServicesOptions { ProblemUnderstandingUrl = "http://127.0.0.1:8001" },
                 NullLogger<ProblemUnderstandingHttpClient>.Instance);
 
             Adapter = new ExternalProblemUnderstandingAgentAdapter(
@@ -117,7 +117,7 @@ public class ExternalProblemUnderstandingWorkflowIntegrationTests
     }
 
     [Fact]
-    public async Task ExternalPythonWorkflow_ConfidentPlumbing_CompletesAndTransitionsToAnalyzed()
+    public async Task ExternalAdapterWorkflow_ConfidentPlumbing_CompletesAndTransitionsToAnalyzed()
     {
         var fixture = new WorkflowTestFixture(_ =>
             JsonResponse(new AgentExecutionResponseDto
@@ -198,7 +198,7 @@ public class ExternalProblemUnderstandingWorkflowIntegrationTests
     }
 
     [Fact]
-    public async Task ExternalPythonWorkflow_DegradedOutput_TransitionsToAwaitingInformation()
+    public async Task ExternalAdapterWorkflow_DegradedOutput_TransitionsToAwaitingInformation()
     {
         var fixture = new WorkflowTestFixture(_ =>
             JsonResponse(new AgentExecutionResponseDto
@@ -248,7 +248,7 @@ public class ExternalProblemUnderstandingWorkflowIntegrationTests
     }
 
     [Fact]
-    public async Task ExternalPythonWorkflow_Http500Failure_RecoversPreAnalysisStatus()
+    public async Task ExternalAdapterWorkflow_Http500Failure_RecoversPreAnalysisStatus()
     {
         var fixture = new WorkflowTestFixture(_ =>
             new HttpResponseMessage(HttpStatusCode.InternalServerError)

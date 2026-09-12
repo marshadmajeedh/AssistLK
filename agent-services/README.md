@@ -70,5 +70,5 @@ From the repository root, start both the Python agent and ASP.NET Core backend s
 ```powershell
 .\scripts\start-c1-dev.ps1
 ```
-This launcher automatically verifies Python virtual environment integrity, waits for `/health` to report HTTP 200, configures ASP.NET environment variables for `ExternalPython` mode, starts ASP.NET, and ensures graceful process termination upon `Ctrl+C`.
+This launcher automatically verifies Python virtual environment integrity, waits for `/health` to report HTTP 200, configures ASP.NET environment variables for the Python agent service, starts ASP.NET, and ensures graceful process termination upon `Ctrl+C`.
 

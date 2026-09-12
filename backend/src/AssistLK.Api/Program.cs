@@ -108,15 +108,7 @@ builder.Services.AddSingleton(sp =>
     var options = new AgentServicesOptions();
     config.GetSection(AgentServicesOptions.SectionName).Bind(options);
 
-    // Fallback for legacy cross-project AGENT_SERVICE_URL only if standard configuration key was not set
-    var legacyAgentServiceUrl = config["AGENT_SERVICE_URL"];
-    if (!string.IsNullOrWhiteSpace(legacyAgentServiceUrl) &&
-        string.IsNullOrWhiteSpace(config[$"{AgentServicesOptions.SectionName}:ProblemUnderstandingUrl"]))
-    {
-        options.ProblemUnderstandingUrl = legacyAgentServiceUrl.Trim();
-    }
-
-    // Strict mode validation
+    // Validate options
     options.Validate();
     return options;
 });
@@ -134,25 +126,12 @@ builder.Services.AddHttpClient<IProblemUnderstandingClient, ProblemUnderstanding
 
 builder.Services.AddScoped<ExternalProblemUnderstandingAgentAdapter>();
 
-// Agent Registry (Mode-aware, Scoped, Lifetime-safe)
+// Agent Registry (Scoped, Lifetime-safe)
 builder.Services.AddScoped<AgentRegistry>(sp =>
 {
     var registry = new AgentRegistry();
-    var options = sp.GetRequiredService<AgentServicesOptions>();
-
-    if (string.Equals(options.ProblemUnderstandingMode, AgentServicesOptions.ExternalPythonMode, StringComparison.OrdinalIgnoreCase) ||
-        string.Equals(options.ProblemUnderstandingMode, AgentServicesOptions.NativeCSharpMode, StringComparison.OrdinalIgnoreCase))
-    {
-        registry.Register(
-            sp.GetRequiredService<ExternalProblemUnderstandingAgentAdapter>());
-    }
-    else
-    {
-        throw new InvalidOperationException(
-            $"Invalid AgentServices:ProblemUnderstandingMode '{options.ProblemUnderstandingMode}'. " +
-            $"Supported modes are '{AgentServicesOptions.NativeCSharpMode}' and '{AgentServicesOptions.ExternalPythonMode}'.");
-    }
-
+    registry.Register(
+        sp.GetRequiredService<ExternalProblemUnderstandingAgentAdapter>());
     return registry;
 });
 

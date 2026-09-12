@@ -48,8 +48,7 @@ public class PostgreSqlAssistLKApiTestFactory : WebApplicationFactory<Program>
                 ["Jwt:Key"] = TestJwtKey,
                 ["Jwt:Issuer"] = TestIssuer,
                 ["Jwt:Audience"] = TestAudience,
-                ["Jwt:ExpirationMinutes"] = "60",
-                ["AgentServices:ProblemUnderstandingMode"] = "ExternalPython"
+                ["Jwt:ExpirationMinutes"] = "60"
             });
         });
 

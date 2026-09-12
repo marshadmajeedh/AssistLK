@@ -788,133 +788,37 @@ public class ExternalProblemUnderstandingAgentAdapterTests
 
     #endregion
 
-    #region Section 15: Required Tests 24-25 & Strict Mode Validation
-
-    [Fact]
-    public void Test24_ModeSwitch_NativeCSharpMode_FallsBackToExternalAdapter()
-    {
-        // When NativeCSharp mode is configured, during migration it resolves the adapter as native agent is removed
-        var services = new ServiceCollection();
-
-        var configuration = new ConfigurationBuilder()
-            .AddInMemoryCollection(new Dictionary<string, string?>
-            {
-                ["AgentServices:ProblemUnderstandingMode"] = "NativeCSharp"
-            })
-            .Build();
-
-        services.AddSingleton<IConfiguration>(configuration);
-        services.AddLogging();
-        services.AddHttpClient();
-
-        services.AddSingleton(sp =>
-        {
-            var config = sp.GetRequiredService<IConfiguration>();
-            var options = new AgentServicesOptions();
-            config.GetSection(AgentServicesOptions.SectionName).Bind(options);
-            options.Validate();
-            return options;
-        });
-
-        services.AddScoped<ToolRegistry>();
-        services.AddScoped<ToolExecutor>();
-        services.AddScoped<IProblemUnderstandingClient, ProblemUnderstandingHttpClient>();
-        services.AddScoped<ExternalProblemUnderstandingAgentAdapter>();
-
-        services.AddScoped<AgentRegistry>(sp =>
-        {
-            var registry = new AgentRegistry();
-            var options = sp.GetRequiredService<AgentServicesOptions>();
-
-            if (string.Equals(options.ProblemUnderstandingMode, AgentServicesOptions.ExternalPythonMode, StringComparison.OrdinalIgnoreCase) ||
-                string.Equals(options.ProblemUnderstandingMode, AgentServicesOptions.NativeCSharpMode, StringComparison.OrdinalIgnoreCase))
-            {
-                registry.Register(sp.GetRequiredService<ExternalProblemUnderstandingAgentAdapter>());
-            }
-            return registry;
-        });
-
-        using var provider = services.BuildServiceProvider();
-        using var scope = provider.CreateScope();
-
-        var registry = scope.ServiceProvider.GetRequiredService<AgentRegistry>();
-        var registeredAgent = registry.Get("ProblemUnderstandingAgent");
-
-        Assert.NotNull(registeredAgent);
-        Assert.IsType<ExternalProblemUnderstandingAgentAdapter>(registeredAgent);
-    }
-
-    [Fact]
-    public void Test25_ModeSwitch_ExternalPythonMode_RegistersExternalAdapter()
-    {
-        // Item 25: ExternalPython mode registers external adapter
-        var services = new ServiceCollection();
-
-        var configuration = new ConfigurationBuilder()
-            .AddInMemoryCollection(new Dictionary<string, string?>
-            {
-                ["AgentServices:ProblemUnderstandingMode"] = "ExternalPython",
-                ["AgentServices:ProblemUnderstandingUrl"] = "http://127.0.0.1:8001"
-            })
-            .Build();
-
-        services.AddSingleton<IConfiguration>(configuration);
-        services.AddLogging();
-        services.AddHttpClient();
-
-        services.AddSingleton(sp =>
-        {
-            var config = sp.GetRequiredService<IConfiguration>();
-            var options = new AgentServicesOptions();
-            config.GetSection(AgentServicesOptions.SectionName).Bind(options);
-            options.Validate();
-            return options;
-        });
-
-        services.AddScoped<ToolRegistry>();
-        services.AddScoped<ToolExecutor>();
-        services.AddScoped<IProblemUnderstandingClient, ProblemUnderstandingHttpClient>();
-        services.AddScoped<ExternalProblemUnderstandingAgentAdapter>();
-
-        services.AddScoped<AgentRegistry>(sp =>
-        {
-            var registry = new AgentRegistry();
-            var options = sp.GetRequiredService<AgentServicesOptions>();
-
-            if (string.Equals(options.ProblemUnderstandingMode, AgentServicesOptions.ExternalPythonMode, StringComparison.OrdinalIgnoreCase) ||
-                string.Equals(options.ProblemUnderstandingMode, AgentServicesOptions.NativeCSharpMode, StringComparison.OrdinalIgnoreCase))
-            {
-                registry.Register(sp.GetRequiredService<ExternalProblemUnderstandingAgentAdapter>());
-            }
-            return registry;
-        });
-
-        using var provider = services.BuildServiceProvider();
-        using var scope = provider.CreateScope();
-
-        var registry = scope.ServiceProvider.GetRequiredService<AgentRegistry>();
-        var registeredAgent = registry.Get("ProblemUnderstandingAgent");
-
-        Assert.NotNull(registeredAgent);
-        Assert.IsType<ExternalProblemUnderstandingAgentAdapter>(registeredAgent);
-    }
+    #region Section 15: Agent Services Options Validation
 
     [Theory]
-    [InlineData("InvalidMode")]
-    [InlineData("Python")]
-    [InlineData("OpenAI")]
-    [InlineData("None")]
-    public void Test26_StrictModeValidation_ThrowsOnUnknownMode(string invalidMode)
+    [InlineData("")]
+    [InlineData("   ")]
+    [InlineData("not-a-url")]
+    [InlineData("ftp://127.0.0.1:8001")]
+    public void Test26_OptionsValidation_ThrowsOnInvalidUrl(string invalidUrl)
     {
         var options = new AgentServicesOptions
         {
-            ProblemUnderstandingMode = invalidMode
+            ProblemUnderstandingUrl = invalidUrl
         };
 
         var ex = Assert.Throws<InvalidOperationException>(() => options.Validate());
-        Assert.Contains(invalidMode, ex.Message);
-        Assert.Contains("NativeCSharp", ex.Message);
-        Assert.Contains("ExternalPython", ex.Message);
+        Assert.Contains("ProblemUnderstandingUrl", ex.Message);
+    }
+
+    [Theory]
+    [InlineData(0)]
+    [InlineData(-1)]
+    [InlineData(-45)]
+    public void Test26_OptionsValidation_ThrowsOnNonPositiveTimeout(int invalidTimeout)
+    {
+        var options = new AgentServicesOptions
+        {
+            TimeoutSeconds = invalidTimeout
+        };
+
+        var ex = Assert.Throws<InvalidOperationException>(() => options.Validate());
+        Assert.Contains("TimeoutSeconds", ex.Message);
     }
 
     [Fact]

@@ -73,7 +73,6 @@ public class LocalhostPythonSmokeIntegrationTests
 
         var options = new AgentServicesOptions
         {
-            ProblemUnderstandingMode = "ExternalPython",
             ProblemUnderstandingUrl = "http://127.0.0.1:8001"
         };
 

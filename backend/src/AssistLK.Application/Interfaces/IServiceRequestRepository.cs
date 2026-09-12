@@ -39,6 +39,12 @@ public interface IServiceRequestRepository
         ServiceRequestStatus status,
         CancellationToken cancellationToken = default);
 
+    Task<IReadOnlyList<ServiceRequest>> GetAllForAdminAsync(
+        ServiceRequestStatus? status = null,
+        string? category = null,
+        ServiceRequestUrgency? urgency = null,
+        CancellationToken cancellationToken = default);
+
     Task AddAsync(ServiceRequest serviceRequest, CancellationToken cancellationToken = default);
     Task AddClarificationsAsync(
         IEnumerable<ServiceRequestClarification> clarifications,

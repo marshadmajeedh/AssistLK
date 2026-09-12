@@ -580,6 +580,19 @@ public class Component1LifecycleTests
         public Task<IReadOnlyList<ServiceRequest>> GetByStatusAsync(ServiceRequestStatus status, CancellationToken cancellationToken = default)
             => Task.FromResult<IReadOnlyList<ServiceRequest>>(_requests.Where(x => x.Status == status).ToArray());
 
+        public Task<IReadOnlyList<ServiceRequest>> GetAllForAdminAsync(
+            ServiceRequestStatus? status = null,
+            string? category = null,
+            ServiceRequestUrgency? urgency = null,
+            CancellationToken cancellationToken = default)
+        {
+            var query = _requests.AsEnumerable();
+            if (status.HasValue) query = query.Where(x => x.Status == status.Value);
+            if (!string.IsNullOrWhiteSpace(category)) query = query.Where(x => string.Equals(x.Category, category, StringComparison.OrdinalIgnoreCase));
+            if (urgency.HasValue) query = query.Where(x => x.Urgency == urgency.Value);
+            return Task.FromResult<IReadOnlyList<ServiceRequest>>(query.OrderByDescending(x => x.CreatedAt).ToArray());
+        }
+
         public Task AddAsync(ServiceRequest serviceRequest, CancellationToken cancellationToken = default)
         {
             _requests.Add(serviceRequest);

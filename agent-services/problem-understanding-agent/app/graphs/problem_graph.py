@@ -5,6 +5,7 @@ import time
 from typing import Any, Callable, Literal
 from langgraph.graph import END, START, StateGraph
 from app.graphs.state import ProblemUnderstandingState
+from app.graphs.visual_evidence import prepare_visual_evidence
 from app.providers.base import BaseLLMProvider, ProviderError
 from app.safety.guardrails import apply_safety_guardrails
 from app.tools.location_extraction import extract_location_tool
@@ -121,6 +122,7 @@ def create_problem_understanding_graph(
         if not desc:
             return {
                 "is_empty_input": True,
+                "vision_status": "unsupported" if state.get("visual_evidence") else "not_requested",
                 "final_category": "Unclassified",
                 "final_summary": "Insufficient information provided to determine the problem.",
                 "final_urgency": "Unknown",
@@ -365,6 +367,7 @@ def create_problem_understanding_graph(
 
     workflow.add_node("validate_input", validate_input_node)
     workflow.add_node("extract_location", location_extraction_node)
+    workflow.add_node("prepare_visual_evidence", lambda state: prepare_visual_evidence(state, provider))
     workflow.add_node("classify_problem", problem_classification_node)
     workflow.add_node("retrieve_knowledge", service_knowledge_node)
     workflow.add_node("reason_problem", llm_reasoning_node)
@@ -381,7 +384,8 @@ def create_problem_understanding_graph(
             "extract_location": "extract_location",
         },
     )
-    workflow.add_edge("extract_location", "classify_problem")
+    workflow.add_edge("extract_location", "prepare_visual_evidence")
+    workflow.add_edge("prepare_visual_evidence", "classify_problem")
     workflow.add_edge("classify_problem", "retrieve_knowledge")
     workflow.add_edge("retrieve_knowledge", "reason_problem")
     workflow.add_edge("reason_problem", "evaluate_ambiguity")

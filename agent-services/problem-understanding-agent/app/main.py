@@ -3,6 +3,8 @@ import logging
 import time
 from typing import Any
 from fastapi import Depends, FastAPI, Header, HTTPException, Request, status
+from fastapi.exceptions import RequestValidationError
+from fastapi.responses import JSONResponse
 from app.config import Settings, get_settings
 from app.graphs.problem_graph import create_problem_understanding_graph
 from app.providers.factory import ProviderFactory
@@ -28,6 +30,12 @@ app = FastAPI(
     docs_url=None,  # Disable Swagger UI in internal production
     redoc_url=None,
 )
+
+
+@app.exception_handler(RequestValidationError)
+async def invalid_request(_request: Request, _error: RequestValidationError) -> JSONResponse:
+    # Default validation responses echo rejected input, including Base64. Never expose it.
+    return JSONResponse(status_code=422, content={"detail": "Invalid internal execution payload."})
 
 
 def verify_internal_auth(
@@ -94,6 +102,7 @@ async def execute_agent(
         "longitude": inp.longitude,
         "category_hint": inp.category_hint,
         "clarification_history": [item.model_dump() for item in inp.clarification_history],
+        "visual_evidence": inp.visual_evidence,
         "tool_executions": [],
     }
 
@@ -133,7 +142,7 @@ async def execute_agent(
 
     except Exception as ex:
         elapsed_ms = max(1, int((time.perf_counter() - t0) * 1000))
-        logger.error("Agent execution unrecoverable failure: %s", ex, exc_info=True)
+        logger.error("Agent execution unrecoverable failure (%s)", type(ex).__name__)
 
         metadata = ExecutionMetadataDto(
             agentName=request.agent_name,

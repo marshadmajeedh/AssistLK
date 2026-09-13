@@ -19,7 +19,7 @@ public class Component1EndToEndPostgreSqlTests : PostgreSqlIntegrationTestBase
     {
     }
 
-    private ProblemUnderstandingWorkflowService CreateWorkflowService(AssistLKDbContext context)
+    private ProblemUnderstandingWorkflowService CreateWorkflowService(AssistLKDbContext context, AssistLK.Tests.Shared.FakeAttachmentStorage? storage = null)
     {
         var workflowService = new AgentWorkflowService(context);
         var memoryService = new AgentMemoryService(context);
@@ -49,7 +49,10 @@ public class Component1EndToEndPostgreSqlTests : PostgreSqlIntegrationTestBase
             safetyService,
             orchestrator,
             registry,
-            requestService);
+            requestService,
+            new AssistLK.Application.Attachments.ProblemVisualEvidenceService(
+                new AssistLK.Infrastructure.Repositories.AnalysisEvidenceRepository(context),
+                storage ?? new AssistLK.Tests.Shared.FakeAttachmentStorage()));
     }
 
     [Fact]
@@ -57,6 +60,8 @@ public class Component1EndToEndPostgreSqlTests : PostgreSqlIntegrationTestBase
     {
         var customer = await CreateUserAsync(email: "pipe_customer@assistlk.com");
         var requestId = Guid.NewGuid();
+
+        var storage = new AssistLK.Tests.Shared.FakeAttachmentStorage();
 
         // 1. Customer submits request to PostgreSQL
         await using (var context = CreateDbContext())
@@ -73,9 +78,8 @@ public class Component1EndToEndPostgreSqlTests : PostgreSqlIntegrationTestBase
             };
             await context.ServiceRequests.AddAsync(req);
             await context.SaveChangesAsync();
-            // Upload evidence before the existing text-only workflow; Phase 1 must persist
+            // Upload evidence before the workflow; audit input must persist
             // its revision without leaking the normalized binary or storage metadata into audit input.
-            var storage = new AssistLK.Tests.Shared.FakeAttachmentStorage();
             var attachments = new AssistLK.Application.Attachments.ServiceRequestAttachmentService(
                 new ServiceRequestAttachmentRepository(context), storage,
                 new AssistLK.Infrastructure.Attachments.AttachmentImageNormalizer(),
@@ -88,7 +92,7 @@ public class Component1EndToEndPostgreSqlTests : PostgreSqlIntegrationTestBase
         // 2. Execute full Component 1 Workflow backed by real PostgreSQL
         await using (var workflowContext = CreateDbContext())
         {
-            var workflowService = CreateWorkflowService(workflowContext);
+            var workflowService = CreateWorkflowService(workflowContext, storage);
             var result = await workflowService.AnalyzeAsync(requestId, customer.Id);
 
             Assert.True(result.Success, $"Workflow execution failed: {result.ErrorMessage}");
@@ -147,7 +151,12 @@ public class Component1EndToEndPostgreSqlTests : PostgreSqlIntegrationTestBase
             {
                 using var input = System.Text.Json.JsonDocument.Parse(execution.Input!);
                 Assert.Equal(2, input.RootElement.GetProperty("EvidenceRevision").GetInt64());
-                var allowed = new[] { "EvidenceRevision", "ServiceRequestId", "Description", "LocationText", "Latitude", "Longitude", "CategoryHint", "ClarificationHistory" };
+                var ids = input.RootElement.GetProperty("AttachmentIds").EnumerateArray().Select(x => x.GetGuid()).ToArray();
+                Assert.Equal(await verifyContext.ServiceRequestAttachments.Where(a => a.ServiceRequestId == requestId)
+                    .OrderBy(a => a.Slot).Select(a => a.Id).ToArrayAsync(), ids);
+                Assert.True(execution.Input!.Length < 2000);
+                Assert.DoesNotContain("dataBase64", execution.Input, StringComparison.OrdinalIgnoreCase);
+                var allowed = new[] { "EvidenceRevision", "AttachmentIds", "ServiceRequestId", "Description", "LocationText", "Latitude", "Longitude", "CategoryHint", "ClarificationHistory" };
                 Assert.All(input.RootElement.EnumerateObject(), property => Assert.Contains(property.Name, allowed));
             }
             Assert.NotEmpty(workflowRecord.AuditLogs);

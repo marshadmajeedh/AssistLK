@@ -69,7 +69,8 @@ public class Component1FailureTests
             safetyService,
             orchestrator,
             registry,
-            requestService);
+            requestService,
+            AssistLK.IntegrationTests.TestDoubles.TestAnalysisEvidence.Create(reqRepo));
 
         var serviceRequestId = Guid.NewGuid();
         requests.Add(new ServiceRequest
@@ -148,7 +149,8 @@ public class Component1FailureTests
             safetyService,
             orchestrator,
             registry,
-            requestService);
+            requestService,
+            AssistLK.IntegrationTests.TestDoubles.TestAnalysisEvidence.Create(reqRepo));
 
         var serviceRequestId = Guid.NewGuid();
         requests.Add(new ServiceRequest
@@ -209,7 +211,8 @@ public class Component1FailureTests
             safetyService,
             orchestrator,
             registry,
-            requestService);
+            requestService,
+            AssistLK.IntegrationTests.TestDoubles.TestAnalysisEvidence.Create(reqRepo));
 
         // Non-existent ID
         var nonExistentId = Guid.NewGuid();
@@ -258,7 +261,8 @@ public class Component1FailureTests
             safetyService,
             orchestrator,
             registry,
-            requestService);
+            requestService,
+            AssistLK.IntegrationTests.TestDoubles.TestAnalysisEvidence.Create(reqRepo));
 
         var serviceRequestId = Guid.NewGuid();
         requests.Add(new ServiceRequest
@@ -326,7 +330,8 @@ public class Component1FailureTests
             safetyService,
             orchestrator,
             registry,
-            requestService);
+            requestService,
+            AssistLK.IntegrationTests.TestDoubles.TestAnalysisEvidence.Create(reqRepo));
 
         var serviceRequestId = Guid.NewGuid();
         requests.Add(new ServiceRequest
@@ -389,7 +394,8 @@ public class Component1FailureTests
             safetyService,
             orchestrator,
             registry,
-            requestService);
+            requestService,
+            AssistLK.IntegrationTests.TestDoubles.TestAnalysisEvidence.Create(reqRepo));
 
         var serviceRequestId = Guid.NewGuid();
         requests.Add(new ServiceRequest
@@ -470,7 +476,8 @@ public class Component1FailureTests
             safetyService,
             orchestrator,
             registry,
-            requestService);
+            requestService,
+            AssistLK.IntegrationTests.TestDoubles.TestAnalysisEvidence.Create(reqRepo));
 
         var serviceRequestId = Guid.NewGuid();
         requests.Add(new ServiceRequest
@@ -545,7 +552,8 @@ public class Component1FailureTests
             safetyService,
             orchestrator,
             registry,
-            requestService);
+            requestService,
+            AssistLK.IntegrationTests.TestDoubles.TestAnalysisEvidence.Create(reqRepo));
 
         var serviceRequestId = Guid.NewGuid();
         requests.Add(new ServiceRequest
@@ -613,7 +621,8 @@ public class Component1FailureTests
             safetyService,
             orchestrator,
             registry,
-            requestService);
+            requestService,
+            AssistLK.IntegrationTests.TestDoubles.TestAnalysisEvidence.Create(reqRepo));
 
         var serviceRequestId = Guid.NewGuid();
         requests.Add(new ServiceRequest
@@ -683,7 +692,8 @@ public class Component1FailureTests
             safetyService,
             orchestrator,
             registry,
-            requestService);
+            requestService,
+            AssistLK.IntegrationTests.TestDoubles.TestAnalysisEvidence.Create(reqRepo));
 
         var serviceRequestId = Guid.NewGuid();
         requests.Add(new ServiceRequest
@@ -766,7 +776,8 @@ public class Component1FailureTests
             safetyService,
             orchestrator,
             registry,
-            requestService);
+            requestService,
+            AssistLK.IntegrationTests.TestDoubles.TestAnalysisEvidence.Create(reqRepo));
 
         var serviceRequestId = Guid.NewGuid();
         requests.Add(new ServiceRequest
@@ -834,7 +845,8 @@ public class Component1FailureTests
             safetyService,
             orchestrator,
             registry,
-            requestService);
+            requestService,
+            AssistLK.IntegrationTests.TestDoubles.TestAnalysisEvidence.Create(reqRepo));
 
         var serviceRequestId = Guid.NewGuid();
         requests.Add(new ServiceRequest

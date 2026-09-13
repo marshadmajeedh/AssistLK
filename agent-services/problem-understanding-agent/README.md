@@ -22,7 +22,8 @@ flowchart TD
     START --> validate_input
     validate_input -->|normal input| extract_location
     validate_input -->|empty input| finalize
-    extract_location --> classify_problem
+    extract_location --> prepare_visual_evidence
+    prepare_visual_evidence --> classify_problem
     classify_problem --> retrieve_knowledge
     retrieve_knowledge --> reason_problem
     reason_problem --> evaluate_ambiguity
@@ -52,8 +53,19 @@ The [request schema](app/schemas/request.py) and [.NET wire DTOs](../../backend/
 | `input.locationText` | Optional supplied location text |
 | `input.latitude`, `input.longitude` | Optional coordinates with geographic bounds |
 | `input.clarificationHistory` | Ordered answered items containing `round`, `question`, `answer` |
+| `input.visualEvidence` | Optional array (defaults to empty), at most three normalized JPEG transport items |
 
 ASP.NET supplies answered history ordered by round and sequence. The Python round field has a lower bound of one; the two-round business limit is enforced by ASP.NET, not by a Python schema upper bound. Customer content is data, not permission to override system instructions.
+
+### Phase 3 visual transport (no live vision)
+
+`input.visualEvidence` contains provider-neutral [VisualEvidence](app/schemas/visual_evidence.py) items with `attachmentId` (unique nonempty UUID), `contentType` (`image/jpeg` only), `dataBase64` (canonical Base64), `width` and `height` (strict integers 1–2048). Maximum three items, 2 MiB decoded per item and 4 MiB decoded total; the encoded ceilings are 2,796,204 characters per item and 5,592,412 total including padding. Validation bounds encoded length before decoding and checks decoded size independently. Decoded validation bytes are discarded; no Pillow/OpenCV dependency or second normalization pipeline is introduced.
+
+ASP.NET owns authorization, secure image normalization and private storage. It constructs this payload only after persisting a small workflow input containing text, evidence revision and attachment IDs. Base64, binary contents, filenames and storage paths never enter persisted agent audit or memory. See [backend contract and limits](../../backend/ATTACHMENTS.md#phase-3-internal-visual-evidence-contract).
+
+The graph holds one request-scoped evidence collection. `prepare_visual_evidence` only reports internal `not_requested`, `available`, `unsupported` or `failed` status. `available` means structurally valid evidence and a declared capability, not interpreted images. All current provider implementations inherit `supports_images = false`; Gemini/OpenAI payloads remain text-only, and Offline never invents visual findings. Preparation does not alter category, urgency, prompts, tool counts or response fields. Invalid HTTP input returns generic 422 without echoing Base64. Empty input still follows direct finalization.
+
+There is no persisted/checkpointed graph state, live vision, new response observation field or public client change in Phase 3. Phase 4 must implement and test provider-specific image conversion/reasoning before enabling image capability. Do not log or enable tracing that exports transient image-bearing state.
 
 ## Output contract
 

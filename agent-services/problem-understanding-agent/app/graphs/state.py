@@ -1,5 +1,6 @@
 """State schema definition for Problem Understanding LangGraph state machine."""
 from typing import Any, TypedDict
+from app.schemas.visual_evidence import VisualEvidence, VisionStatus
 
 
 class ProblemUnderstandingState(TypedDict, total=False):
@@ -14,6 +15,10 @@ class ProblemUnderstandingState(TypedDict, total=False):
     longitude: float | None
     category_hint: str | None
     clarification_history: list[dict[str, Any]]
+
+    # One transient collection, never copied into prompts/output/memory.
+    visual_evidence: list[VisualEvidence]
+    vision_status: VisionStatus
 
     # Validation
     is_empty_input: bool

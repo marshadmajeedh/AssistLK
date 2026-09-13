@@ -88,6 +88,7 @@ public sealed class ExternalProblemUnderstandingAgentAdapter : IAgent
                 {
                     ServiceRequestId = input?.ServiceRequestId ?? Guid.NewGuid(),
                     Description = description,
+                    VisualEvidence = context.VisualEvidence,
                     LocationText = input?.LocationText,
                     Latitude = (double?)input?.Latitude,
                     Longitude = (double?)input?.Longitude,

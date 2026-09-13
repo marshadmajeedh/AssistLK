@@ -5,6 +5,7 @@ using AssistLK.Agents.Core;
 using AssistLK.Agents.Models;
 using AssistLK.Application.Common.Exceptions;
 using AssistLK.Application.Interfaces;
+using AssistLK.Application.Attachments;
 using AssistLK.Application.ServiceRequests.DTOs;
 using AssistLK.Domain.Entities;
 using AssistLK.Domain.Enums;
@@ -20,6 +21,7 @@ namespace AssistLK.Application.Services;
 /// </summary>
 public class ProblemUnderstandingWorkflowService
 {
+    private readonly ProblemVisualEvidenceService _visualEvidenceService;
     private readonly AgentWorkflowService _workflowService;
     private readonly AgentContextService _contextService;
     private readonly AgentMemoryService _memoryService;
@@ -39,8 +41,10 @@ public class ProblemUnderstandingWorkflowService
         AgentOrchestrator orchestrator,
         AgentRegistry registry,
         IServiceRequestService serviceRequestService,
+        ProblemVisualEvidenceService visualEvidenceService,
         ILogger<ProblemUnderstandingWorkflowService>? logger = null)
     {
+        _visualEvidenceService = visualEvidenceService;
         _workflowService = workflowService;
         _contextService = contextService;
         _memoryService = memoryService;
@@ -165,6 +169,10 @@ public class ProblemUnderstandingWorkflowService
                 throw new ConflictException("Request evidence changed before analysis. Refresh and retry.");
             input.EvidenceRevision = begun.EvidenceRevision;
 
+            var evidence = await _visualEvidenceService.CaptureAsync(input.ServiceRequestId,
+                begun.CustomerId, begun.EvidenceRevision, cancellationToken);
+            input.AttachmentIds = evidence.Attachments.Select(a => a.Id).ToArray();
+
             // 4. Start agent execution
             execution = await _workflowService.StartExecutionAsync(
                 workflow.Id,
@@ -183,6 +191,8 @@ public class ProblemUnderstandingWorkflowService
                 }
             };
 
+            // The audit snapshot above has already been persisted. Never put binary content in input/Data/memory.
+            context.VisualEvidence = await _visualEvidenceService.LoadAsync(evidence, cancellationToken);
             await _contextService.LoadMemoryAsync(context);
 
             // 6. Execute agent via orchestrator
@@ -208,8 +218,8 @@ public class ProblemUnderstandingWorkflowService
                 throw new InvalidOperationException("Agent produced an empty problem summary.");
             }
 
-            // 8. Store semantic memory (concise structured facts only)
-            await StoreMemoryAsync(workflow.Id, output);
+            await _visualEvidenceService.EnsureCurrentAsync(input.ServiceRequestId,
+                begun.CustomerId, evidence.Revision, CancellationToken.None);
 
             // 9. Apply analysis result to domain
             // Persist using CancellationToken.None so that if agent execution successfully
@@ -229,6 +239,9 @@ public class ProblemUnderstandingWorkflowService
             };
 
             await _serviceRequestService.ApplyProblemAnalysisResultAsync(applyResult, CancellationToken.None);
+
+            // Store semantic facts only after the domain accepted the captured evidence revision.
+            await StoreMemoryAsync(workflow.Id, output);
 
             // 10. Complete workflow & execution
             await _workflowService.CompleteExecutionAsync(execution!.Id, true, output);

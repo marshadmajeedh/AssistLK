@@ -51,7 +51,10 @@ public class ClarificationWorkflowPostgreSqlTests : PostgreSqlIntegrationTestBas
             safetyService,
             orchestrator,
             registry,
-            requestService);
+            requestService,
+            new AssistLK.Application.Attachments.ProblemVisualEvidenceService(
+                new AssistLK.Infrastructure.Repositories.AnalysisEvidenceRepository(context),
+                new AssistLK.Tests.Shared.FakeAttachmentStorage()));
     }
 
     [Theory]

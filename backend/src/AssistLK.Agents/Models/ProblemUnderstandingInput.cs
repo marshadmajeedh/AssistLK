@@ -14,6 +14,9 @@ public class ProblemUnderstandingInput
     /// </summary>
     public long? EvidenceRevision { get; set; }
 
+    /// <summary>Bounded identities only; binary content belongs exclusively to transient HTTP transport.</summary>
+    public IReadOnlyList<Guid> AttachmentIds { get; set; } = Array.Empty<Guid>();
+
     /// <summary>The unique identifier of the ServiceRequest being analysed.</summary>
     public Guid ServiceRequestId { get; set; }
 

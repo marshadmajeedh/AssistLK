@@ -41,6 +41,11 @@ class BaseLLMProvider(ABC):
     """Abstract interface decoupling agent reasoning graph from model vendors."""
 
     @property
+    def supports_images(self) -> bool:
+        """Implementation capability, not vendor marketing. All adapters are text-only in Phase 3."""
+        return False
+
+    @property
     @abstractmethod
     def provider_name(self) -> str:
         """Name of the provider backend."""

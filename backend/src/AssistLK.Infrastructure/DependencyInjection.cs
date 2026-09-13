@@ -25,6 +25,8 @@ public static class DependencyInjection
         services.AddScoped<IProblemAnalysisRepository, ProblemAnalysisRepository>();
         services.AddScoped<AssistLK.Application.Attachments.IServiceRequestAttachmentRepository, ServiceRequestAttachmentRepository>();
         services.AddScoped<AssistLK.Application.Attachments.ServiceRequestAttachmentService>();
+        services.AddScoped<AssistLK.Application.Attachments.IAnalysisEvidenceRepository, AnalysisEvidenceRepository>();
+        services.AddScoped<AssistLK.Application.Attachments.ProblemVisualEvidenceService>();
         services.AddScoped<AssistLK.Application.Attachments.AttachmentReconciliationService>();
         services.AddSingleton<AssistLK.Application.Attachments.IAttachmentImageNormalizer, Attachments.AttachmentImageNormalizer>();
         return services;

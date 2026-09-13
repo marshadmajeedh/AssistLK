@@ -15,6 +15,14 @@ public class ServiceRequestRepository : IServiceRequestRepository
         _context = context;
     }
 
+    public async Task<ServiceRequest?> ReloadForRecoveryAsync(Guid serviceRequestId, CancellationToken cancellationToken = default)
+    {
+        var tracked = _context.ServiceRequests.Local.SingleOrDefault(r => r.Id == serviceRequestId);
+        if (tracked is null) return await GetByIdAsync(serviceRequestId, cancellationToken: cancellationToken);
+        await _context.Entry(tracked).ReloadAsync(cancellationToken);
+        return _context.Entry(tracked).State == EntityState.Detached ? null : tracked;
+    }
+
     public Task<ServiceRequest?> GetByIdAsync(
         Guid serviceRequestId,
         bool includeProblemAnalyses = false,

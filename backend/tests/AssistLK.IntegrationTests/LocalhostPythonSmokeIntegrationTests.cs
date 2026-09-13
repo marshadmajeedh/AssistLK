@@ -104,7 +104,8 @@ public class LocalhostPythonSmokeIntegrationTests
             safetyService,
             orchestrator,
             registry,
-            requestService);
+            requestService,
+            AssistLK.IntegrationTests.TestDoubles.TestAnalysisEvidence.Create(reqRepo));
 
         var requestId = Guid.NewGuid();
         var customerId = Guid.NewGuid();

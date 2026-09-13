@@ -36,6 +36,10 @@ public class AgentExecutionRequestDto
 /// </summary>
 public class ProblemUnderstandingInputPayloadDto
 {
+    // Transient wire content: this DTO must never be passed to AgentWorkflowService.
+    [JsonPropertyName("visualEvidence")]
+    public IReadOnlyList<VisualEvidencePayloadDto> VisualEvidence { get; set; } = Array.Empty<VisualEvidencePayloadDto>();
+
     [JsonPropertyName("serviceRequestId")]
     public Guid ServiceRequestId { get; set; }
 

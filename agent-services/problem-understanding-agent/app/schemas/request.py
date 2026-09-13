@@ -2,7 +2,8 @@
 from datetime import datetime
 from typing import Any
 from uuid import UUID
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, field_validator
+from app.schemas.visual_evidence import VisualEvidence, MAX_IMAGES, validate_evidence_collection
 
 
 class ClarificationHistoryItemDto(BaseModel):
@@ -24,9 +25,16 @@ class ClarificationHistoryItemDto(BaseModel):
 
 
 class ProblemUnderstandingInputDto(BaseModel):
-    """Mirror of .NET ProblemUnderstandingInput domain contract."""
+    """Internal HTTP input; visual content is never part of .NET persisted domain input."""
 
     model_config = ConfigDict(populate_by_name=True)
+
+    visual_evidence: list[VisualEvidence] = Field(default_factory=list, alias="visualEvidence", max_length=MAX_IMAGES, repr=False)
+
+    @field_validator("visual_evidence")
+    @classmethod
+    def bounded_evidence(cls, value: list[VisualEvidence]) -> list[VisualEvidence]:
+        return validate_evidence_collection(value)
 
     service_request_id: UUID = Field(
         alias="serviceRequestId",

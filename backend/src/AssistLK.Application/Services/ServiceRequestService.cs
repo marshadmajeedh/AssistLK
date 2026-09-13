@@ -434,7 +434,7 @@ public class ServiceRequestService : IServiceRequestService
                 $"Invalid recovery target status '{previousStatus}'. Analysis can only be recovered to Created or AwaitingInformation.");
         }
 
-        var serviceRequest = await _serviceRequestRepository.GetByIdAsync(
+        var serviceRequest = await _serviceRequestRepository.ReloadForRecoveryAsync(
             serviceRequestId,
             cancellationToken: cancellationToken);
 

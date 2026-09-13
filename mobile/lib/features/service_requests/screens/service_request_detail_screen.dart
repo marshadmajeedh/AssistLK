@@ -2,6 +2,7 @@ import '../../auth/providers/auth_provider.dart';
 import '../providers/problem_photos_controller.dart';
 import '../services/problem_image_picker.dart';
 import '../widgets/problem_photos.dart';
+import '../widgets/request_summary_artwork.dart';
 import '../models/location_source.dart';
 import '../widgets/location_attribution.dart';
 
@@ -338,97 +339,120 @@ class _ServiceRequestDetailScreenState
             children: [
               // Header Card: Category, Urgency, Status, Service preference
               AppCard(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Expanded(
-                          child: Text(
-                            request.category.isEmpty
-                                ? 'Unclassified Request'
-                                : (CanonicalServiceCategory.fromCanonicalOrDisplayName(
-                                        request.category,
-                                      )?.displayName ??
-                                      request.category),
-                            style: AppTextStyles.sectionHeading,
-                          ),
+                child: RequestSummaryArtwork(
+                  category: request.category,
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      if (request.category == 'Unclassified')
+                        Wrap(
+                          alignment: WrapAlignment.spaceBetween,
+                          crossAxisAlignment: WrapCrossAlignment.center,
+                          spacing: AppSpacing.sm,
+                          runSpacing: AppSpacing.sm,
+                          children: [
+                            Text(
+                              request.category.isEmpty
+                                  ? 'Unclassified Request'
+                                  : (CanonicalServiceCategory.fromCanonicalOrDisplayName(
+                                          request.category,
+                                        )?.displayName ??
+                                        request.category),
+                              style: AppTextStyles.sectionHeading,
+                            ),
+                            StatusBadge(status: request.status),
+                          ],
+                        )
+                      else
+                        Row(
+                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Expanded(
+                              child: Text(
+                                request.category.isEmpty
+                                    ? 'Unclassified Request'
+                                    : (CanonicalServiceCategory.fromCanonicalOrDisplayName(
+                                            request.category,
+                                          )?.displayName ??
+                                          request.category),
+                                style: AppTextStyles.sectionHeading,
+                              ),
+                            ),
+                            const SizedBox(width: AppSpacing.sm),
+                            StatusBadge(status: request.status),
+                          ],
                         ),
-                        const SizedBox(width: AppSpacing.sm),
-                        StatusBadge(status: request.status),
+                      if (request.status != ServiceRequestStatus.analyzed &&
+                          request.status !=
+                              ServiceRequestStatus.readyForMatching) ...[
+                        const SizedBox(height: AppSpacing.xs + 2),
+                        Wrap(
+                          crossAxisAlignment: WrapCrossAlignment.center,
+                          children: [
+                            const Text(
+                              'Service preference: ',
+                              style: TextStyle(
+                                fontSize: 12,
+                                color: AppColors.textSecondary,
+                                fontWeight: FontWeight.w500,
+                              ),
+                            ),
+                            Text(
+                              CanonicalServiceCategory.fromCanonicalOrDisplayName(
+                                    request.categoryHint,
+                                  )?.displayName ??
+                                  (request.categoryHint == null
+                                      ? 'Let AssistLK AI identify'
+                                      : request.categoryHint!),
+                              style: const TextStyle(
+                                fontSize: 12,
+                                fontWeight: FontWeight.w600,
+                                color: AppColors.textPrimary,
+                              ),
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: AppSpacing.xs),
+                        Wrap(
+                          crossAxisAlignment: WrapCrossAlignment.center,
+                          children: [
+                            const Text(
+                              'AssistLK AI classification: ',
+                              style: TextStyle(
+                                fontSize: 12,
+                                color: AppColors.textSecondary,
+                                fontWeight: FontWeight.w500,
+                              ),
+                            ),
+                            Text(
+                              _getAiClassificationText(request),
+                              style: const TextStyle(
+                                fontSize: 12,
+                                fontWeight: FontWeight.w600,
+                                color: AppColors.textPrimary,
+                              ),
+                            ),
+                          ],
+                        ),
                       ],
-                    ),
-                    if (request.status != ServiceRequestStatus.analyzed &&
-                        request.status !=
-                            ServiceRequestStatus.readyForMatching) ...[
                       const SizedBox(height: AppSpacing.xs + 2),
                       Wrap(
                         crossAxisAlignment: WrapCrossAlignment.center,
+                        spacing: AppSpacing.xs,
                         children: [
                           const Text(
-                            'Service preference: ',
+                            'Urgency Level: ',
                             style: TextStyle(
                               fontSize: 12,
                               color: AppColors.textSecondary,
-                              fontWeight: FontWeight.w500,
                             ),
                           ),
-                          Text(
-                            CanonicalServiceCategory.fromCanonicalOrDisplayName(
-                                  request.categoryHint,
-                                )?.displayName ??
-                                (request.categoryHint == null
-                                    ? 'Let AssistLK AI identify'
-                                    : request.categoryHint!),
-                            style: const TextStyle(
-                              fontSize: 12,
-                              fontWeight: FontWeight.w600,
-                              color: AppColors.textPrimary,
-                            ),
-                          ),
-                        ],
-                      ),
-                      const SizedBox(height: AppSpacing.xs),
-                      Wrap(
-                        crossAxisAlignment: WrapCrossAlignment.center,
-                        children: [
-                          const Text(
-                            'AssistLK AI classification: ',
-                            style: TextStyle(
-                              fontSize: 12,
-                              color: AppColors.textSecondary,
-                              fontWeight: FontWeight.w500,
-                            ),
-                          ),
-                          Text(
-                            _getAiClassificationText(request),
-                            style: const TextStyle(
-                              fontSize: 12,
-                              fontWeight: FontWeight.w600,
-                              color: AppColors.textPrimary,
-                            ),
-                          ),
+                          UrgencyChip(urgency: request.urgency),
                         ],
                       ),
                     ],
-                    const SizedBox(height: AppSpacing.xs + 2),
-                    Wrap(
-                      crossAxisAlignment: WrapCrossAlignment.center,
-                      spacing: AppSpacing.xs,
-                      children: [
-                        const Text(
-                          'Urgency Level: ',
-                          style: TextStyle(
-                            fontSize: 12,
-                            color: AppColors.textSecondary,
-                          ),
-                        ),
-                        UrgencyChip(urgency: request.urgency),
-                      ],
-                    ),
-                  ],
+                  ),
                 ),
               ),
               const SizedBox(height: AppSpacing.sm),
@@ -594,7 +618,12 @@ class _ServiceRequestDetailScreenState
               child: CircularProgressIndicator(strokeWidth: 2),
             ),
             SizedBox(width: AppSpacing.md),
-            Text('AssistLK AI analysis in progress', style: AppTextStyles.body),
+            Flexible(
+              child: Text(
+                'AssistLK AI analysis in progress',
+                style: AppTextStyles.body,
+              ),
+            ),
           ],
         ),
       );
@@ -676,9 +705,11 @@ class _ServiceRequestDetailScreenState
                 child: CircularProgressIndicator(strokeWidth: 2),
               ),
               SizedBox(width: AppSpacing.md),
-              Text(
-                'AssistLK AI analysis in progress',
-                style: AppTextStyles.body,
+              Flexible(
+                child: Text(
+                  'AssistLK AI analysis in progress',
+                  style: AppTextStyles.body,
+                ),
               ),
             ],
           ),

@@ -1,5 +1,7 @@
 # Component 1 Frontend Foundation Inspection
 
+> **Historical / Superseded:** This document records an earlier implementation state. Its original conclusions and verification results are retained as historical evidence, not current instructions. Component 1 is now Python-only. See [current Agentic AI architecture](../../../agent-services/README.md). References repaired during documentation consolidation point to replacement explanations, not the original historical implementation.
+
 ## 1. Executive Summary
 
 This document provides the definitive architectural and design system inspection for the AssistLK Frontend prior to the implementation of the Component 1 Customer Frontend (**Smart Service Request & Problem Understanding Agent**). 

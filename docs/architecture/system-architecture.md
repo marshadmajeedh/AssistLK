@@ -1,5 +1,7 @@
 # AssistLK System Architecture
 
+> **Implementation scope:** C1 uses the Python runtime described below. Later-component lifecycle examples describe the intended platform and do not establish completed implementations.
+
 ## 1. Introduction
 
 AssistLK is an Agentic AI powered multi-service platform designed to connect customers with service providers through an intelligent automated workflow.
@@ -100,16 +102,11 @@ Dependencies point inward toward domain and application abstractions. Controller
 - `DTOs/`: Application-level data transfer models and component handoff contracts (`ServiceRequestForMatchingResponse`).
 - `Common/Exceptions/`: Custom domain exceptions (`ConflictException`).
 
-## 7. Agents Layer
+## 7. Agents Layer and Python service
 
-**Location:** `AssistLK.Agents`
+`AssistLK.Agents` contains `IAgent`, orchestration/registry abstractions, shared tool and safety abstractions, typed models, `ExternalProblemUnderstandingAgentAdapter`, and `ProblemUnderstandingHttpClient`.
 
-**Components:**
-- `Agents/`: Specialized AI agents (`ProblemUnderstandingAgent`, etc.) implementing `IAgent`.
-- `Tools/`: Deterministic domain tools (`ProblemClassificationTool`, `LocationExtractionTool`, `ServiceKnowledgeTool`) implementing `IAgentTool`.
-- `Core/`: Foundational execution engine (`AgentOrchestrator`, `ToolExecutor`, `AgentSafetyPolicyEngine`).
-- `Models/`: Agent input/output contracts (`ProblemUnderstandingInput`, `ProblemUnderstandingOutput`, `AgentResult`).
-- `Services/`: Google Gemini LLM API client (`GeminiService` implementing `IGeminiService`).
+Component 1 reasoning runs only in `agent-services/problem-understanding-agent/`. Python owns the request-scoped LangGraph workflow and deterministic Python tools. ASP.NET owns authorization, lifecycle, persistence, monitoring, and failure recovery. Python has no database ownership. See [canonical agent architecture](../../agent-services/README.md) and [service details](../../agent-services/problem-understanding-agent/README.md).
 
 ## 8. Domain Layer
 
@@ -155,7 +152,7 @@ Allows agents to share structured information. For example, Component 1 may stor
 
 ### Agent Tool Framework
 
-Allows agents to perform approved actions through tools such as `ProviderSearchTool`, `QuotationComparisonTool`, and `NotificationTool`. Agents must not directly access external systems.
+The shared C# tool framework supports approved actions; provider search, quotation comparison, and notifications are conceptual later-component examples. C1 uses deterministic Python functions and provider-specific HTTP implementations. Python has no database ownership.
 
 ### Safety Policy Engine
 

@@ -29,22 +29,13 @@ class ServiceRequestProvider extends ChangeNotifier {
   bool _analysisStateNeedsRefresh = false;
   String? _error;
   bool _isDisposed = false;
-  int _sessionGeneration = 0;
+  int _generation = 0;
 
-  void clearSession() {
-    _sessionGeneration++;
-    _requests = [];
-    _currentRequest = null;
-    _currentAnalysis = null;
-    _isLoading = false;
-    _isAnalyzing = false;
-    _analysisStateNeedsRefresh = false;
-    _error = null;
-    notifyListeners();
-  }
+  bool _isCurrent(int generation) => !_isDisposed && generation == _generation;
 
   @override
   void dispose() {
+    _generation++;
     _isDisposed = true;
     super.dispose();
   }
@@ -82,13 +73,14 @@ class ServiceRequestProvider extends ChangeNotifier {
   }
 
   Future<bool> loadMyRequests() async {
-    final session = _sessionGeneration;
+    final generation = _generation;
+    if (!_isCurrent(generation)) return false;
     _setLoading(true);
     _error = null;
 
     try {
       final fetched = await serviceRequestService.getMyRequests();
-      if (_isDisposed || session != _sessionGeneration) return false;
+      if (!_isCurrent(generation)) return false;
       _requests = List<ServiceRequestModel>.from(fetched);
 
       // Update currentRequest if it exists in the new list
@@ -103,39 +95,41 @@ class ServiceRequestProvider extends ChangeNotifier {
 
       return true;
     } catch (err) {
-      if (_isDisposed || session != _sessionGeneration) return false;
+      if (!_isCurrent(generation)) return false;
       _error = serviceRequestService.getErrorMessage(err);
       return false;
     } finally {
-      if (!_isDisposed && session == _sessionGeneration) _setLoading(false);
+      if (_isCurrent(generation)) _setLoading(false);
     }
   }
 
   Future<ServiceRequestModel?> loadRequestById(String id) async {
-    final session = _sessionGeneration;
+    final generation = _generation;
+    if (!_isCurrent(generation)) return null;
     _setLoading(true);
     _error = null;
 
     try {
       final request = await serviceRequestService.getById(id);
-      if (_isDisposed || session != _sessionGeneration) return null;
+      if (!_isCurrent(generation)) return null;
       _currentRequest = request;
       _updateRequestInList(request);
       _analysisStateNeedsRefresh = false;
       return request;
     } catch (err) {
-      if (_isDisposed || session != _sessionGeneration) return null;
+      if (!_isCurrent(generation)) return null;
       _error = serviceRequestService.getErrorMessage(err);
       return null;
     } finally {
-      if (!_isDisposed && session == _sessionGeneration) _setLoading(false);
+      if (_isCurrent(generation)) _setLoading(false);
     }
   }
 
   Future<ServiceRequestModel?> createRequest(
     CreateServiceRequestDto dto,
   ) async {
-    final session = _sessionGeneration;
+    final generation = _generation;
+    if (!_isCurrent(generation)) return null;
     final validationError = dto.validate();
     if (validationError != null) {
       _error = validationError;
@@ -148,17 +142,17 @@ class ServiceRequestProvider extends ChangeNotifier {
 
     try {
       final created = await serviceRequestService.create(dto);
-      if (_isDisposed || session != _sessionGeneration) return null;
+      if (!_isCurrent(generation)) return null;
       _requests = [created, ..._requests];
       _currentRequest = created;
       _currentAnalysis = null;
       return created;
     } catch (err) {
-      if (_isDisposed || session != _sessionGeneration) return null;
+      if (!_isCurrent(generation)) return null;
       _error = serviceRequestService.getErrorMessage(err);
       return null;
     } finally {
-      if (!_isDisposed && session == _sessionGeneration) _setLoading(false);
+      if (_isCurrent(generation)) _setLoading(false);
     }
   }
 
@@ -166,7 +160,8 @@ class ServiceRequestProvider extends ChangeNotifier {
     String id,
     UpdateServiceRequestDto dto,
   ) async {
-    final session = _sessionGeneration;
+    final generation = _generation;
+    if (!_isCurrent(generation)) return null;
     final validationError = dto.validate();
     if (validationError != null) {
       _error = validationError;
@@ -179,40 +174,41 @@ class ServiceRequestProvider extends ChangeNotifier {
 
     try {
       final updated = await serviceRequestService.update(id, dto);
-      if (_isDisposed || session != _sessionGeneration) return null;
+      if (!_isCurrent(generation)) return null;
       _updateRequestInList(updated);
       if (_currentRequest?.serviceRequestId == id) {
         _currentRequest = updated;
       }
       return updated;
     } catch (err) {
-      if (_isDisposed || session != _sessionGeneration) return null;
+      if (!_isCurrent(generation)) return null;
       _error = serviceRequestService.getErrorMessage(err);
       return null;
     } finally {
-      if (!_isDisposed && session == _sessionGeneration) _setLoading(false);
+      if (_isCurrent(generation)) _setLoading(false);
     }
   }
 
   Future<ServiceRequestModel?> cancelRequest(String id) async {
-    final session = _sessionGeneration;
+    final generation = _generation;
+    if (!_isCurrent(generation)) return null;
     _setLoading(true);
     _error = null;
 
     try {
       final cancelled = await serviceRequestService.cancel(id);
-      if (_isDisposed || session != _sessionGeneration) return null;
+      if (!_isCurrent(generation)) return null;
       _updateRequestInList(cancelled);
       if (_currentRequest?.serviceRequestId == id) {
         _currentRequest = cancelled;
       }
       return cancelled;
     } catch (err) {
-      if (_isDisposed || session != _sessionGeneration) return null;
+      if (!_isCurrent(generation)) return null;
       _error = serviceRequestService.getErrorMessage(err);
       return null;
     } finally {
-      if (!_isDisposed && session == _sessionGeneration) _setLoading(false);
+      if (_isCurrent(generation)) _setLoading(false);
     }
   }
 
@@ -221,6 +217,8 @@ class ServiceRequestProvider extends ChangeNotifier {
     Duration? pollInterval,
     int? maxPolls,
   }) async {
+    final generation = _generation;
+    if (!_isCurrent(generation)) return null;
     if (_isAnalyzing || _analysisStateNeedsRefresh) {
       return null;
     }
@@ -230,6 +228,7 @@ class ServiceRequestProvider extends ChangeNotifier {
 
     try {
       final result = await serviceRequestService.analyze(id);
+      if (!_isCurrent(generation)) return null;
       _currentAnalysis = result;
       _analysisStateNeedsRefresh = false;
 
@@ -258,14 +257,17 @@ class ServiceRequestProvider extends ChangeNotifier {
       // this read fails after a successful execution.
       try {
         final refreshed = await serviceRequestService.getById(id);
+        if (!_isCurrent(generation)) return null;
         _currentRequest = refreshed;
         _updateRequestInList(refreshed);
       } catch (refreshError) {
+        if (!_isCurrent(generation)) return null;
         _analysisStateNeedsRefresh = true;
         _error = serviceRequestService.getErrorMessage(refreshError);
       }
       return result;
     } catch (err) {
+      if (!_isCurrent(generation)) return null;
       final analysisError = serviceRequestService.getAnalysisErrorMessage(err);
       final isTimeoutOrUncertain = serviceRequestService
           .isTimeoutOrUncertainTransport(err);
@@ -275,10 +277,12 @@ class ServiceRequestProvider extends ChangeNotifier {
         // Attempt one authoritative GET to synchronize state
         try {
           final refreshed = await serviceRequestService.getById(id);
+          if (!_isCurrent(generation)) return null;
           _currentRequest = refreshed;
           _updateRequestInList(refreshed);
           _analysisStateNeedsRefresh = false;
         } catch (_) {
+          if (!_isCurrent(generation)) return null;
           _analysisStateNeedsRefresh = true;
         }
 
@@ -291,7 +295,9 @@ class ServiceRequestProvider extends ChangeNotifier {
       ServiceRequestModel refreshed;
       try {
         refreshed = await serviceRequestService.getById(id);
+        if (!_isCurrent(generation)) return null;
       } catch (_) {
+        if (!_isCurrent(generation)) return null;
         // Authoritative GET itself failed -> state is genuinely uncertain
         _analysisStateNeedsRefresh = true;
         _error = analysisError;
@@ -317,6 +323,7 @@ class ServiceRequestProvider extends ChangeNotifier {
         pollCount++;
         if (interval > Duration.zero) {
           await Future.delayed(interval);
+          if (!_isCurrent(generation)) return null;
         }
 
         if (_isDisposed || _currentRequest?.serviceRequestId != id) {
@@ -325,6 +332,7 @@ class ServiceRequestProvider extends ChangeNotifier {
 
         try {
           final pollRefreshed = await serviceRequestService.getById(id);
+          if (!_isCurrent(generation)) return null;
           _currentRequest = pollRefreshed;
           _updateRequestInList(pollRefreshed);
           _error = null;
@@ -334,6 +342,7 @@ class ServiceRequestProvider extends ChangeNotifier {
             return null;
           }
         } catch (pollErr) {
+          if (!_isCurrent(generation)) return null;
           // If polling GET becomes unreliable, mark state as needing refresh
           _analysisStateNeedsRefresh = true;
           _error = serviceRequestService.getErrorMessage(pollErr);
@@ -349,29 +358,30 @@ class ServiceRequestProvider extends ChangeNotifier {
       _error = null;
       return null;
     } finally {
-      _setAnalyzing(false);
+      if (_isCurrent(generation)) _setAnalyzing(false);
     }
   }
 
   Future<ServiceRequestModel?> markReadyForMatching(String id) async {
-    final session = _sessionGeneration;
+    final generation = _generation;
+    if (!_isCurrent(generation)) return null;
     _setLoading(true);
     _error = null;
 
     try {
       final updated = await serviceRequestService.markReadyForMatching(id);
-      if (_isDisposed || session != _sessionGeneration) return null;
+      if (!_isCurrent(generation)) return null;
       _updateRequestInList(updated);
       if (_currentRequest?.serviceRequestId == id) {
         _currentRequest = updated;
       }
       return updated;
     } catch (err) {
-      if (_isDisposed || session != _sessionGeneration) return null;
+      if (!_isCurrent(generation)) return null;
       _error = serviceRequestService.getErrorMessage(err);
       return null;
     } finally {
-      if (!_isDisposed && session == _sessionGeneration) _setLoading(false);
+      if (_isCurrent(generation)) _setLoading(false);
     }
   }
 
@@ -380,7 +390,8 @@ class ServiceRequestProvider extends ChangeNotifier {
     int round,
     Map<String, String> answers,
   ) async {
-    final session = _sessionGeneration;
+    final generation = _generation;
+    if (!_isCurrent(generation)) return false;
     _setLoading(true);
     _error = null;
 
@@ -399,7 +410,7 @@ class ServiceRequestProvider extends ChangeNotifier {
 
       final updatedClarifications = await serviceRequestService
           .submitClarificationAnswers(id, submission);
-      if (_isDisposed || session != _sessionGeneration) return false;
+      if (!_isCurrent(generation)) return false;
 
       if (_currentRequest != null && _currentRequest!.serviceRequestId == id) {
         _currentRequest = _currentRequest!.copyWith(
@@ -410,11 +421,11 @@ class ServiceRequestProvider extends ChangeNotifier {
 
       return true;
     } catch (err) {
-      if (_isDisposed || session != _sessionGeneration) return false;
+      if (!_isCurrent(generation)) return false;
       _error = serviceRequestService.getErrorMessage(err);
       return false;
     } finally {
-      if (!_isDisposed && session == _sessionGeneration) _setLoading(false);
+      if (_isCurrent(generation)) _setLoading(false);
     }
   }
 
@@ -426,7 +437,10 @@ class ServiceRequestProvider extends ChangeNotifier {
     Duration? pollInterval,
     int? maxPolls,
   }) async {
+    final generation = _generation;
+    if (!_isCurrent(generation)) return null;
     final success = await submitClarificationAnswers(id, round, answers);
+    if (!_isCurrent(generation)) return null;
     if (!success) {
       return null;
     }
@@ -434,6 +448,7 @@ class ServiceRequestProvider extends ChangeNotifier {
   }
 
   void reset() {
+    _generation++;
     _requests = [];
     _currentRequest = null;
     _currentAnalysis = null;

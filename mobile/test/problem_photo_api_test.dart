@@ -128,7 +128,10 @@ void main() {
   });
   test('current 401 clears session through shared interceptor', () async {
     var expired = 0;
-    client.onUnauthorized = () => expired++;
+    client.onSessionExpired = () async {
+      expired++;
+      await tokens.deleteToken();
+    };
     adapter.respond = (_) async => json({}, 401);
     await expectLater(
       service.listAttachments('r1'),
@@ -139,7 +142,10 @@ void main() {
   });
   test('old 401 cannot erase a newer sign-in', () async {
     var expired = 0;
-    client.onUnauthorized = () => expired++;
+    client.onSessionExpired = () async {
+      expired++;
+      await tokens.deleteToken();
+    };
     final started = Completer<void>();
     final reply = Completer<ResponseBody>();
     adapter.respond = (_) {

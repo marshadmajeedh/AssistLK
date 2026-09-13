@@ -1,5 +1,10 @@
 # Database Ownership
 
+## Runtime and schema scope
+
+ASP.NET application services own persisted workflow memory, analysis, clarification history, and lifecycle changes. Python has no database ownership; its LangGraph state is request-scoped and not a competing persistence system. Hidden reasoning is not persisted. Entity sketches below are conceptual ownership examples, not exhaustive current EF schemas; later-component tables describe planned domains. See [agent architecture](../../agent-services/README.md).
+
+
 PostgreSQL is shared by the platform, but tables and business rules have clear primary owners.
 
 

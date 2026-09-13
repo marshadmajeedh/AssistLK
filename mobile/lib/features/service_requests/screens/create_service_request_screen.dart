@@ -3,6 +3,7 @@ import '../providers/problem_photos_controller.dart';
 import '../services/problem_image_picker.dart';
 import '../widgets/problem_photos.dart';
 import '../models/location_source.dart';
+import '../../customer/models/location_suggestion.dart';
 import '../widgets/location_attribution.dart';
 import '../providers/location_selection_controller.dart';
 import '../services/location_geocoding_service.dart';
@@ -32,6 +33,7 @@ class CreateServiceRequestScreen extends StatefulWidget {
   final String? initialCategoryPreference;
   final LocationService? locationService;
   final LocationGeocodingService? geocodingService;
+  final LocationSuggestion? initialLocationSuggestion;
 
   const CreateServiceRequestScreen({
     super.key,
@@ -39,6 +41,7 @@ class CreateServiceRequestScreen extends StatefulWidget {
     this.initialCategoryPreference,
     this.locationService,
     this.geocodingService,
+    this.initialLocationSuggestion,
   });
 
   @override
@@ -72,6 +75,7 @@ class _CreateServiceRequestScreenState
     _photos.recover();
     _selectedPreference = widget.initialCategoryPreference;
     _location = LocationSelectionController(
+      initialSuggestion: widget.initialLocationSuggestion,
       gps: widget.locationService ?? GeolocatorLocationService(),
       geocoding:
           widget.geocodingService ??
@@ -316,10 +320,64 @@ class _CreateServiceRequestScreenState
                   child: _buildCurrentStep(context),
                 ),
               ),
+              Padding(
+                key: const Key('wizard_actions'),
+                padding: const EdgeInsets.fromLTRB(
+                  AppSpacing.lg,
+                  AppSpacing.sm,
+                  AppSpacing.lg,
+                  AppSpacing.md,
+                ),
+                child: _buildWizardActions(context),
+              ),
             ],
           ),
         ),
       ),
+    );
+  }
+
+  Widget _buildWizardActions(BuildContext context) {
+    final provider = context.watch<ServiceRequestProvider>();
+    if (_photos.sessionEnded || _photos.requestId != null) {
+      return const SizedBox.shrink();
+    }
+    if (_currentStep == 0) {
+      return AppButton(text: 'Next: Location', onPressed: _nextFromDetails);
+    }
+    final back = OutlinedButton(
+      onPressed: _currentStep == 1
+          ? _backToDetails
+          : (provider.isLoading || _photos.busy ? null : _backToLocation),
+      child: const Text('Back'),
+    );
+    final next = AppButton(
+      text: _currentStep == 1 ? 'Next: Review' : 'Submit Request',
+      isLoading: _currentStep == 2 && (provider.isLoading || _photos.busy),
+      onPressed: _currentStep == 1 ? _nextFromLocation : _submit,
+    );
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final scale = MediaQuery.textScalerOf(context).scale(14) / 14;
+        if (constraints.maxWidth < 280 * scale) {
+          return Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              next,
+              const SizedBox(height: AppSpacing.sm),
+              back,
+            ],
+          );
+        }
+        return Row(
+          children: [
+            Expanded(child: back),
+            const SizedBox(width: AppSpacing.md),
+            Expanded(child: next),
+          ],
+        );
+      },
     );
   }
 
@@ -418,14 +476,12 @@ class _CreateServiceRequestScreenState
                     ),
                   ],
                 ),
-                Align(
-                  alignment: Alignment.centerRight,
-                  child: TextButton(
-                    onPressed: _showChangePreferenceSheet,
-                    child: Text(
-                      selectedCategory != null ? 'Change' : 'Choose preference',
-                      style: const TextStyle(fontWeight: FontWeight.w600),
-                    ),
+                const SizedBox(height: AppSpacing.sm),
+                TextButton(
+                  onPressed: _showChangePreferenceSheet,
+                  child: Text(
+                    selectedCategory != null ? 'Change' : 'Choose preference',
+                    style: const TextStyle(fontWeight: FontWeight.w600),
                   ),
                 ),
               ],
@@ -467,7 +523,6 @@ class _CreateServiceRequestScreenState
 
           DraftProblemPhotos(controller: _photos),
           const SizedBox(height: AppSpacing.md),
-          AppButton(text: 'Next: Location', onPressed: _nextFromDetails),
         ],
       ),
     );
@@ -477,27 +532,7 @@ class _CreateServiceRequestScreenState
     key: _locationFormKey,
     child: Column(
       crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        LocationSelection(controller: _location),
-        const SizedBox(height: AppSpacing.md),
-        Row(
-          children: [
-            Expanded(
-              child: OutlinedButton(
-                onPressed: _backToDetails,
-                child: const Text('Back'),
-              ),
-            ),
-            const SizedBox(width: AppSpacing.md),
-            Expanded(
-              child: AppButton(
-                text: 'Next: Review',
-                onPressed: _nextFromLocation,
-              ),
-            ),
-          ],
-        ),
-      ],
+      children: [LocationSelection(controller: _location)],
     ),
   );
 
@@ -603,11 +638,13 @@ class _CreateServiceRequestScreenState
                       color: AppColors.success,
                     ),
                     const SizedBox(width: AppSpacing.xs),
-                    Text(
-                      'GPS location captured',
-                      style: AppTextStyles.small.copyWith(
-                        color: AppColors.success,
-                        fontWeight: FontWeight.w600,
+                    Flexible(
+                      child: Text(
+                        'GPS location captured',
+                        style: AppTextStyles.small.copyWith(
+                          color: AppColors.success,
+                          fontWeight: FontWeight.w600,
+                        ),
                       ),
                     ),
                   ],
@@ -651,25 +688,6 @@ class _CreateServiceRequestScreenState
           ),
         ),
         const SizedBox(height: AppSpacing.xl),
-
-        Row(
-          children: [
-            Expanded(
-              child: OutlinedButton(
-                onPressed: _photos.busy ? null : _backToLocation,
-                child: const Text('Back'),
-              ),
-            ),
-            const SizedBox(width: AppSpacing.md),
-            Expanded(
-              child: AppButton(
-                text: 'Submit Request',
-                isLoading: _photos.busy,
-                onPressed: _submit,
-              ),
-            ),
-          ],
-        ),
       ],
     );
   }

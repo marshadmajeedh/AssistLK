@@ -209,7 +209,7 @@ void main() {
       final provider = ServiceRequestProvider(serviceRequestService: api);
       api.createPending = Completer<ServiceRequestModel>();
       final work = provider.createRequest(dto);
-      provider.clearSession();
+      provider.reset();
       api.createPending!.complete(request());
       expect(await work, isNull);
       expect(provider.requests, isEmpty);

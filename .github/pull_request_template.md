@@ -74,17 +74,17 @@ Before requesting review, confirm:
 
 ## Agent Integration
 
-- [ ] Agent implements `IAgent`
-- [ ] Agent uses `AgentContext`
-- [ ] Agent uses `AgentMemoryService`
-- [ ] Agent uses `AgentSafetyService`
-- [ ] Agent uses `AgentMonitoringService`
+- [ ] .NET adapter implements `IAgent` where applicable
+- [ ] .NET integration uses `AgentContext` where applicable
+- [ ] ASP.NET workflow owns persisted memory via `AgentMemoryService`
+- [ ] ASP.NET action safety and Python content guardrails are applied as appropriate
+- [ ] ASP.NET records authoritative monitoring through `AgentMonitoringService`
 
 ## Tool Integration
 
-- [ ] Agent uses tools through `ToolExecutor`
+- [ ] Shared C# tools use `ToolExecutor`; Python tools follow the internal service architecture
 - [ ] No direct database access from agents
-- [ ] No direct external API access from agents
+- [ ] Provider API calls are isolated in Python provider implementations; frontends only call ASP.NET
 
 ## Database Changes
 

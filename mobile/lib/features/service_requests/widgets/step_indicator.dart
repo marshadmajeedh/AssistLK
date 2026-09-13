@@ -23,11 +23,28 @@ class StepIndicator extends StatelessWidget {
       ),
       child: LayoutBuilder(
         builder: (context, constraints) {
-          if (constraints.maxWidth < 400 ||
-              MediaQuery.textScalerOf(context).scale(12) > 15) {
-            return Text(
-              'Step ${currentStep + 1} of ${steps.length}: ${steps[currentStep]}',
-              style: AppTextStyles.small,
+          var requiredWidth = (steps.length - 1) * AppSpacing.sm;
+          for (final step in steps) {
+            final label = TextPainter(
+              text: TextSpan(
+                text: step,
+                style: AppTextStyles.small.copyWith(
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+              textDirection: Directionality.of(context),
+              textScaler: MediaQuery.textScalerOf(context),
+            )..layout();
+            requiredWidth += 24 + AppSpacing.xs + label.width;
+            label.dispose();
+          }
+          if (constraints.maxWidth < requiredWidth) {
+            return Wrap(
+              spacing: AppSpacing.sm,
+              runSpacing: AppSpacing.sm,
+              children: [
+                for (int i = 0; i < steps.length; i++) _buildStepItem(i),
+              ],
             );
           }
           return Row(

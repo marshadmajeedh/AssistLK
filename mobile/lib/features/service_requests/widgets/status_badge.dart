@@ -8,10 +8,7 @@ import '../models/service_request_status.dart';
 class StatusBadge extends StatelessWidget {
   final ServiceRequestStatus status;
 
-  const StatusBadge({
-    super.key,
-    required this.status,
-  });
+  const StatusBadge({super.key, required this.status});
 
   @override
   Widget build(BuildContext context) {
@@ -25,10 +22,7 @@ class StatusBadge extends StatelessWidget {
       decoration: BoxDecoration(
         color: colors.background,
         borderRadius: BorderRadius.circular(AppRadius.pill),
-        border: Border.all(
-          color: colors.border,
-          width: 1,
-        ),
+        border: Border.all(color: colors.border, width: 1),
       ),
       child: Row(
         mainAxisSize: MainAxisSize.min,
@@ -42,13 +36,15 @@ class StatusBadge extends StatelessWidget {
             ),
           ),
           const SizedBox(width: AppSpacing.xs + 2),
-          Text(
-            status.displayName,
-            style: TextStyle(
-              fontSize: 12,
-              fontWeight: FontWeight.w600,
-              color: colors.foreground,
-              height: 1.2,
+          Flexible(
+            child: Text(
+              status.displayName,
+              style: TextStyle(
+                fontSize: 12,
+                fontWeight: FontWeight.w600,
+                color: colors.foreground,
+                height: 1.2,
+              ),
             ),
           ),
         ],

@@ -1,5 +1,7 @@
 # AssistLK Component Development Timeline and Integration Roadmap
 
+> **Planning scope:** This roadmap preserves assignment phases and planned component integration. Current C1 is Python-only via the ASP.NET adapter; its tools run in Python. Phase labels and later-component tasks are not current completion evidence. See [current architecture](../../agent-services/README.md).
+
 ## 1. Purpose
 
 This document defines the development order, component dependencies, integration strategy, testing milestones, and team coordination plan. AssistLK must be built as one complete system rather than four isolated components.
@@ -101,8 +103,8 @@ Every member should complete work in this order:
 ```text
 1. Database entities, relationships, and migration
 2. Application services, business rules, and validators
-3. Agent implementation with IAgent, context, memory, and tools
-4. IAgentTool implementations
+3. Runtime-appropriate agent integration: .NET adapters use IAgent; Python uses its internal service contract
+4. Runtime-appropriate tools; C# IAgentTool is not required for Python functions
 5. API controllers and integration
 6. Unit and integration testing
 7. Documentation

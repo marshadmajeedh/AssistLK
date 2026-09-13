@@ -16,8 +16,6 @@ import 'package:mobile/shared/widgets/app_image_asset.dart';
 class FakeAuthProvider extends ChangeNotifier implements AuthProvider {
   @override
   int get sessionGeneration => 0;
-  @override
-  void sessionExpired() { _user = null; notifyListeners(); }
   AuthUser? _user;
   final bool _isLoading = false;
   String? _error;
@@ -39,6 +37,9 @@ class FakeAuthProvider extends ChangeNotifier implements AuthProvider {
 
   @override
   bool get isLoading => _isLoading;
+
+  @override
+  bool get isInitializing => false;
 
   @override
   String? get error => _error;
@@ -99,10 +100,7 @@ class FakeAuthProvider extends ChangeNotifier implements AuthProvider {
 Widget _buildScreen(Widget screen, FakeAuthProvider authProvider) {
   return ChangeNotifierProvider<AuthProvider>.value(
     value: authProvider,
-    child: MaterialApp(
-      theme: AppTheme.lightTheme,
-      home: screen,
-    ),
+    child: MaterialApp(theme: AppTheme.lightTheme, home: screen),
   );
 }
 
@@ -114,29 +112,34 @@ void main() {
   });
 
   group('LoginScreen UX & Flow Tests', () {
-    testWidgets('renders auth_welcome.png, brand title, subtitle, and input fields',
-        (tester) async {
-      await tester.pumpWidget(_buildScreen(const LoginScreen(), fakeAuth));
-      await tester.pumpAndSettle();
+    testWidgets(
+      'renders auth_welcome.png, brand title, subtitle, and input fields',
+      (tester) async {
+        await tester.pumpWidget(_buildScreen(const LoginScreen(), fakeAuth));
+        await tester.pumpAndSettle();
 
-      // Asset
-      final imageAssetFinder = find.byWidgetPredicate((widget) =>
-          widget is AppImageAsset && widget.assetPath == AppAssets.authWelcome);
-      expect(imageAssetFinder, findsOneWidget);
+        // Asset
+        final imageAssetFinder = find.byWidgetPredicate(
+          (widget) =>
+              widget is AppImageAsset &&
+              widget.assetPath == AppAssets.authWelcome,
+        );
+        expect(imageAssetFinder, findsOneWidget);
 
-      // Typography
-      expect(find.text('AssistLK'), findsOneWidget);
-      expect(find.text('Sign in to continue'), findsOneWidget);
+        // Typography
+        expect(find.text('AssistLK'), findsOneWidget);
+        expect(find.text('Sign in to continue'), findsOneWidget);
 
-      // Inputs & Button
-      expect(find.text('Email'), findsOneWidget);
-      expect(find.text('Password'), findsOneWidget);
-      expect(find.text('Sign In'), findsOneWidget);
+        // Inputs & Button
+        expect(find.text('Email'), findsOneWidget);
+        expect(find.text('Password'), findsOneWidget);
+        expect(find.text('Sign In'), findsOneWidget);
 
-      // Create account action
-      expect(find.text("Don't have an account?"), findsOneWidget);
-      expect(find.text('Create an account'), findsOneWidget);
-    });
+        // Create account action
+        expect(find.text("Don't have an account?"), findsOneWidget);
+        expect(find.text('Create an account'), findsOneWidget);
+      },
+    );
 
     testWidgets('password visibility toggle changes obscurity', (tester) async {
       await tester.pumpWidget(_buildScreen(const LoginScreen(), fakeAuth));
@@ -157,8 +160,9 @@ void main() {
       expect(passwordField.obscureText, isFalse);
     });
 
-    testWidgets('validates required email and valid email format',
-        (tester) async {
+    testWidgets('validates required email and valid email format', (
+      tester,
+    ) async {
       await tester.pumpWidget(_buildScreen(const LoginScreen(), fakeAuth));
       await tester.pumpAndSettle();
 
@@ -171,7 +175,9 @@ void main() {
 
       // Enter invalid email format
       await tester.enterText(
-          find.widgetWithText(TextField, 'Email'), 'invalidemail');
+        find.widgetWithText(TextField, 'Email'),
+        'invalidemail',
+      );
       await tester.tap(find.text('Sign In'));
       await tester.pumpAndSettle();
 
@@ -183,9 +189,13 @@ void main() {
       await tester.pumpAndSettle();
 
       await tester.enterText(
-          find.widgetWithText(TextField, 'Email'), 'customer@assistlk.com');
+        find.widgetWithText(TextField, 'Email'),
+        'customer@assistlk.com',
+      );
       await tester.enterText(
-          find.widgetWithText(TextField, 'Password'), 'secret123');
+        find.widgetWithText(TextField, 'Password'),
+        'secret123',
+      );
 
       await tester.tap(find.text('Sign In'));
       await tester.pumpAndSettle();
@@ -195,111 +205,133 @@ void main() {
     });
 
     testWidgets(
-        'tapping "Create an account" navigates to AccountTypeSelectionScreen',
-        (tester) async {
-      await tester.pumpWidget(_buildScreen(const LoginScreen(), fakeAuth));
-      await tester.pumpAndSettle();
+      'tapping "Create an account" navigates to AccountTypeSelectionScreen',
+      (tester) async {
+        await tester.pumpWidget(_buildScreen(const LoginScreen(), fakeAuth));
+        await tester.pumpAndSettle();
 
-      await tester.tap(find.text('Create an account'));
-      await tester.pumpAndSettle();
+        await tester.tap(find.text('Create an account'));
+        await tester.pumpAndSettle();
 
-      expect(find.byType(AccountTypeSelectionScreen), findsOneWidget);
-    });
+        expect(find.byType(AccountTypeSelectionScreen), findsOneWidget);
+      },
+    );
   });
 
   group('AccountTypeSelectionScreen Flow Tests', () {
     testWidgets(
-        'renders auth_register.png, title, and both Customer and Provider choices',
-        (tester) async {
-      await tester.pumpWidget(
-          _buildScreen(const AccountTypeSelectionScreen(), fakeAuth));
-      await tester.pumpAndSettle();
+      'renders auth_register.png, title, and both Customer and Provider choices',
+      (tester) async {
+        await tester.pumpWidget(
+          _buildScreen(const AccountTypeSelectionScreen(), fakeAuth),
+        );
+        await tester.pumpAndSettle();
 
-      // Asset
-      final imageAssetFinder = find.byWidgetPredicate((widget) =>
-          widget is AppImageAsset &&
-          widget.assetPath == AppAssets.authRegister);
-      expect(imageAssetFinder, findsOneWidget);
+        // Asset
+        final imageAssetFinder = find.byWidgetPredicate(
+          (widget) =>
+              widget is AppImageAsset &&
+              widget.assetPath == AppAssets.authRegister,
+        );
+        expect(imageAssetFinder, findsOneWidget);
 
-      // Title & Subtitle
-      expect(find.text('Join AssistLK'), findsWidgets);
-      expect(
-          find.text('Choose how you would like to get started'), findsOneWidget);
+        // Title & Subtitle
+        expect(find.text('Join AssistLK'), findsWidgets);
+        expect(
+          find.text('Choose how you would like to get started'),
+          findsOneWidget,
+        );
 
-      // Choices
-      expect(find.text('Register as Customer'), findsOneWidget);
-      expect(
-          find.text('Request home, vehicle, electrical and appliance services.'),
-          findsOneWidget);
+        // Choices
+        expect(find.text('Register as Customer'), findsOneWidget);
+        expect(
+          find.text(
+            'Request home, vehicle, electrical and appliance services.',
+          ),
+          findsOneWidget,
+        );
 
-      expect(find.text('Register as Provider'), findsOneWidget);
-      expect(find.text('Offer professional services through AssistLK.'),
-          findsOneWidget);
+        expect(find.text('Register as Provider'), findsOneWidget);
+        expect(
+          find.text('Offer professional services through AssistLK.'),
+          findsOneWidget,
+        );
 
-      // Must NOT contain registration fields
-      expect(find.byType(TextField), findsNothing);
-      expect(find.byType(TextFormField), findsNothing);
-    });
-
-    testWidgets('tapping "Register as Customer" navigates to CustomerRegisterScreen',
-        (tester) async {
-      await tester.pumpWidget(
-          _buildScreen(const AccountTypeSelectionScreen(), fakeAuth));
-      await tester.pumpAndSettle();
-
-      await tester.tap(find.text('Register as Customer'));
-      await tester.pumpAndSettle();
-
-      expect(find.byType(CustomerRegisterScreen), findsOneWidget);
-    });
+        // Must NOT contain registration fields
+        expect(find.byType(TextField), findsNothing);
+        expect(find.byType(TextFormField), findsNothing);
+      },
+    );
 
     testWidgets(
-        'tapping "Register as Provider" shows neutral notice and does not open Customer registration',
-        (tester) async {
-      await tester.pumpWidget(
-          _buildScreen(const AccountTypeSelectionScreen(), fakeAuth));
-      await tester.pumpAndSettle();
+      'tapping "Register as Customer" navigates to CustomerRegisterScreen',
+      (tester) async {
+        await tester.pumpWidget(
+          _buildScreen(const AccountTypeSelectionScreen(), fakeAuth),
+        );
+        await tester.pumpAndSettle();
 
-      await tester.tap(find.text('Register as Provider'));
-      await tester.pumpAndSettle();
+        await tester.tap(find.text('Register as Customer'));
+        await tester.pumpAndSettle();
 
-      // Does NOT navigate to customer registration
-      expect(find.byType(CustomerRegisterScreen), findsNothing);
+        expect(find.byType(CustomerRegisterScreen), findsOneWidget);
+      },
+    );
 
-      // Shows neutral provider onboarding notice
-      expect(find.text('Provider Registration'), findsOneWidget);
-      expect(
-        find.textContaining('Provider registration is being prepared'),
-        findsOneWidget,
-      );
-      expect(
-        find.textContaining('Provider onboarding will be available soon'),
-        findsOneWidget,
-      );
+    testWidgets(
+      'tapping "Register as Provider" shows neutral notice and does not open Customer registration',
+      (tester) async {
+        await tester.pumpWidget(
+          _buildScreen(const AccountTypeSelectionScreen(), fakeAuth),
+        );
+        await tester.pumpAndSettle();
 
-      // Ensure internal assignment terminology is NOT exposed to users
-      expect(find.textContaining('Component 2'), findsNothing);
-    });
+        await tester.tap(find.text('Register as Provider'));
+        await tester.pumpAndSettle();
+
+        // Does NOT navigate to customer registration
+        expect(find.byType(CustomerRegisterScreen), findsNothing);
+
+        // Shows neutral provider onboarding notice
+        expect(find.text('Provider Registration'), findsOneWidget);
+        expect(
+          find.textContaining('Provider registration is being prepared'),
+          findsOneWidget,
+        );
+        expect(
+          find.textContaining('Provider onboarding will be available soon'),
+          findsOneWidget,
+        );
+
+        // Ensure internal assignment terminology is NOT exposed to users
+        expect(find.textContaining('Component 2'), findsNothing);
+      },
+    );
   });
 
   group('CustomerRegisterScreen UX & Validation Tests', () {
-    testWidgets('renders auth_customer_register.png, title, and helper text',
-        (tester) async {
+    testWidgets('renders auth_customer_register.png, title, and helper text', (
+      tester,
+    ) async {
       await tester.pumpWidget(
-          _buildScreen(const CustomerRegisterScreen(), fakeAuth));
+        _buildScreen(const CustomerRegisterScreen(), fakeAuth),
+      );
       await tester.pumpAndSettle();
 
       // Asset
-      final imageAssetFinder = find.byWidgetPredicate((widget) =>
-          widget is AppImageAsset &&
-          widget.assetPath == AppAssets.authCustomerRegister);
+      final imageAssetFinder = find.byWidgetPredicate(
+        (widget) =>
+            widget is AppImageAsset &&
+            widget.assetPath == AppAssets.authCustomerRegister,
+      );
       expect(imageAssetFinder, findsOneWidget);
 
       // Header & helper text
       expect(find.text('Join AssistLK'), findsOneWidget);
       expect(
         find.text(
-            'Create your customer account to request services with AssistLK.'),
+          'Create your customer account to request services with AssistLK.',
+        ),
         findsOneWidget,
       );
 
@@ -314,75 +346,110 @@ void main() {
       expect(find.byType(DropdownButtonFormField<String>), findsNothing);
     });
 
-    testWidgets('validates full name, email, password length, and password match',
-        (tester) async {
-      await tester.pumpWidget(
-          _buildScreen(const CustomerRegisterScreen(), fakeAuth));
-      await tester.pumpAndSettle();
+    testWidgets(
+      'validates full name, email, password length, and password match',
+      (tester) async {
+        await tester.pumpWidget(
+          _buildScreen(const CustomerRegisterScreen(), fakeAuth),
+        );
+        await tester.pumpAndSettle();
 
-      final createBtn = find.widgetWithText(ElevatedButton, 'Create Account');
+        final createBtn = find.widgetWithText(ElevatedButton, 'Create Account');
 
-      // Tap Create Account with empty fields
-      await tester.ensureVisible(createBtn);
-      await tester.tap(createBtn);
-      await tester.pumpAndSettle();
+        // Tap Create Account with empty fields
+        await tester.ensureVisible(createBtn);
+        await tester.tap(createBtn);
+        await tester.pumpAndSettle();
 
-      expect(find.text('Full Name is required.'), findsNothing); // label is 'Full name is required.'
-      expect(find.text('Full name is required.'), findsOneWidget);
-      expect(find.text('Email is required.'), findsOneWidget);
-      expect(
-          find.text('Password must contain at least 8 characters.'), findsOneWidget);
+        expect(
+          find.text('Full Name is required.'),
+          findsNothing,
+        ); // label is 'Full name is required.'
+        expect(find.text('Full name is required.'), findsOneWidget);
+        expect(find.text('Email is required.'), findsOneWidget);
+        expect(
+          find.text('Password must contain at least 8 characters.'),
+          findsOneWidget,
+        );
 
-      // Fill in invalid email and short password
-      await tester.enterText(
-          find.widgetWithText(TextField, 'Full Name'), 'Kamal Perera');
-      await tester.enterText(
-          find.widgetWithText(TextField, 'Email'), 'kamalwithoutat');
-      await tester.enterText(
-          find.widgetWithText(TextField, 'Password'), 'short');
-      await tester.enterText(
-          find.widgetWithText(TextField, 'Confirm Password'), 'different');
+        // Fill in invalid email and short password
+        await tester.enterText(
+          find.widgetWithText(TextField, 'Full Name'),
+          'Kamal Perera',
+        );
+        await tester.enterText(
+          find.widgetWithText(TextField, 'Email'),
+          'kamalwithoutat',
+        );
+        await tester.enterText(
+          find.widgetWithText(TextField, 'Password'),
+          'short',
+        );
+        await tester.enterText(
+          find.widgetWithText(TextField, 'Confirm Password'),
+          'different',
+        );
 
-      await tester.ensureVisible(createBtn);
-      await tester.tap(createBtn);
-      await tester.pumpAndSettle();
+        await tester.ensureVisible(createBtn);
+        await tester.tap(createBtn);
+        await tester.pumpAndSettle();
 
-      expect(find.text('Enter a valid email.'), findsOneWidget);
-      expect(
-          find.text('Password must contain at least 8 characters.'), findsOneWidget);
+        expect(find.text('Enter a valid email.'), findsOneWidget);
+        expect(
+          find.text('Password must contain at least 8 characters.'),
+          findsOneWidget,
+        );
 
-      // Fill in matching passwords >= 8 chars and valid email
-      await tester.enterText(
-          find.widgetWithText(TextField, 'Email'), 'kamal@assistlk.com');
-      await tester.enterText(
-          find.widgetWithText(TextField, 'Password'), 'password123');
-      await tester.enterText(
-          find.widgetWithText(TextField, 'Confirm Password'), 'password999');
+        // Fill in matching passwords >= 8 chars and valid email
+        await tester.enterText(
+          find.widgetWithText(TextField, 'Email'),
+          'kamal@assistlk.com',
+        );
+        await tester.enterText(
+          find.widgetWithText(TextField, 'Password'),
+          'password123',
+        );
+        await tester.enterText(
+          find.widgetWithText(TextField, 'Confirm Password'),
+          'password999',
+        );
 
-      await tester.ensureVisible(createBtn);
-      await tester.tap(createBtn);
-      await tester.pumpAndSettle();
+        await tester.ensureVisible(createBtn);
+        await tester.tap(createBtn);
+        await tester.pumpAndSettle();
 
-      expect(find.text('Passwords do not match.'), findsOneWidget);
-    });
+        expect(find.text('Passwords do not match.'), findsOneWidget);
+      },
+    );
 
     testWidgets('submits registration with role "Customer"', (tester) async {
       await tester.pumpWidget(
-          _buildScreen(const CustomerRegisterScreen(), fakeAuth));
+        _buildScreen(const CustomerRegisterScreen(), fakeAuth),
+      );
       await tester.pumpAndSettle();
 
       final createBtn = find.widgetWithText(ElevatedButton, 'Create Account');
 
       await tester.enterText(
-          find.widgetWithText(TextField, 'Full Name'), 'Kamal Perera');
+        find.widgetWithText(TextField, 'Full Name'),
+        'Kamal Perera',
+      );
       await tester.enterText(
-          find.widgetWithText(TextField, 'Email'), 'kamal@assistlk.com');
+        find.widgetWithText(TextField, 'Email'),
+        'kamal@assistlk.com',
+      );
       await tester.enterText(
-          find.widgetWithText(TextField, 'Phone Number'), '0771234567');
+        find.widgetWithText(TextField, 'Phone Number'),
+        '0771234567',
+      );
       await tester.enterText(
-          find.widgetWithText(TextField, 'Password'), 'password123');
+        find.widgetWithText(TextField, 'Password'),
+        'password123',
+      );
       await tester.enterText(
-          find.widgetWithText(TextField, 'Confirm Password'), 'password123');
+        find.widgetWithText(TextField, 'Confirm Password'),
+        'password123',
+      );
 
       await tester.ensureVisible(createBtn);
       await tester.tap(createBtn);
@@ -397,56 +464,62 @@ void main() {
   });
 
   group('Narrow Viewport Overflow Safety', () {
-    testWidgets('LoginScreen renders safely on compact 360x640 screen without overflow',
-        (tester) async {
-      tester.view.physicalSize = const Size(360, 640);
-      tester.view.devicePixelRatio = 1.0;
-      addTearDown(() {
-        tester.view.resetPhysicalSize();
-        tester.view.resetDevicePixelRatio();
-      });
+    testWidgets(
+      'LoginScreen renders safely on compact 360x640 screen without overflow',
+      (tester) async {
+        tester.view.physicalSize = const Size(360, 640);
+        tester.view.devicePixelRatio = 1.0;
+        addTearDown(() {
+          tester.view.resetPhysicalSize();
+          tester.view.resetDevicePixelRatio();
+        });
 
-      await tester.pumpWidget(_buildScreen(const LoginScreen(), fakeAuth));
-      await tester.pumpAndSettle();
+        await tester.pumpWidget(_buildScreen(const LoginScreen(), fakeAuth));
+        await tester.pumpAndSettle();
 
-      expect(find.text('AssistLK'), findsOneWidget);
-      expect(tester.takeException(), isNull);
-    });
+        expect(find.text('AssistLK'), findsOneWidget);
+        expect(tester.takeException(), isNull);
+      },
+    );
 
     testWidgets(
-        'AccountTypeSelectionScreen renders safely on compact 360x640 screen without overflow',
-        (tester) async {
-      tester.view.physicalSize = const Size(360, 640);
-      tester.view.devicePixelRatio = 1.0;
-      addTearDown(() {
-        tester.view.resetPhysicalSize();
-        tester.view.resetDevicePixelRatio();
-      });
+      'AccountTypeSelectionScreen renders safely on compact 360x640 screen without overflow',
+      (tester) async {
+        tester.view.physicalSize = const Size(360, 640);
+        tester.view.devicePixelRatio = 1.0;
+        addTearDown(() {
+          tester.view.resetPhysicalSize();
+          tester.view.resetDevicePixelRatio();
+        });
 
-      await tester.pumpWidget(
-          _buildScreen(const AccountTypeSelectionScreen(), fakeAuth));
-      await tester.pumpAndSettle();
+        await tester.pumpWidget(
+          _buildScreen(const AccountTypeSelectionScreen(), fakeAuth),
+        );
+        await tester.pumpAndSettle();
 
-      expect(find.text('Register as Customer'), findsOneWidget);
-      expect(tester.takeException(), isNull);
-    });
+        expect(find.text('Register as Customer'), findsOneWidget);
+        expect(tester.takeException(), isNull);
+      },
+    );
 
     testWidgets(
-        'CustomerRegisterScreen renders safely on compact 360x640 screen without overflow',
-        (tester) async {
-      tester.view.physicalSize = const Size(360, 640);
-      tester.view.devicePixelRatio = 1.0;
-      addTearDown(() {
-        tester.view.resetPhysicalSize();
-        tester.view.resetDevicePixelRatio();
-      });
+      'CustomerRegisterScreen renders safely on compact 360x640 screen without overflow',
+      (tester) async {
+        tester.view.physicalSize = const Size(360, 640);
+        tester.view.devicePixelRatio = 1.0;
+        addTearDown(() {
+          tester.view.resetPhysicalSize();
+          tester.view.resetDevicePixelRatio();
+        });
 
-      await tester.pumpWidget(
-          _buildScreen(const CustomerRegisterScreen(), fakeAuth));
-      await tester.pumpAndSettle();
+        await tester.pumpWidget(
+          _buildScreen(const CustomerRegisterScreen(), fakeAuth),
+        );
+        await tester.pumpAndSettle();
 
-      expect(find.text('Join AssistLK'), findsOneWidget);
-      expect(tester.takeException(), isNull);
-    });
+        expect(find.text('Join AssistLK'), findsOneWidget);
+        expect(tester.takeException(), isNull);
+      },
+    );
   });
 }

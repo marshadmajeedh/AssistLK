@@ -146,7 +146,7 @@ public class ServiceRequestRepository : IServiceRequestRepository
 
     private IQueryable<ServiceRequest> BuildQuery(bool includeProblemAnalyses, bool includeClarifications)
     {
-        var query = _context.ServiceRequests.AsQueryable();
+        var query = _context.ServiceRequests.Include(x => x.Attachments).AsQueryable();
 
         if (includeProblemAnalyses)
         {

@@ -5,6 +5,10 @@ namespace AssistLK.Application.ServiceRequests.DTOs;
 
 public class ApplyProblemAnalysisResult
 {
+    public AssistLK.Domain.Entities.ProblemAnalysisVisualEvidence VisualEvidence { get; set; } = new();
+
+    public IReadOnlyList<Guid> SuppliedAttachmentIds { get; set; } = Array.Empty<Guid>();
+
     public long? EvidenceRevision { get; set; }
 
     public Guid ServiceRequestId { get; set; }

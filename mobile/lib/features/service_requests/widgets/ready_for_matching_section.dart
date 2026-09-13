@@ -47,9 +47,7 @@ class ReadyForMatchingSection extends StatelessWidget {
           // Subtitle / Ready for matching message
           Text(
             'Your request has been clearly analyzed and is ready for provider matching.',
-            style: AppTextStyles.body.copyWith(
-              color: AppColors.textSecondary,
-            ),
+            style: AppTextStyles.body.copyWith(color: AppColors.textSecondary),
             textAlign: TextAlign.center,
           ),
           const SizedBox(height: AppSpacing.md),
@@ -74,12 +72,14 @@ class ReadyForMatchingSection extends StatelessWidget {
                   color: AppColors.success,
                 ),
                 SizedBox(width: AppSpacing.xs + 2),
-                Text(
-                  'Ready for provider matching',
-                  style: TextStyle(
-                    fontSize: 13,
-                    fontWeight: FontWeight.w600,
-                    color: AppColors.success,
+                Flexible(
+                  child: Text(
+                    'Ready for provider matching',
+                    style: TextStyle(
+                      fontSize: 13,
+                      fontWeight: FontWeight.w600,
+                      color: AppColors.success,
+                    ),
                   ),
                 ),
               ],

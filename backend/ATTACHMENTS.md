@@ -193,3 +193,28 @@ Python result fields `visionStatus`, `attachmentIdsUsed`, `visualObservations` a
 Image-enhanced output/error paths reject or suppress image payload echoes; additional metadata is allowlisted and provider metadata is bounded to implemented provider names. No Base64, raw bytes, storage keys, vendor request/response payloads or hidden reasoning belongs in persisted results. Regressions inspect successful and rejected persisted execution fields and existing semantic memory. Previous stale-revision, two-round re-analysis, ReadyForMatching, ownership and recovery tests remain intact.
 
 Provider failures exhaust only the existing retry budget and return unsuccessful execution through existing ASP.NET recovery; no extra fresh-budget text fallback or per-image retry loop. Normal backend tests continue to use the fake internal service and do not require Python. See the [canonical agent README](../agent-services/problem-understanding-agent/README.md) for provider support, mock coverage, gated live verification and Phase 4 results.
+
+## Phase 5 authoritative analysis evidence
+
+`ProblemAnalysis.VisualEvidence` now owns the accepted, provider-neutral structured result: `visionStatus`, `attachmentIdsUsed`, `observations` (`attachmentId`, `observation`), and `limitations`. One JSONB column stores this bounded aggregate, using an EF value converter and structural change comparer. This keeps the small per-analysis value together without child-table joins or unrelated prose columns. No binary content, paths, provider payload, metadata hashes or hidden reasoning is part of the value.
+
+Migration **20260913083439_AddProblemAnalysisVisualEvidence** adds only that column with a `not_requested`/empty-array default for legacy rows. It does not modify the attachment migration. The migration is generated and verified on guarded test PostgreSQL, including upgrade, legacy data and Down/re-upgrade. It is **not applied to the developer's primary database**.
+
+The workflow maps its Phase 4 result and captured attachment IDs into the existing authoritative analysis application. Domain validation checks status, supplied/owned identities, observation membership, count/string limits and listed unsafe/payload content before changing request state. Visual metadata is written with the rest of ProblemAnalysis in the existing SaveChanges transaction. Existing current-evidence and concurrency checks still reject stale results before they can become authoritative.
+
+Customer Request Details expose `latestAnalysis.visualEvidence` only when that analysis's EvidenceRevision equals the request revision. Historical analysis remains stored; stale visual metadata is omitted from current details. Customer detail-shaped command responses use the same mapping. Customer and Admin list responses omit visual evidence entirely, and Admin detail remains unchanged in this phase. Detail data comes from ProblemAnalysis, never the operational execution audit. The C2 `ServiceRequestForMatchingResponse` is unchanged.
+
+The existing two-round clarification, optional-photo readiness, attachment mutation restrictions and cancellation retention rules remain. Valid successful `unsupported`/`failed` values can be represented, but actual Phase 4 live vision failure still returns failed execution with no new ProblemAnalysis. `partial` remains invalid. Flutter displays only the safe persisted wording; no new public image URL or image endpoint is introduced.
+
+Phase 5 verification is separate from the Phase 4 Gemini synthetic-image smoke test. Full physical-device/mobile Gemini E2E has **not** been performed in Phase 5; OpenAI remains not live-verified. Later Phase 6 verification can exercise the complete selection/upload/analyze/persist/detail flow after the primary database migration is deliberately applied.
+
+### Phase 5 verification (2026-09-13)
+
+- `dotnet build backend/AssistLK.sln`: 0 warnings, 0 errors.
+- `dotnet test backend/AssistLK.sln`: **529 passed** (159 API + 370 integration), 0 failed, 0 skipped. All 514 baseline cases retained, with 15 new persistence/migration cases; Phase 4 audit tests additionally assert domain persistence.
+- Existing Python venv `python -m pytest`: **162 passed**, 0 failed, 0 skipped. No Python runtime/test changes or live model call in Phase 5.
+- `flutter pub get`: succeeded without a dependency upgrade; `flutter analyze`: no issues; `flutter test --reporter expanded`: **411 passed**, 0 failed, 0 skipped (386 baseline + 25 new cases).
+- Migration upgrade, legacy defaults, rollback/re-upgrade and JSONB round-trip/change tracking pass on disposable PostgreSQL. Primary database not updated.
+- Responsive regressions at 320px/412px and 1×/2× text exposed existing header/status and readiness-chip overflow. These received wrapping-only fixes; no lifecycle behavior change.
+- `git diff --check`: passed. No web/, provider-runtime, public attachment API, normalization/storage, C2 handoff or matching-rule changes. No commit/staging performed.
+- Physical-device/live mobile E2E: **not performed**. Phase 6 should verify the full customer image-to-persisted-insight flow after an explicitly authorized primary-database migration. Historical Phase 4 Gemini inference evidence does not establish this mobile E2E.

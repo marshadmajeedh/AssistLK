@@ -355,6 +355,14 @@ public class AssistLKDbContext : DbContext, IAgentWorkflowDbContext
     private static void ConfigureProblemAnalysis(ModelBuilder modelBuilder)
     {
         var analysis = modelBuilder.Entity<ProblemAnalysis>();
+        analysis.Property(x => x.VisualEvidence)
+            .HasColumnType("jsonb")
+            .HasConversion(value => VisualEvidenceJson.Write(value), json => VisualEvidenceJson.Read(json))
+            .HasDefaultValueSql("'{\"visionStatus\":\"not_requested\",\"attachmentIdsUsed\":[],\"observations\":[],\"limitations\":[]}'::jsonb")
+            .Metadata.SetValueComparer(new Microsoft.EntityFrameworkCore.ChangeTracking.ValueComparer<ProblemAnalysisVisualEvidence>(
+                (a, b) => VisualEvidenceJson.Write(a!) == VisualEvidenceJson.Write(b!),
+                value => VisualEvidenceJson.Write(value).GetHashCode(),
+                value => VisualEvidenceJson.Read(VisualEvidenceJson.Write(value))));
 
         analysis.ToTable(
             "ProblemAnalyses",

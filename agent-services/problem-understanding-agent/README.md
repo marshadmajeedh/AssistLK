@@ -110,7 +110,7 @@ Canonical categories are Plumbing, Electrical, Vehicle Repair, Appliance Repair,
 
 There is no `visualConfidence`. Unknown IDs, malformed visual fields and falsely claimed image usage fail validation. `partial` is rejected because the implemented calls are atomic and provide no trustworthy per-image acceptance signal. Non-used statuses cannot claim inspected IDs or observations. Hidden reasoning/extra lifecycle fields and model-supplied free-form metadata are excluded; Gemini thought parts are ignored. Only deterministic agent metadata is reconstructed.
 
-ASP.NET maps a compact `VisualResult` value into the existing serialized **AgentExecution output**; no new schema/migration is needed. ProblemAnalysis visual-evidence storage and public/client presentation are deferred to Phase 5. Audit output contains bounded semantic summaries and IDs, never Base64, raw bytes, provider request/response payloads or hidden reasoning. Semantic memory retains its existing explicit field mapping.
+ASP.NET maps a compact `VisualResult` value into the existing serialized **AgentExecution output**; no new schema/migration is needed. Phase 5 now maps this value into authoritative ProblemAnalysis persistence and Customer detail presentation; see the backend contract below. Audit output contains bounded semantic summaries and IDs, never Base64, raw bytes, provider request/response payloads or hidden reasoning. Semantic memory retains its existing explicit field mapping.
 
 Metadata contains `agentName`, `provider`, `degraded`, `durationMs`, and `toolExecutions`; each tool audit contains `tool`, `success`, and `durationMs`. This internal provider metadata is not customer-facing branding: clients use **AssistLK AI**.
 
@@ -312,3 +312,9 @@ Backend modified:
 - `backend/src/AssistLK.Agents/Models/ProblemUnderstandingOutput.cs`
 - `backend/src/AssistLK.Agents/Adapters/ExternalProblemUnderstandingAgentAdapter.cs`
 - `backend/tests/AssistLK.IntegrationTests/VisualEvidenceTransportTests.cs`
+
+## Phase 5 persistence and presentation
+
+Python runtime, schemas, graph and provider payloads are unchanged in Phase 5. The existing four Phase 4 statuses/limits remain authoritative; `partial` is still unsupported. ASP.NET maps the accepted result into a bounded ProblemAnalysis JSONB value in the same transaction as the rest of the domain analysis. Operational execution audit is not the Customer detail data source. See [backend persistence contract](../../backend/ATTACHMENTS.md#phase-5-authoritative-analysis-evidence) and [Flutter photo insights](../../mobile/PROBLEM_PHOTOS.md#phase-5-persisted-photo-insights).
+
+Current-revision Customer detail JSON includes only semantic observations/limitations and attachment IDs, never raw images or provider payloads. The existing authenticated attachment endpoint remains the sole image-byte source. List payloads and C2 handoff do not acquire visual observations. The Phase 4 Gemini live evidence above is unchanged and separate from full mobile E2E, which has not been performed in Phase 5. OpenAI remains not live-verified.

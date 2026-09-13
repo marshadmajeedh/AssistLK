@@ -229,6 +229,15 @@ public class ProblemUnderstandingWorkflowService
             {
                 ServiceRequestId = input.ServiceRequestId,
                 EvidenceRevision = input.EvidenceRevision,
+                SuppliedAttachmentIds = input.AttachmentIds,
+                VisualEvidence = new AssistLK.Domain.Entities.ProblemAnalysisVisualEvidence
+                {
+                    VisionStatus = output.VisualResult.VisionStatus,
+                    AttachmentIdsUsed = output.VisualResult.AttachmentIdsUsed,
+                    Observations = output.VisualResult.VisualObservations.Select(o => new AssistLK.Domain.Entities.ProblemAnalysisVisualObservation
+                        { AttachmentId = o.AttachmentId, Observation = o.Observation }).ToArray(),
+                    Limitations = output.VisualResult.VisualLimitations
+                },
                 Category = output.Category,
                 DetectedProblem = output.ProblemSummary,
                 Confidence = output.Confidence,

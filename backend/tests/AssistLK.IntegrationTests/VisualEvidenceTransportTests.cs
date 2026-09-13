@@ -114,6 +114,12 @@ public class VisualEvidenceTransportTests
         using var document = JsonDocument.Parse(execution.Output!);
         var visual = document.RootElement.GetProperty("VisualResult");
         Assert.Equal(status, visual.GetProperty("visionStatus").GetString());
+        var domain = Assert.Single(f.Db.ProblemAnalyses).VisualEvidence;
+        Assert.Equal(status, domain.VisionStatus);
+        Assert.Equal(status == "used" ? 1 : 0, domain.Observations.Count);
+        Assert.Equal(status == "used" ? new[] { attachment.Id } : Array.Empty<Guid>(), domain.AttachmentIdsUsed);
+        Assert.Equal(status == "used" ? new[] { "The internal cause cannot be seen." } : Array.Empty<string>(), domain.Limitations);
+        Assert.DoesNotContain(f.Sent!.Input.VisualEvidence[0].DataBase64, JsonSerializer.Serialize(domain));
         Assert.Equal(status == "used" ? 1 : 0, visual.GetProperty("visualObservations").GetArrayLength());
         if (status == "used") Assert.Equal(attachment.Id,
             visual.GetProperty("visualObservations")[0].GetProperty("attachmentId").GetGuid());

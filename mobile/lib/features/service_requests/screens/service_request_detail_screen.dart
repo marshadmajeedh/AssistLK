@@ -1,3 +1,4 @@
+import '../models/analysis_visual_evidence.dart';
 import '../../auth/providers/auth_provider.dart';
 import '../providers/problem_photos_controller.dart';
 import '../services/problem_image_picker.dart';
@@ -344,45 +345,24 @@ class _ServiceRequestDetailScreenState
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      if (request.category == 'Unclassified')
-                        Wrap(
-                          alignment: WrapAlignment.spaceBetween,
-                          crossAxisAlignment: WrapCrossAlignment.center,
-                          spacing: AppSpacing.sm,
-                          runSpacing: AppSpacing.sm,
-                          children: [
-                            Text(
-                              request.category.isEmpty
-                                  ? 'Unclassified Request'
-                                  : (CanonicalServiceCategory.fromCanonicalOrDisplayName(
-                                          request.category,
-                                        )?.displayName ??
-                                        request.category),
-                              style: AppTextStyles.sectionHeading,
-                            ),
-                            StatusBadge(status: request.status),
-                          ],
-                        )
-                      else
-                        Row(
-                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Expanded(
-                              child: Text(
-                                request.category.isEmpty
-                                    ? 'Unclassified Request'
-                                    : (CanonicalServiceCategory.fromCanonicalOrDisplayName(
-                                            request.category,
-                                          )?.displayName ??
-                                          request.category),
-                                style: AppTextStyles.sectionHeading,
-                              ),
-                            ),
-                            const SizedBox(width: AppSpacing.sm),
-                            StatusBadge(status: request.status),
-                          ],
-                        ),
+                      Wrap(
+                        alignment: WrapAlignment.spaceBetween,
+                        crossAxisAlignment: WrapCrossAlignment.center,
+                        spacing: AppSpacing.sm,
+                        runSpacing: AppSpacing.sm,
+                        children: [
+                          Text(
+                            request.category.isEmpty
+                                ? 'Unclassified Request'
+                                : (CanonicalServiceCategory.fromCanonicalOrDisplayName(
+                                        request.category,
+                                      )?.displayName ??
+                                      request.category),
+                            style: AppTextStyles.sectionHeading,
+                          ),
+                          StatusBadge(status: request.status),
+                        ],
+                      ),
                       if (request.status != ServiceRequestStatus.analyzed &&
                           request.status !=
                               ServiceRequestStatus.readyForMatching) ...[
@@ -547,17 +527,50 @@ class _ServiceRequestDetailScreenState
                 const Text(
                   'Upload or discard selected photos before continuing with analysis.',
                 )
-              else
+              else ...[
+                if ((request.status ==
+                            ServiceRequestStatus.awaitingInformation ||
+                        request.status == ServiceRequestStatus.cancelled) &&
+                    request.latestAnalysis != null &&
+                    request.latestAnalysis!.visualEvidence.status !=
+                        AnalysisVisionStatus.notRequested) ...[
+                  _persistedPhotoAnalysis(request),
+                  const SizedBox(height: AppSpacing.md),
+                ],
                 _buildStatusWorkflowSection(
                   context,
                   request,
                   analysis,
                   provider,
                 ),
+              ],
             ],
           ),
         ),
       ),
+    );
+  }
+
+  Widget _persistedPhotoAnalysis(ServiceRequestModel request) {
+    final latest = request.latestAnalysis!;
+    return AnalysisResultCard(
+      analysis: ProblemUnderstandingResultModel(
+        workflowId: '',
+        executionId: '',
+        serviceRequestId: request.serviceRequestId,
+        status: request.status,
+        category: request.category,
+        problemSummary: latest.detectedProblem,
+        urgency: request.urgency,
+        confidence: latest.confidence,
+        needsMoreInformation:
+            request.status == ServiceRequestStatus.awaitingInformation,
+        followUpQuestions: const [],
+      ),
+      visualEvidence: latest.visualEvidence,
+      hasPhotos: _photos.attachments.isNotEmpty,
+      categoryHint: request.categoryHint,
+      status: request.status,
     );
   }
 
@@ -764,6 +777,10 @@ class _ServiceRequestDetailScreenState
           children: [
             AnalysisResultCard(
               analysis: displayAnalysis,
+              visualEvidence:
+                  request.latestAnalysis?.visualEvidence ??
+                  const AnalysisVisualEvidence(),
+              hasPhotos: _photos.attachments.isNotEmpty,
               categoryHint: request.categoryHint,
               status: request.status,
             ),
@@ -809,6 +826,10 @@ class _ServiceRequestDetailScreenState
           children: [
             AnalysisResultCard(
               analysis: displayAnalysis,
+              visualEvidence:
+                  request.latestAnalysis?.visualEvidence ??
+                  const AnalysisVisualEvidence(),
+              hasPhotos: _photos.attachments.isNotEmpty,
               categoryHint: request.categoryHint,
               status: request.status,
             ),

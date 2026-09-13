@@ -1,6 +1,6 @@
 # Optional problem photos â€” Image Understanding Phase 2
 
-This phase adds Customer selection/upload/view/remove UX only. Photos are stored as evidence; Python analysis remains text-only. No backend, React, Python, lifecycle, CategoryHint, Smart Location, clarification-round, or ReadyForMatching business rules changed.
+Phase 2 added Customer selection/upload/view/remove UX. Phase 4 added real provider reasoning, and Phase 5 now presents authoritative persisted photo insights inside Request Details. The selection/upload limits and lifecycle, CategoryHint, Smart Location, clarification-round and ReadyForMatching rules remain unchanged.
 
 ## Dependency and platforms
 
@@ -106,3 +106,23 @@ Modified:
 - `mobile/test/smart_location_test.dart`
 - `mobile/windows/flutter/generated_plugin_registrant.cc`
 - `mobile/windows/flutter/generated_plugins.cmake`
+
+## Phase 5 persisted photo insights
+
+Request Details now reads `latestAnalysis.visualEvidence` from the existing authoritative detail JSON. `ProblemAnalysis` persists the bounded provider-neutral result in PostgreSQL; the UI does not read agent audits. Older responses without this value continue to parse with `not_requested` defaults. Unknown statuses, including unsupported `partial`, never claim image use. Untraceable/malformed observations are ignored by parsing.
+
+Inside the existing **AssistLK AI Analysis** card, **Photo evidence used** precedes cautious persisted observations. Nonempty **Photo limitations** follow in softer informational styling. No second large photo card or thumbnail download is added: a decorative photo icon accompanies text. Existing problem-photo previews still use authenticated content loading and the existing cache.
+
+- `not_requested`: no subsection.
+- `used`: show persisted observations and useful limitations without strengthening their wording.
+- `unsupported`: “Photos were attached but were not used in this analysis.” Only shown when the existing authenticated attachment list confirms photos exist.
+- Explicit successful-domain `failed`: “Photos could not be used in this analysis.” Current Phase 4 provider failure creates no new domain analysis, so a failed execution alone cannot create this UI.
+- `partial`: not supported by the provider contract; no fabricated partial presentation.
+
+Current insights also remain visible alongside normal clarification questions and after cancellation when a matching authoritative analysis exists. The backend omits stale visual metadata after an evidence revision change. No round limits, auto-answer behavior, matching readiness, photo limits, upload/normalization logic or Smart Location behavior changes.
+
+The card heading/confidence can wrap at narrow widths and enlarged text. Observations/limitations wrap naturally; screen readers receive the text, while decorative icons are excluded. Tests cover 320px/412px and 1×/2× text, persisted detail states, and no added image fetch on rebuild.
+
+No provider names, internal statuses, paths, storage keys, Base64 or raw payload fields are introduced into the customer presentation. The previous **Phase 4** live Gemini test (14.11 seconds, synthetic JPEG) proves one provider inference only. **Phase 5 physical-device/live mobile E2E is not yet verified.** OpenAI is implemented and mock-tested, not live-verified.
+
+Phase 5 checks: `flutter pub get` succeeded; `flutter analyze` reported no issues; `flutter test --reporter expanded` passed **411 tests**, with no failures/skips. The 386 existing tests remain, plus 25 model/widget/detail cases. Existing category/status and readiness-chip layouts now wrap at enlarged text sizes; this changes presentation only. No new package, endpoint, image cache or additional thumbnail request was added.

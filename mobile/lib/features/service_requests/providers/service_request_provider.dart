@@ -29,6 +29,19 @@ class ServiceRequestProvider extends ChangeNotifier {
   bool _analysisStateNeedsRefresh = false;
   String? _error;
   bool _isDisposed = false;
+  int _sessionGeneration = 0;
+
+  void clearSession() {
+    _sessionGeneration++;
+    _requests = [];
+    _currentRequest = null;
+    _currentAnalysis = null;
+    _isLoading = false;
+    _isAnalyzing = false;
+    _analysisStateNeedsRefresh = false;
+    _error = null;
+    notifyListeners();
+  }
 
   @override
   void dispose() {
@@ -69,11 +82,13 @@ class ServiceRequestProvider extends ChangeNotifier {
   }
 
   Future<bool> loadMyRequests() async {
+    final session = _sessionGeneration;
     _setLoading(true);
     _error = null;
 
     try {
       final fetched = await serviceRequestService.getMyRequests();
+      if (_isDisposed || session != _sessionGeneration) return false;
       _requests = List<ServiceRequestModel>.from(fetched);
 
       // Update currentRequest if it exists in the new list
@@ -88,32 +103,39 @@ class ServiceRequestProvider extends ChangeNotifier {
 
       return true;
     } catch (err) {
+      if (_isDisposed || session != _sessionGeneration) return false;
       _error = serviceRequestService.getErrorMessage(err);
       return false;
     } finally {
-      _setLoading(false);
+      if (!_isDisposed && session == _sessionGeneration) _setLoading(false);
     }
   }
 
   Future<ServiceRequestModel?> loadRequestById(String id) async {
+    final session = _sessionGeneration;
     _setLoading(true);
     _error = null;
 
     try {
       final request = await serviceRequestService.getById(id);
+      if (_isDisposed || session != _sessionGeneration) return null;
       _currentRequest = request;
       _updateRequestInList(request);
       _analysisStateNeedsRefresh = false;
       return request;
     } catch (err) {
+      if (_isDisposed || session != _sessionGeneration) return null;
       _error = serviceRequestService.getErrorMessage(err);
       return null;
     } finally {
-      _setLoading(false);
+      if (!_isDisposed && session == _sessionGeneration) _setLoading(false);
     }
   }
 
-  Future<ServiceRequestModel?> createRequest(CreateServiceRequestDto dto) async {
+  Future<ServiceRequestModel?> createRequest(
+    CreateServiceRequestDto dto,
+  ) async {
+    final session = _sessionGeneration;
     final validationError = dto.validate();
     if (validationError != null) {
       _error = validationError;
@@ -126,15 +148,17 @@ class ServiceRequestProvider extends ChangeNotifier {
 
     try {
       final created = await serviceRequestService.create(dto);
+      if (_isDisposed || session != _sessionGeneration) return null;
       _requests = [created, ..._requests];
       _currentRequest = created;
       _currentAnalysis = null;
       return created;
     } catch (err) {
+      if (_isDisposed || session != _sessionGeneration) return null;
       _error = serviceRequestService.getErrorMessage(err);
       return null;
     } finally {
-      _setLoading(false);
+      if (!_isDisposed && session == _sessionGeneration) _setLoading(false);
     }
   }
 
@@ -142,6 +166,7 @@ class ServiceRequestProvider extends ChangeNotifier {
     String id,
     UpdateServiceRequestDto dto,
   ) async {
+    final session = _sessionGeneration;
     final validationError = dto.validate();
     if (validationError != null) {
       _error = validationError;
@@ -154,35 +179,40 @@ class ServiceRequestProvider extends ChangeNotifier {
 
     try {
       final updated = await serviceRequestService.update(id, dto);
+      if (_isDisposed || session != _sessionGeneration) return null;
       _updateRequestInList(updated);
       if (_currentRequest?.serviceRequestId == id) {
         _currentRequest = updated;
       }
       return updated;
     } catch (err) {
+      if (_isDisposed || session != _sessionGeneration) return null;
       _error = serviceRequestService.getErrorMessage(err);
       return null;
     } finally {
-      _setLoading(false);
+      if (!_isDisposed && session == _sessionGeneration) _setLoading(false);
     }
   }
 
   Future<ServiceRequestModel?> cancelRequest(String id) async {
+    final session = _sessionGeneration;
     _setLoading(true);
     _error = null;
 
     try {
       final cancelled = await serviceRequestService.cancel(id);
+      if (_isDisposed || session != _sessionGeneration) return null;
       _updateRequestInList(cancelled);
       if (_currentRequest?.serviceRequestId == id) {
         _currentRequest = cancelled;
       }
       return cancelled;
     } catch (err) {
+      if (_isDisposed || session != _sessionGeneration) return null;
       _error = serviceRequestService.getErrorMessage(err);
       return null;
     } finally {
-      _setLoading(false);
+      if (!_isDisposed && session == _sessionGeneration) _setLoading(false);
     }
   }
 
@@ -237,8 +267,8 @@ class ServiceRequestProvider extends ChangeNotifier {
       return result;
     } catch (err) {
       final analysisError = serviceRequestService.getAnalysisErrorMessage(err);
-      final isTimeoutOrUncertain =
-          serviceRequestService.isTimeoutOrUncertainTransport(err);
+      final isTimeoutOrUncertain = serviceRequestService
+          .isTimeoutOrUncertainTransport(err);
 
       if (!isTimeoutOrUncertain) {
         // Deterministic HTTP/API error (e.g. 400, 403, 404, 409, 500)
@@ -324,21 +354,24 @@ class ServiceRequestProvider extends ChangeNotifier {
   }
 
   Future<ServiceRequestModel?> markReadyForMatching(String id) async {
+    final session = _sessionGeneration;
     _setLoading(true);
     _error = null;
 
     try {
       final updated = await serviceRequestService.markReadyForMatching(id);
+      if (_isDisposed || session != _sessionGeneration) return null;
       _updateRequestInList(updated);
       if (_currentRequest?.serviceRequestId == id) {
         _currentRequest = updated;
       }
       return updated;
     } catch (err) {
+      if (_isDisposed || session != _sessionGeneration) return null;
       _error = serviceRequestService.getErrorMessage(err);
       return null;
     } finally {
-      _setLoading(false);
+      if (!_isDisposed && session == _sessionGeneration) _setLoading(false);
     }
   }
 
@@ -347,6 +380,7 @@ class ServiceRequestProvider extends ChangeNotifier {
     int round,
     Map<String, String> answers,
   ) async {
+    final session = _sessionGeneration;
     _setLoading(true);
     _error = null;
 
@@ -354,15 +388,18 @@ class ServiceRequestProvider extends ChangeNotifier {
       final submission = SubmitClarificationAnswersDto(
         clarificationRound: round,
         answers: answers.entries
-            .map((e) => ClarificationAnswerSubmissionItemDto(
-                  clarificationId: e.key,
-                  answer: e.value,
-                ))
+            .map(
+              (e) => ClarificationAnswerSubmissionItemDto(
+                clarificationId: e.key,
+                answer: e.value,
+              ),
+            )
             .toList(),
       );
 
-      final updatedClarifications =
-          await serviceRequestService.submitClarificationAnswers(id, submission);
+      final updatedClarifications = await serviceRequestService
+          .submitClarificationAnswers(id, submission);
+      if (_isDisposed || session != _sessionGeneration) return false;
 
       if (_currentRequest != null && _currentRequest!.serviceRequestId == id) {
         _currentRequest = _currentRequest!.copyWith(
@@ -373,14 +410,16 @@ class ServiceRequestProvider extends ChangeNotifier {
 
       return true;
     } catch (err) {
+      if (_isDisposed || session != _sessionGeneration) return false;
       _error = serviceRequestService.getErrorMessage(err);
       return false;
     } finally {
-      _setLoading(false);
+      if (!_isDisposed && session == _sessionGeneration) _setLoading(false);
     }
   }
 
-  Future<ProblemUnderstandingResultModel?> submitClarificationAnswersAndReanalyze(
+  Future<ProblemUnderstandingResultModel?>
+  submitClarificationAnswersAndReanalyze(
     String id,
     int round,
     Map<String, String> answers, {

@@ -1,3 +1,5 @@
+import 'package:dio/dio.dart';
+import 'package:mobile/features/service_requests/models/service_request_attachment.dart';
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -29,6 +31,9 @@ class MockLayoutServiceRequestService extends ServiceRequestService {
 
   List<ServiceRequestModel> requests = [];
   ProblemUnderstandingResultModel? analysisResult;
+
+  @override
+  Future<List<ServiceRequestAttachment>> listAttachments(String id, {CancelToken? cancelToken}) async => [];
 
   @override
   Future<List<ServiceRequestModel>> getMyRequests() async => List.of(requests);
@@ -203,6 +208,7 @@ void main() {
         find.widgetWithText(TextFormField, 'Problem Description'),
         'Major ceiling leak in the living room after heavy rain',
       );
+      await tester.ensureVisible(find.text('Next: Location'));
       await tester.tap(find.text('Next: Location'));
       await tester.pumpAndSettle();
 
@@ -214,6 +220,7 @@ void main() {
         find.widgetWithText(TextFormField, 'Location / Address'),
         '123 Galle Road, Colombo 03',
       );
+      await tester.ensureVisible(find.text('Next: Review'));
       await tester.tap(find.text('Next: Review'));
       await tester.pumpAndSettle();
 

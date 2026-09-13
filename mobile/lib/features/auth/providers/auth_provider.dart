@@ -11,6 +11,8 @@ class AuthProvider extends ChangeNotifier {
   AuthProvider({required this.authService, required this.tokenStorage});
 
   AuthUser? _user;
+  int _sessionGeneration = 0;
+  int get sessionGeneration => _sessionGeneration;
 
   bool _isLoading = false;
 
@@ -30,6 +32,8 @@ class AuthProvider extends ChangeNotifier {
   }
 
   Future<void> initialize() async {
+    final session = _sessionGeneration;
+    final tokenGeneration = tokenStorage.generation;
     String? token;
 
     try {
@@ -38,17 +42,22 @@ class AuthProvider extends ChangeNotifier {
       return;
     }
 
-    if (token == null || token.isEmpty) {
+    if (session != _sessionGeneration || token == null || token.isEmpty) {
       return;
     }
 
     try {
-      _user = await authService.getMe();
+      final restored = await authService.getMe();
+      if (session != _sessionGeneration) return;
+      _user = restored;
+      _sessionGeneration++;
+      notifyListeners();
     } catch (_) {
+      if (session != _sessionGeneration) return;
       _user = null;
 
       try {
-        await tokenStorage.deleteToken();
+        await tokenStorage.deleteIfCurrent(token, tokenGeneration);
       } catch (_) {
         // Storage may be unavailable in a browser privacy mode.
       }
@@ -76,6 +85,7 @@ class AuthProvider extends ChangeNotifier {
       await tokenStorage.saveToken(result.token);
 
       _user = result.user;
+      _sessionGeneration++;
 
       return true;
     } catch (error) {
@@ -116,6 +126,7 @@ class AuthProvider extends ChangeNotifier {
       await tokenStorage.saveToken(result.token);
 
       _user = result.user;
+      _sessionGeneration++;
 
       return true;
     } catch (error) {
@@ -128,8 +139,12 @@ class AuthProvider extends ChangeNotifier {
   }
 
   Future<void> logout() async {
+    sessionExpired();
     await tokenStorage.deleteToken();
+  }
 
+  void sessionExpired() {
+    _sessionGeneration++;
     _user = null;
     _error = null;
 

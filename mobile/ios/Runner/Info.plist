@@ -2,6 +2,10 @@
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
 <dict>
+	<key>NSCameraUsageDescription</key>
+	<string>AssistLK uses your camera when you choose to take a problem photo for a service request.</string>
+	<key>NSPhotoLibraryUsageDescription</key>
+	<string>AssistLK lets you choose optional problem photos from your photo library.</string>
 	<key>NSLocationWhenInUseUsageDescription</key>
 	<string>AssistLK uses your location to pinpoint where service is needed for your request.</string>
 	<key>CADisableMinimumFrameDurationOnPhone</key>

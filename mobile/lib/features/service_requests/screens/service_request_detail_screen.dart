@@ -1,5 +1,10 @@
+import '../../auth/providers/auth_provider.dart';
+import '../providers/problem_photos_controller.dart';
+import '../services/problem_image_picker.dart';
+import '../widgets/problem_photos.dart';
 import '../models/location_source.dart';
 import '../widgets/location_attribution.dart';
+
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
@@ -23,10 +28,12 @@ import 'edit_service_request_screen.dart';
 
 class ServiceRequestDetailScreen extends StatefulWidget {
   final String requestId;
+  final ProblemImagePicker? imagePicker;
 
   const ServiceRequestDetailScreen({
     super.key,
     required this.requestId,
+    this.imagePicker,
   });
 
   @override
@@ -36,12 +43,42 @@ class ServiceRequestDetailScreen extends StatefulWidget {
 
 class _ServiceRequestDetailScreenState
     extends State<ServiceRequestDetailScreen> {
+  late final ProblemPhotosController _photos;
+
   @override
   void initState() {
     super.initState();
+    _photos = ProblemPhotosController(
+      requestId: widget.requestId,
+      service: context.read<ServiceRequestProvider>().serviceRequestService,
+      picker:
+          widget.imagePicker ??
+          context.read<ProblemImagePicker?>() ??
+          NativeProblemImagePicker(),
+      auth: context.read<AuthProvider?>(),
+    );
+    _photos.addListener(_photoChanged);
     WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
       context.read<ServiceRequestProvider>().loadRequestById(widget.requestId);
+      _loadPhotos();
     });
+  }
+
+  Future<void> _loadPhotos() async {
+    await _photos.load();
+    if (_photos.active) await _photos.recover();
+  }
+
+  void _photoChanged() {
+    if (mounted) setState(() {});
+  }
+
+  @override
+  void dispose() {
+    _photos.removeListener(_photoChanged);
+    _photos.dispose();
+    super.dispose();
   }
 
   String _getAiClassificationText(ServiceRequestModel request) {
@@ -54,17 +91,28 @@ class _ServiceRequestDetailScreenState
         return 'Needs more information';
       case ServiceRequestStatus.analyzed:
       case ServiceRequestStatus.readyForMatching:
-        return CanonicalServiceCategory.fromCanonicalOrDisplayName(request.category)?.displayName ??
+        return CanonicalServiceCategory.fromCanonicalOrDisplayName(
+              request.category,
+            )?.displayName ??
             (request.category.isEmpty ? 'Unclassified' : request.category);
       case ServiceRequestStatus.cancelled:
         if (request.category.isNotEmpty && request.category != 'Unclassified') {
-          return CanonicalServiceCategory.fromCanonicalOrDisplayName(request.category)?.displayName ?? request.category;
+          return CanonicalServiceCategory.fromCanonicalOrDisplayName(
+                request.category,
+              )?.displayName ??
+              request.category;
         }
         return 'Not classified';
     }
   }
 
   Future<void> _triggerAnalysis(String id) async {
+    if (!_photos.active ||
+        _photos.busy ||
+        _photos.picking ||
+        _photos.hasPending) {
+      return;
+    }
     final provider = context.read<ServiceRequestProvider>();
     final result = await provider.analyzeRequest(id);
 
@@ -98,6 +146,12 @@ class _ServiceRequestDetailScreenState
     int round,
     Map<String, String> answers,
   ) async {
+    if (!_photos.active ||
+        _photos.busy ||
+        _photos.picking ||
+        _photos.hasPending) {
+      return;
+    }
     final provider = context.read<ServiceRequestProvider>();
     final result = await provider.submitClarificationAnswersAndReanalyze(
       id,
@@ -144,13 +198,9 @@ class _ServiceRequestDetailScreenState
         ),
       );
     } else {
-      final error =
-          provider.error ?? 'Failed to mark ready for matching.';
+      final error = provider.error ?? 'Failed to mark ready for matching.';
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(error),
-          backgroundColor: AppColors.error,
-        ),
+        SnackBar(content: Text(error), backgroundColor: AppColors.error),
       );
     }
   }
@@ -194,10 +244,7 @@ class _ServiceRequestDetailScreenState
     } else {
       final error = provider.error ?? 'Failed to cancel request.';
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(error),
-          backgroundColor: AppColors.error,
-        ),
+        SnackBar(content: Text(error), backgroundColor: AppColors.error),
       );
     }
   }
@@ -212,6 +259,13 @@ class _ServiceRequestDetailScreenState
 
   @override
   Widget build(BuildContext context) {
+    if (_photos.sessionEnded) {
+      return const Scaffold(
+        body: Center(
+          child: Text('Your session has ended. Please sign in again.'),
+        ),
+      );
+    }
     final provider = context.watch<ServiceRequestProvider>();
     final request = provider.currentRequest;
     final analysis = provider.currentAnalysis;
@@ -272,7 +326,10 @@ class _ServiceRequestDetailScreenState
         ],
       ),
       body: RefreshIndicator(
-        onRefresh: () => provider.loadRequestById(widget.requestId),
+        onRefresh: () async {
+          await provider.loadRequestById(widget.requestId);
+          await _photos.load();
+        },
         child: SingleChildScrollView(
           physics: const AlwaysScrollableScrollPhysics(),
           padding: const EdgeInsets.all(AppSpacing.lg),
@@ -292,7 +349,10 @@ class _ServiceRequestDetailScreenState
                           child: Text(
                             request.category.isEmpty
                                 ? 'Unclassified Request'
-                                : (CanonicalServiceCategory.fromCanonicalOrDisplayName(request.category)?.displayName ?? request.category),
+                                : (CanonicalServiceCategory.fromCanonicalOrDisplayName(
+                                        request.category,
+                                      )?.displayName ??
+                                      request.category),
                             style: AppTextStyles.sectionHeading,
                           ),
                         ),
@@ -301,7 +361,8 @@ class _ServiceRequestDetailScreenState
                       ],
                     ),
                     if (request.status != ServiceRequestStatus.analyzed &&
-                        request.status != ServiceRequestStatus.readyForMatching) ...[
+                        request.status !=
+                            ServiceRequestStatus.readyForMatching) ...[
                       const SizedBox(height: AppSpacing.xs + 2),
                       Wrap(
                         crossAxisAlignment: WrapCrossAlignment.center,
@@ -315,8 +376,12 @@ class _ServiceRequestDetailScreenState
                             ),
                           ),
                           Text(
-                            CanonicalServiceCategory.fromCanonicalOrDisplayName(request.categoryHint)?.displayName ??
-                                (request.categoryHint == null ? 'Let AssistLK AI identify' : request.categoryHint!),
+                            CanonicalServiceCategory.fromCanonicalOrDisplayName(
+                                  request.categoryHint,
+                                )?.displayName ??
+                                (request.categoryHint == null
+                                    ? 'Let AssistLK AI identify'
+                                    : request.categoryHint!),
                             style: const TextStyle(
                               fontSize: 12,
                               fontWeight: FontWeight.w600,
@@ -378,10 +443,7 @@ class _ServiceRequestDetailScreenState
                       style: AppTextStyles.cardHeading,
                     ),
                     const SizedBox(height: AppSpacing.xs),
-                    Text(
-                      request.description,
-                      style: AppTextStyles.body,
-                    ),
+                    Text(request.description, style: AppTextStyles.body),
                     const SizedBox(height: AppSpacing.sm),
                     const Divider(color: AppColors.border, height: 1),
                     const SizedBox(height: AppSpacing.sm),
@@ -408,7 +470,9 @@ class _ServiceRequestDetailScreenState
                                   fontWeight: FontWeight.w500,
                                 ),
                               ),
-                              if (request.locationSource == LocationSource.openStreetMap) const LocationAttribution(),
+                              if (request.locationSource ==
+                                  LocationSource.openStreetMap)
+                                const LocationAttribution(),
                               if (request.latitude != null &&
                                   request.longitude != null) ...[
                                 const SizedBox(height: 2),
@@ -441,8 +505,31 @@ class _ServiceRequestDetailScreenState
               ),
               const SizedBox(height: AppSpacing.md),
 
+              RequestProblemPhotos(
+                controller: _photos,
+                editable:
+                    (request.status == ServiceRequestStatus.created ||
+                        request.status ==
+                            ServiceRequestStatus.awaitingInformation) &&
+                    !provider.isAnalyzing &&
+                    !provider.isLoading,
+                onMutation: () async {
+                  await provider.loadRequestById(widget.requestId);
+                },
+              ),
+              const SizedBox(height: AppSpacing.md),
               // Dynamic Workflow Section based on status
-              _buildStatusWorkflowSection(context, request, analysis, provider),
+              if (_photos.busy || _photos.picking || _photos.hasPending)
+                const Text(
+                  'Upload or discard selected photos before continuing with analysis.',
+                )
+              else
+                _buildStatusWorkflowSection(
+                  context,
+                  request,
+                  analysis,
+                  provider,
+                ),
             ],
           ),
         ),
@@ -488,7 +575,8 @@ class _ServiceRequestDetailScreenState
             AppButton(
               text: 'Refresh Status',
               isLoading: provider.isLoading,
-              onPressed: () => provider.loadRequestById(request.serviceRequestId),
+              onPressed: () =>
+                  provider.loadRequestById(request.serviceRequestId),
             ),
           ],
         ),
@@ -506,10 +594,7 @@ class _ServiceRequestDetailScreenState
               child: CircularProgressIndicator(strokeWidth: 2),
             ),
             SizedBox(width: AppSpacing.md),
-            Text(
-              'AssistLK AI analysis in progress',
-              style: AppTextStyles.body,
-            ),
+            Text('AssistLK AI analysis in progress', style: AppTextStyles.body),
           ],
         ),
       );
@@ -547,7 +632,8 @@ class _ServiceRequestDetailScreenState
             AppButton(
               text: 'Refresh Status',
               isLoading: provider.isLoading,
-              onPressed: () => provider.loadRequestById(request.serviceRequestId),
+              onPressed: () =>
+                  provider.loadRequestById(request.serviceRequestId),
             ),
           ],
         ),
@@ -607,12 +693,16 @@ class _ServiceRequestDetailScreenState
           isSubmitting: provider.isLoading,
           onEditDetails: () => _navigateToEdit(request),
           onReanalyze: () => _triggerAnalysis(request.serviceRequestId),
-          onSubmitAnswers: (round, answers) =>
-              _submitClarificationAnswers(request.serviceRequestId, round, answers),
+          onSubmitAnswers: (round, answers) => _submitClarificationAnswers(
+            request.serviceRequestId,
+            round,
+            answers,
+          ),
         );
 
       case ServiceRequestStatus.analyzed:
-        final displayAnalysis = analysis ??
+        final displayAnalysis =
+            analysis ??
             (request.latestAnalysis != null
                 ? ProblemUnderstandingResultModel(
                     workflowId: '',
@@ -656,7 +746,8 @@ class _ServiceRequestDetailScreenState
         );
 
       case ServiceRequestStatus.readyForMatching:
-        final displayAnalysis = analysis ??
+        final displayAnalysis =
+            analysis ??
             (request.latestAnalysis != null
                 ? ProblemUnderstandingResultModel(
                     workflowId: '',

@@ -21,13 +21,24 @@ class StepIndicator extends StatelessWidget {
         horizontal: AppSpacing.sm,
         vertical: AppSpacing.md,
       ),
-      child: Row(
-        children: [
-          for (int i = 0; i < steps.length; i++) ...[
-            _buildStepItem(i),
-            if (i < steps.length - 1) _buildDivider(i),
-          ],
-        ],
+      child: LayoutBuilder(
+        builder: (context, constraints) {
+          if (constraints.maxWidth < 400 ||
+              MediaQuery.textScalerOf(context).scale(12) > 15) {
+            return Text(
+              'Step ${currentStep + 1} of ${steps.length}: ${steps[currentStep]}',
+              style: AppTextStyles.small,
+            );
+          }
+          return Row(
+            children: [
+              for (int i = 0; i < steps.length; i++) ...[
+                _buildStepItem(i),
+                if (i < steps.length - 1) _buildDivider(i),
+              ],
+            ],
+          );
+        },
       ),
     );
   }
@@ -74,10 +85,7 @@ class StepIndicator extends StatelessWidget {
         Container(
           width: 24,
           height: 24,
-          decoration: BoxDecoration(
-            color: circleColor,
-            shape: BoxShape.circle,
-          ),
+          decoration: BoxDecoration(color: circleColor, shape: BoxShape.circle),
           child: Center(child: content),
         ),
         const SizedBox(width: AppSpacing.xs),

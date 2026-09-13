@@ -14,6 +14,10 @@ import 'package:mobile/shared/theme/app_theme.dart';
 import 'package:mobile/shared/widgets/app_image_asset.dart';
 
 class FakeAuthProvider extends ChangeNotifier implements AuthProvider {
+  @override
+  int get sessionGeneration => 0;
+  @override
+  void sessionExpired() { _user = null; notifyListeners(); }
   AuthUser? _user;
   final bool _isLoading = false;
   String? _error;

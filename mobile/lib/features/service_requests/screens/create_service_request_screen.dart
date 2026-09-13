@@ -1,3 +1,7 @@
+import '../../auth/providers/auth_provider.dart';
+import '../providers/problem_photos_controller.dart';
+import '../services/problem_image_picker.dart';
+import '../widgets/problem_photos.dart';
 import '../models/location_source.dart';
 import '../widgets/location_attribution.dart';
 import '../providers/location_selection_controller.dart';
@@ -24,12 +28,14 @@ import '../widgets/step_indicator.dart';
 import 'service_request_detail_screen.dart';
 
 class CreateServiceRequestScreen extends StatefulWidget {
+  final ProblemImagePicker? imagePicker;
   final String? initialCategoryPreference;
   final LocationService? locationService;
   final LocationGeocodingService? geocodingService;
 
   const CreateServiceRequestScreen({
     super.key,
+    this.imagePicker,
     this.initialCategoryPreference,
     this.locationService,
     this.geocodingService,
@@ -42,6 +48,7 @@ class CreateServiceRequestScreen extends StatefulWidget {
 
 class _CreateServiceRequestScreenState
     extends State<CreateServiceRequestScreen> {
+  late final ProblemPhotosController _photos;
   int _currentStep = 0;
   String? _selectedPreference;
   late final LocationSelectionController _location;
@@ -53,6 +60,16 @@ class _CreateServiceRequestScreenState
   @override
   void initState() {
     super.initState();
+    _photos = ProblemPhotosController(
+      service: context.read<ServiceRequestProvider>().serviceRequestService,
+      picker:
+          widget.imagePicker ??
+          context.read<ProblemImagePicker?>() ??
+          NativeProblemImagePicker(),
+      auth: context.read<AuthProvider?>(),
+    );
+    _photos.addListener(_photoChanged);
+    _photos.recover();
     _selectedPreference = widget.initialCategoryPreference;
     _location = LocationSelectionController(
       gps: widget.locationService ?? GeolocatorLocationService(),
@@ -67,8 +84,14 @@ class _CreateServiceRequestScreenState
     );
   }
 
+  void _photoChanged() {
+    if (mounted) setState(() {});
+  }
+
   @override
   void dispose() {
+    _photos.removeListener(_photoChanged);
+    _photos.dispose();
     _descriptionController.dispose();
     _location.dispose();
     super.dispose();
@@ -240,7 +263,7 @@ class _CreateServiceRequestScreenState
   }
 
   Future<void> _submit() async {
-    if (_location.validate() != null) return;
+    if (_photos.busy || !_photos.active || _location.validate() != null) return;
     final provider = context.read<ServiceRequestProvider>();
     final canonicalHint = CanonicalServiceCategory.toCanonicalCategoryHint(
       _selectedPreference,
@@ -254,55 +277,63 @@ class _CreateServiceRequestScreenState
       categoryHint: canonicalHint,
     );
 
-    final created = await provider.createRequest(dto);
-
-    if (!mounted) return;
-
-    if (created != null) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Service request created successfully!'),
-          backgroundColor: AppColors.success,
-        ),
-      );
-
-      // Navigate to detail screen so customer can trigger AI analysis
-      Navigator.of(context).pushReplacement(
-        MaterialPageRoute(
-          builder: (_) =>
-              ServiceRequestDetailScreen(requestId: created.serviceRequestId),
-        ),
-      );
-    } else {
-      final errorMessage =
-          provider.error ?? 'Failed to create request. Please try again.';
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(errorMessage), backgroundColor: AppColors.error),
-      );
+    final complete = await _photos.submit(
+      create: () => provider.createRequest(dto),
+    );
+    if (!mounted || !_photos.active) return;
+    if (complete) {
+      _openCreatedRequest();
+    } else if (_photos.requestId == null && provider.error != null) {
+      ScaffoldMessenger.of(context)
+          .showSnackBar(SnackBar(content: Text(provider.error!)));
     }
+  }
+
+  void _openCreatedRequest() {
+    final id = _photos.requestId;
+    if (id == null || !_photos.active) return;
+    _photos.continueWithoutFailed();
+    Navigator.of(context).pushReplacement(
+      MaterialPageRoute(
+        builder: (_) => ServiceRequestDetailScreen(requestId: id),
+      ),
+    );
   }
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(title: const Text('Create Service Request')),
-      body: SafeArea(
-        child: Column(
-          children: [
-            StepIndicator(currentStep: _currentStep),
-            Expanded(
-              child: SingleChildScrollView(
-                padding: const EdgeInsets.all(AppSpacing.lg),
-                child: _buildCurrentStep(context),
+    return PopScope(
+      canPop: !_photos.busy,
+      child: Scaffold(
+        appBar: AppBar(title: const Text('Create Service Request')),
+        body: SafeArea(
+          child: Column(
+            children: [
+              StepIndicator(currentStep: _currentStep),
+              Expanded(
+                child: SingleChildScrollView(
+                  padding: const EdgeInsets.all(AppSpacing.lg),
+                  child: _buildCurrentStep(context),
+                ),
               ),
-            ),
-          ],
+            ],
+          ),
         ),
       ),
     );
   }
 
   Widget _buildCurrentStep(BuildContext context) {
+    if (_photos.sessionEnded) {
+      return const Text('Your session has ended. Please sign in again.');
+    }
+    if (_photos.requestId != null) {
+      return PhotoUploadProgress(
+        controller: _photos,
+        onContinue: _openCreatedRequest,
+        onRetry: _submit,
+      );
+    }
     switch (_currentStep) {
       case 0:
         return _buildDetailsStep();
@@ -335,57 +366,66 @@ class _CreateServiceRequestScreenState
               borderRadius: BorderRadius.circular(AppRadius.large),
               border: Border.all(color: AppColors.border),
             ),
-            child: Row(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Container(
-                  width: 44,
-                  height: 44,
-                  padding: const EdgeInsets.all(AppSpacing.xs),
-                  decoration: BoxDecoration(
-                    color: selectedCategory != null
-                        ? AppColors.primarySurface
-                        : AppColors.aiSurface,
-                    borderRadius: BorderRadius.circular(AppRadius.medium),
-                  ),
-                  child: Center(
-                    child: AppImageAsset(
-                      assetPath: selectedCategory != null
-                          ? _getCategoryAssetPath(selectedCategory)
-                          : AppAssets.aiDiagnosisSpark,
-                      width: 32,
-                      height: 32,
-                      fit: BoxFit.contain,
-                      fallbackIcon:
-                          selectedCategory?.icon ?? Icons.auto_awesome_rounded,
-                      semanticLabel:
-                          selectedCategory?.displayName ??
-                          'AssistLK AI Problem Understanding',
+                Row(
+                  children: [
+                    Container(
+                      width: 44,
+                      height: 44,
+                      padding: const EdgeInsets.all(AppSpacing.xs),
+                      decoration: BoxDecoration(
+                        color: selectedCategory != null
+                            ? AppColors.primarySurface
+                            : AppColors.aiSurface,
+                        borderRadius: BorderRadius.circular(AppRadius.medium),
+                      ),
+                      child: Center(
+                        child: AppImageAsset(
+                          assetPath: selectedCategory != null
+                              ? _getCategoryAssetPath(selectedCategory)
+                              : AppAssets.aiDiagnosisSpark,
+                          width: 32,
+                          height: 32,
+                          fit: BoxFit.contain,
+                          fallbackIcon:
+                              selectedCategory?.icon ??
+                              Icons.auto_awesome_rounded,
+                          semanticLabel:
+                              selectedCategory?.displayName ??
+                              'AssistLK AI Problem Understanding',
+                        ),
+                      ),
                     ),
-                  ),
-                ),
-                const SizedBox(width: AppSpacing.md),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      const Text(
-                        'Service preference',
-                        style: AppTextStyles.small,
+                    const SizedBox(width: AppSpacing.md),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          const Text(
+                            'Service preference',
+                            style: AppTextStyles.small,
+                          ),
+                          const SizedBox(height: 2),
+                          Text(
+                            selectedCategory?.displayName ??
+                                'Let AssistLK AI identify',
+                            style: AppTextStyles.cardHeading,
+                          ),
+                        ],
                       ),
-                      const SizedBox(height: 2),
-                      Text(
-                        selectedCategory?.displayName ??
-                            'Let AssistLK AI identify',
-                        style: AppTextStyles.cardHeading,
-                      ),
-                    ],
-                  ),
+                    ),
+                  ],
                 ),
-                TextButton(
-                  onPressed: _showChangePreferenceSheet,
-                  child: Text(
-                    selectedCategory != null ? 'Change' : 'Choose preference',
-                    style: const TextStyle(fontWeight: FontWeight.w600),
+                Align(
+                  alignment: Alignment.centerRight,
+                  child: TextButton(
+                    onPressed: _showChangePreferenceSheet,
+                    child: Text(
+                      selectedCategory != null ? 'Change' : 'Choose preference',
+                      style: const TextStyle(fontWeight: FontWeight.w600),
+                    ),
                   ),
                 ),
               ],
@@ -425,6 +465,8 @@ class _CreateServiceRequestScreenState
           ),
           const SizedBox(height: AppSpacing.xl),
 
+          DraftProblemPhotos(controller: _photos),
+          const SizedBox(height: AppSpacing.md),
           AppButton(text: 'Next: Location', onPressed: _nextFromDetails),
         ],
       ),
@@ -460,7 +502,6 @@ class _CreateServiceRequestScreenState
   );
 
   Widget _buildReviewStep(BuildContext context) {
-    final provider = context.watch<ServiceRequestProvider>();
     final selectedCategory =
         CanonicalServiceCategory.fromCanonicalOrDisplayName(
           _selectedPreference,
@@ -577,6 +618,8 @@ class _CreateServiceRequestScreenState
         ),
         const SizedBox(height: AppSpacing.md),
 
+        DraftProblemPhotos(controller: _photos, review: true),
+        const SizedBox(height: AppSpacing.md),
         // AI Confirmation Disclosure Banner
         Container(
           width: double.infinity,
@@ -613,7 +656,7 @@ class _CreateServiceRequestScreenState
           children: [
             Expanded(
               child: OutlinedButton(
-                onPressed: provider.isLoading ? null : _backToLocation,
+                onPressed: _photos.busy ? null : _backToLocation,
                 child: const Text('Back'),
               ),
             ),
@@ -621,7 +664,7 @@ class _CreateServiceRequestScreenState
             Expanded(
               child: AppButton(
                 text: 'Submit Request',
-                isLoading: provider.isLoading,
+                isLoading: _photos.busy,
                 onPressed: _submit,
               ),
             ),

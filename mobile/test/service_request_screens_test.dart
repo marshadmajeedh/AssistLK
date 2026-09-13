@@ -1,3 +1,4 @@
+import 'package:mobile/features/service_requests/models/service_request_attachment.dart';
 import 'mocks/mock_location_geocoding_service.dart';
 import 'dart:async';
 import 'dart:ui';
@@ -43,6 +44,9 @@ class MockServiceRequestService extends ServiceRequestService {
   List<ServiceRequestModel>? getByIdResponses;
   CreateServiceRequestDto? lastCreateDto;
   UpdateServiceRequestDto? lastUpdateDto;
+
+  @override
+  Future<List<ServiceRequestAttachment>> listAttachments(String id, {CancelToken? cancelToken}) async => [];
 
   @override
   Future<List<ServiceRequestModel>> getMyRequests() async => List.of(mockRequests);
@@ -366,6 +370,7 @@ void main() {
       expect(find.text('Next: Location'), findsOneWidget);
 
       // Step 1: Tap Next without typing description -> shows validation error
+      await tester.ensureVisible(find.text('Next: Location'));
       await tester.tap(find.text('Next: Location'));
       await tester.pumpAndSettle();
 
@@ -376,6 +381,7 @@ void main() {
         find.widgetWithText(TextFormField, 'Problem Description'),
         'Short',
       );
+      await tester.ensureVisible(find.text('Next: Location'));
       await tester.tap(find.text('Next: Location'));
       await tester.pumpAndSettle();
 
@@ -388,6 +394,7 @@ void main() {
       );
 
       // Advance to Step 2: Location
+      await tester.ensureVisible(find.text('Next: Location'));
       await tester.tap(find.text('Next: Location'));
       await tester.pumpAndSettle();
 
@@ -395,6 +402,7 @@ void main() {
       expect(find.text('Next: Review'), findsOneWidget);
 
       // Step 2: Tap Next without typing location -> shows validation error
+      await tester.ensureVisible(find.text('Next: Review'));
       await tester.tap(find.text('Next: Review'));
       await tester.pumpAndSettle();
 
@@ -407,6 +415,7 @@ void main() {
       );
 
       // Advance to Step 3: Review
+      await tester.ensureVisible(find.text('Next: Review'));
       await tester.tap(find.text('Next: Review'));
       await tester.pumpAndSettle();
 
@@ -443,6 +452,7 @@ void main() {
         find.widgetWithText(TextFormField, 'Problem Description'),
         'Broken pipe leaking continuously under kitchen sink',
       );
+      await tester.ensureVisible(find.text('Next: Location'));
       await tester.tap(find.text('Next: Location'));
       await tester.pumpAndSettle();
 
@@ -463,12 +473,14 @@ void main() {
       );
 
       // Navigate forward to Step 2 again
+      await tester.ensureVisible(find.text('Next: Location'));
       await tester.tap(find.text('Next: Location'));
       await tester.pumpAndSettle();
 
       expect(find.text('45 Havelock Road, Colombo 05'), findsOneWidget);
 
       // Advance to Step 3
+      await tester.ensureVisible(find.text('Next: Review'));
       await tester.tap(find.text('Next: Review'));
       await tester.pumpAndSettle();
 
@@ -620,6 +632,7 @@ void main() {
       expect(find.textContaining('Gemini'), findsNothing);
 
       // Trigger analysis
+      await tester.ensureVisible(find.text('Analyze with AssistLK AI'));
       await tester.tap(find.text('Analyze with AssistLK AI'));
       await tester.pumpAndSettle();
 
@@ -678,6 +691,7 @@ void main() {
       expect(find.text('Analyze with AssistLK AI'), findsOneWidget);
 
       // Tap Analyze with AssistLK AI
+      await tester.ensureVisible(find.text('Analyze with AssistLK AI'));
       await tester.tap(find.text('Analyze with AssistLK AI'));
       await tester.pump();
 
@@ -741,6 +755,7 @@ void main() {
       );
       await tester.pumpAndSettle();
 
+      await tester.ensureVisible(find.text('Analyze with AssistLK AI'));
       await tester.tap(find.text('Analyze with AssistLK AI'));
       await tester.pumpAndSettle();
 
@@ -860,6 +875,7 @@ void main() {
       mockService.shouldAnalyzeThrow = true;
       mockService.shouldGetByIdThrow = true;
 
+      await tester.ensureVisible(find.text('Analyze with AssistLK AI'));
       await tester.tap(find.text('Analyze with AssistLK AI'));
       await tester.pumpAndSettle();
 
@@ -894,6 +910,7 @@ void main() {
       mockService.shouldAnalyzeThrow = true;
       mockService.shouldGetByIdThrow = true;
 
+      await tester.ensureVisible(find.text('Analyze with AssistLK AI'));
       await tester.tap(find.text('Analyze with AssistLK AI'));
       await tester.pumpAndSettle();
 
@@ -902,6 +919,7 @@ void main() {
       // Now network recovers and backend returns Created
       mockService.shouldGetByIdThrow = false;
 
+      await tester.ensureVisible(find.text('Refresh Status'));
       await tester.tap(find.text('Refresh Status'));
       await tester.pumpAndSettle();
 
@@ -932,6 +950,7 @@ void main() {
       mockService.shouldAnalyzeThrow = true;
       mockService.shouldGetByIdThrow = true;
 
+      await tester.ensureVisible(find.text('Analyze with AssistLK AI'));
       await tester.tap(find.text('Analyze with AssistLK AI'));
       await tester.pumpAndSettle();
 
@@ -941,6 +960,7 @@ void main() {
         sample.copyWith(status: ServiceRequestStatus.analyzing),
       ];
 
+      await tester.ensureVisible(find.text('Refresh Status'));
       await tester.tap(find.text('Refresh Status'));
       await tester.pump();
       await tester.pump();
@@ -973,6 +993,7 @@ void main() {
       mockService.shouldAnalyzeThrow = true;
       mockService.shouldGetByIdThrow = true;
 
+      await tester.ensureVisible(find.text('Analyze with AssistLK AI'));
       await tester.tap(find.text('Analyze with AssistLK AI'));
       await tester.pumpAndSettle();
 
@@ -982,6 +1003,7 @@ void main() {
         sample.copyWith(status: ServiceRequestStatus.awaitingInformation),
       ];
 
+      await tester.ensureVisible(find.text('Refresh Status'));
       await tester.tap(find.text('Refresh Status'));
       await tester.pumpAndSettle();
 
@@ -1026,6 +1048,7 @@ void main() {
         ),
       ];
 
+      await tester.ensureVisible(find.text('Analyze with AssistLK AI'));
       await tester.tap(find.text('Analyze with AssistLK AI'));
       await tester.pumpAndSettle();
 
@@ -1070,6 +1093,7 @@ void main() {
         type: DioExceptionType.receiveTimeout,
       );
 
+      await tester.ensureVisible(find.text('Analyze with AssistLK AI'));
       await tester.tap(find.text('Analyze with AssistLK AI'));
       await tester.pump();
       await tester.pump();
@@ -1118,6 +1142,7 @@ void main() {
         type: DioExceptionType.receiveTimeout,
       );
 
+      await tester.ensureVisible(find.text('Analyze with AssistLK AI'));
       await tester.tap(find.text('Analyze with AssistLK AI'));
       await tester.pump();
       await tester.pump();
@@ -1135,6 +1160,7 @@ void main() {
         ),
       ];
 
+      await tester.ensureVisible(find.text('Refresh Status'));
       await tester.tap(find.text('Refresh Status'));
       await tester.pumpAndSettle();
 
@@ -1195,6 +1221,7 @@ void main() {
         find.widgetWithText(TextFormField, 'Problem Description'),
         'Bathroom pipe leaking under the washbasin',
       );
+      await tester.ensureVisible(find.text('Next: Location'));
       await tester.tap(find.text('Next: Location'));
       await tester.pumpAndSettle();
 
@@ -1202,6 +1229,7 @@ void main() {
         find.widgetWithText(TextFormField, 'Location / Address'),
         'No 10 Main Street, Kandy',
       );
+      await tester.ensureVisible(find.text('Next: Review'));
       await tester.tap(find.text('Next: Review'));
       await tester.pumpAndSettle();
 
@@ -1227,6 +1255,7 @@ void main() {
         find.widgetWithText(TextFormField, 'Problem Description'),
         'Car engine stalling while idling at traffic lights',
       );
+      await tester.ensureVisible(find.text('Next: Location'));
       await tester.tap(find.text('Next: Location'));
       await tester.pumpAndSettle();
 
@@ -1234,6 +1263,7 @@ void main() {
         find.widgetWithText(TextFormField, 'Location / Address'),
         'Galle Road, Bambalapitiya',
       );
+      await tester.ensureVisible(find.text('Next: Review'));
       await tester.tap(find.text('Next: Review'));
       await tester.pumpAndSettle();
 
@@ -1260,12 +1290,14 @@ void main() {
         find.widgetWithText(TextFormField, 'Problem Description'),
         'Short circuit tripped all main breaker switches',
       );
+      await tester.ensureVisible(find.text('Next: Location'));
       await tester.tap(find.text('Next: Location'));
       await tester.pumpAndSettle();
       await tester.enterText(
         find.widgetWithText(TextFormField, 'Location / Address'),
         'Colombo 07',
       );
+      await tester.ensureVisible(find.text('Next: Review'));
       await tester.tap(find.text('Next: Review'));
       await tester.pumpAndSettle();
 
@@ -1287,12 +1319,14 @@ void main() {
         find.widgetWithText(TextFormField, 'Problem Description'),
         'Refrigerator compressor not turning on properly',
       );
+      await tester.ensureVisible(find.text('Next: Location'));
       await tester.tap(find.text('Next: Location'));
       await tester.pumpAndSettle();
       await tester.enterText(
         find.widgetWithText(TextFormField, 'Location / Address'),
         'Colombo 04',
       );
+      await tester.ensureVisible(find.text('Next: Review'));
       await tester.tap(find.text('Next: Review'));
       await tester.pumpAndSettle();
 
@@ -1314,6 +1348,7 @@ void main() {
         find.widgetWithText(TextFormField, 'Problem Description'),
         'Strange buzzing sound in the wall that happens at night',
       );
+      await tester.ensureVisible(find.text('Next: Location'));
       await tester.tap(find.text('Next: Location'));
       await tester.pumpAndSettle();
 
@@ -1321,6 +1356,7 @@ void main() {
         find.widgetWithText(TextFormField, 'Location / Address'),
         'Rajagiriya',
       );
+      await tester.ensureVisible(find.text('Next: Review'));
       await tester.tap(find.text('Next: Review'));
       await tester.pumpAndSettle();
 
@@ -2026,6 +2062,7 @@ void main() {
         find.widgetWithText(TextFormField, 'Problem Description'),
         'Major ceiling leak in the living room after heavy rain',
       );
+      await tester.ensureVisible(find.text('Next: Location'));
       await tester.tap(find.text('Next: Location'));
       await tester.pumpAndSettle();
 
@@ -2035,6 +2072,7 @@ void main() {
         find.widgetWithText(TextFormField, 'Location / Address'),
         '123 Galle Road, Colombo 03',
       );
+      await tester.ensureVisible(find.text('Next: Review'));
       await tester.tap(find.text('Next: Review'));
       await tester.pumpAndSettle();
 
@@ -2068,6 +2106,7 @@ void main() {
         find.widgetWithText(TextFormField, 'Problem Description'),
         'Water leaking under bathroom sink pipe heavily',
       );
+      await tester.ensureVisible(find.text('Next: Location'));
       await tester.tap(find.text('Next: Location'));
       await tester.pumpAndSettle();
 
@@ -2086,6 +2125,7 @@ void main() {
       await tester.pumpAndSettle();
       await tester.ensureVisible(find.byKey(const Key('edit_keep_gps_button')));
       await tester.tap(find.byKey(const Key('edit_keep_gps_button')));
+      await tester.ensureVisible(find.text('Next: Review'));
       await tester.ensureVisible(find.text('Next: Review'));
       await tester.tap(find.text('Next: Review'));
       await tester.pumpAndSettle();
@@ -2116,6 +2156,7 @@ void main() {
         find.widgetWithText(TextFormField, 'Problem Description'),
         'Water leaking under bathroom sink pipe heavily',
       );
+      await tester.ensureVisible(find.text('Next: Location'));
       await tester.tap(find.text('Next: Location'));
       await tester.pumpAndSettle();
 
@@ -2135,6 +2176,7 @@ void main() {
         find.widgetWithText(TextFormField, 'Location / Address'),
         'Manual address without GPS',
       );
+      await tester.ensureVisible(find.text('Next: Review'));
       await tester.tap(find.text('Next: Review'));
       await tester.pumpAndSettle();
 
@@ -2162,6 +2204,7 @@ void main() {
         find.widgetWithText(TextFormField, 'Problem Description'),
         'Water leaking under bathroom sink pipe heavily',
       );
+      await tester.ensureVisible(find.text('Next: Location'));
       await tester.tap(find.text('Next: Location'));
       await tester.pumpAndSettle();
 
@@ -2178,6 +2221,7 @@ void main() {
         find.widgetWithText(TextFormField, 'Location / Address'),
         '45 Havelock Road, Colombo 05',
       );
+      await tester.ensureVisible(find.text('Next: Review'));
       await tester.tap(find.text('Next: Review'));
       await tester.pumpAndSettle();
 
@@ -2203,6 +2247,7 @@ void main() {
         find.widgetWithText(TextFormField, 'Problem Description'),
         'Main switchboard power trip continuously',
       );
+      await tester.ensureVisible(find.text('Next: Location'));
       await tester.tap(find.text('Next: Location'));
       await tester.pumpAndSettle();
 
@@ -2230,6 +2275,7 @@ void main() {
         find.widgetWithText(TextFormField, 'Problem Description'),
         'Main switchboard power trip continuously',
       );
+      await tester.ensureVisible(find.text('Next: Location'));
       await tester.tap(find.text('Next: Location'));
       await tester.pumpAndSettle();
 
@@ -2259,6 +2305,7 @@ void main() {
         find.widgetWithText(TextFormField, 'Problem Description'),
         'Main switchboard power trip continuously',
       );
+      await tester.ensureVisible(find.text('Next: Location'));
       await tester.tap(find.text('Next: Location'));
       await tester.pumpAndSettle();
 
@@ -2283,6 +2330,7 @@ void main() {
         find.widgetWithText(TextFormField, 'Problem Description'),
         'Main switchboard power trip continuously',
       );
+      await tester.ensureVisible(find.text('Next: Location'));
       await tester.tap(find.text('Next: Location'));
       await tester.pumpAndSettle();
 
@@ -2310,6 +2358,7 @@ void main() {
         find.widgetWithText(TextFormField, 'Problem Description'),
         'Vehicle radiator overheating on roadside',
       );
+      await tester.ensureVisible(find.text('Next: Location'));
       await tester.tap(find.text('Next: Location'));
       await tester.pumpAndSettle();
 
@@ -2323,6 +2372,7 @@ void main() {
       await tester.pumpAndSettle();
       await tester.ensureVisible(find.byKey(const Key('edit_keep_gps_button')));
       await tester.tap(find.byKey(const Key('edit_keep_gps_button')));
+      await tester.ensureVisible(find.text('Next: Review'));
       await tester.ensureVisible(find.text('Next: Review'));
       await tester.tap(find.text('Next: Review'));
       await tester.pumpAndSettle();

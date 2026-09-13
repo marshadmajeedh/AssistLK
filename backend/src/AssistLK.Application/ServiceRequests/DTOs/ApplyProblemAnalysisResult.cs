@@ -5,6 +5,8 @@ namespace AssistLK.Application.ServiceRequests.DTOs;
 
 public class ApplyProblemAnalysisResult
 {
+    public long? EvidenceRevision { get; set; }
+
     public Guid ServiceRequestId { get; set; }
 
     [Required]

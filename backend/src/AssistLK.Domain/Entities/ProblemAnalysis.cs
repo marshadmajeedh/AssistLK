@@ -2,6 +2,8 @@ namespace AssistLK.Domain.Entities;
 
 public class ProblemAnalysis : BaseEntity
 {
+    public long EvidenceRevision { get; set; } = 1;
+
     public Guid ServiceRequestId { get; set; }
 
     public ServiceRequest ServiceRequest { get; set; } = null!;

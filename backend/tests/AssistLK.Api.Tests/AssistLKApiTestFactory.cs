@@ -86,6 +86,8 @@ public class AssistLKApiTestFactory : WebApplicationFactory<Program>
             }
 
             services.AddSingleton<IProblemUnderstandingClient>(FakeAgentClient);
+            services.AddSingleton<AssistLK.Application.Attachments.IServiceRequestAttachmentStorage,
+                AssistLK.Tests.Shared.FakeAttachmentStorage>();
         });
     }
 

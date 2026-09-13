@@ -104,6 +104,7 @@ public class ProblemUnderstandingWorkflowService
 
         var input = new ProblemUnderstandingInput
         {
+            EvidenceRevision = serviceRequest.EvidenceRevision,
             ServiceRequestId = serviceRequest.ServiceRequestId,
             Description = serviceRequest.Description,
             LocationText = serviceRequest.LocationText,
@@ -158,8 +159,11 @@ public class ProblemUnderstandingWorkflowService
                 cancellationToken);
 
             // 3. Domain state transition: Created/AwaitingInformation -> Analyzing
-            await _serviceRequestService.BeginAnalysisAsync(input.ServiceRequestId, cancellationToken);
+            var begun = await _serviceRequestService.BeginAnalysisAsync(input.ServiceRequestId, cancellationToken);
             analysisBegun = true;
+            if (input.EvidenceRevision.HasValue && input.EvidenceRevision != begun.EvidenceRevision)
+                throw new ConflictException("Request evidence changed before analysis. Refresh and retry.");
+            input.EvidenceRevision = begun.EvidenceRevision;
 
             // 4. Start agent execution
             execution = await _workflowService.StartExecutionAsync(
@@ -214,6 +218,7 @@ public class ProblemUnderstandingWorkflowService
             var applyResult = new ApplyProblemAnalysisResult
             {
                 ServiceRequestId = input.ServiceRequestId,
+                EvidenceRevision = input.EvidenceRevision,
                 Category = output.Category,
                 DetectedProblem = output.ProblemSummary,
                 Confidence = output.Confidence,

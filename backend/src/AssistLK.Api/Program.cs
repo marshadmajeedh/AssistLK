@@ -57,6 +57,14 @@ var jwtAudience =
 // -----------------------------
 
 builder.Services.AddInfrastructure(connectionString);
+builder.Services.AddSingleton<AssistLK.Application.Attachments.IServiceRequestAttachmentStorage>(sp =>
+{
+    var options = new AssistLK.Infrastructure.Attachments.AttachmentStorageOptions();
+    sp.GetRequiredService<IConfiguration>().GetSection("AttachmentStorage").Bind(options);
+    var environment = sp.GetRequiredService<IWebHostEnvironment>();
+    return new AssistLK.Infrastructure.Attachments.PrivateFileAttachmentStorage(
+        options.Resolve(environment.ContentRootPath, environment.WebRootPath));
+});
 
 builder.Services
     .AddControllers()
@@ -301,6 +309,9 @@ builder.Services.AddHealthChecks();
 
 
 var app = builder.Build();
+// Test hosts substitute fake storage and must never create the developer's private directory.
+if (!app.Environment.IsEnvironment("Testing"))
+    _ = app.Services.GetRequiredService<AssistLK.Application.Attachments.IServiceRequestAttachmentStorage>();
 
 
 // -----------------------------

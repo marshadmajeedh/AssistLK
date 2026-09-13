@@ -169,6 +169,12 @@ public class ServiceRequestService : IServiceRequestService
             }
         }
 
+        CanonicalServiceCategories.IsValidHint(request.CategoryHint, out var revisionHint);
+        if (descriptionChanged || serviceRequest.CategoryHint != revisionHint ||
+            serviceRequest.LocationText != request.LocationText.Trim() ||
+            serviceRequest.Latitude != request.Latitude || serviceRequest.Longitude != request.Longitude)
+            serviceRequest.EvidenceRevision = checked(serviceRequest.EvidenceRevision + 1);
+
         serviceRequest.Description = request.Description.Trim();
         serviceRequest.LocationText = request.LocationText.Trim();
         serviceRequest.LocationSource = request.LocationSource;
@@ -232,9 +238,13 @@ public class ServiceRequestService : IServiceRequestService
                 "Problem analysis cannot be applied in the current status.");
         }
 
+        if (result.EvidenceRevision.HasValue && result.EvidenceRevision.Value != serviceRequest.EvidenceRevision)
+            throw new ConflictException("Analysis was produced for outdated request evidence.");
+
         var analysis = new ProblemAnalysis
         {
             ServiceRequestId = serviceRequest.Id,
+            EvidenceRevision = result.EvidenceRevision ?? serviceRequest.EvidenceRevision,
             DetectedProblem = result.DetectedProblem.Trim(),
             Confidence = result.Confidence,
             AgentName = result.AgentName.Trim()
@@ -509,6 +519,9 @@ public class ServiceRequestService : IServiceRequestService
                 "Service request must have at least one problem analysis to be marked ready for matching.");
         }
 
+        if (latestAnalysis.EvidenceRevision != serviceRequest.EvidenceRevision)
+            throw new ConflictException("The latest analysis is outdated. Re-analysis is required.");
+
         if (latestAnalysis.Confidence <= 0m || latestAnalysis.Confidence > 1m)
         {
             throw new ConflictException(
@@ -594,6 +607,8 @@ public class ServiceRequestService : IServiceRequestService
             }
         }
 
+        if (actionableQuestions.Any(q => q.Answer != submittedAnswers[q.Id]))
+            serviceRequest.EvidenceRevision = checked(serviceRequest.EvidenceRevision + 1);
         var now = DateTime.UtcNow;
         foreach (var q in actionableQuestions)
         {
@@ -831,6 +846,7 @@ public class ServiceRequestService : IServiceRequestService
         return new ServiceRequestResponse
         {
             ServiceRequestId = serviceRequest.Id,
+            EvidenceRevision = serviceRequest.EvidenceRevision,
             CustomerId = serviceRequest.CustomerId,
             CategoryHint = serviceRequest.CategoryHint,
             Category = serviceRequest.Category,

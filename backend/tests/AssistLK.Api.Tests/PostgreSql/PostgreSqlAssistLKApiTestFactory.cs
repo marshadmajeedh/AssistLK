@@ -79,6 +79,8 @@ public class PostgreSqlAssistLKApiTestFactory : WebApplicationFactory<Program>
             }
 
             services.AddSingleton<IProblemUnderstandingClient>(FakeAgentClient);
+            services.AddSingleton<AssistLK.Application.Attachments.IServiceRequestAttachmentStorage,
+                AssistLK.Tests.Shared.FakeAttachmentStorage>();
         });
     }
 

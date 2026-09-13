@@ -4,6 +4,8 @@ namespace AssistLK.Domain.Entities;
 
 public class ServiceRequest : BaseEntity
 {
+    public long EvidenceRevision { get; set; } = 1;
+
     public Guid CustomerId { get; set; }
 
     public User Customer { get; set; } = null!;
@@ -25,6 +27,8 @@ public class ServiceRequest : BaseEntity
     public ServiceRequestUrgency Urgency { get; set; }
 
     public ServiceRequestStatus Status { get; set; } = ServiceRequestStatus.Created;
+
+    public ICollection<ServiceRequestAttachment> Attachments { get; set; } = new List<ServiceRequestAttachment>();
 
     public ICollection<ProblemAnalysis> ProblemAnalyses { get; set; }
         = new List<ProblemAnalysis>();

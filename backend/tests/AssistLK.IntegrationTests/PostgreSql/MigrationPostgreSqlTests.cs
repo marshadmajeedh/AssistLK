@@ -44,7 +44,8 @@ public class MigrationPostgreSqlTests
                 "AddServiceRequestAndProblemAnalysis",
                 "AddCategoryHintToServiceRequests",
                 "AddServiceRequestClarifications",
-                "AddServiceRequestLocationSource"
+                "AddServiceRequestLocationSource",
+                "AddServiceRequestAttachmentsAndEvidenceRevision"
             };
 
             Assert.Equal(expectedMigrations.Length, appliedMigrations.Count);
@@ -62,6 +63,7 @@ public class MigrationPostgreSqlTests
                 "ServiceRequests",
                 "ProblemAnalyses",
                 "ServiceRequestClarifications",
+                "ServiceRequestAttachments",
                 "AgentWorkflows",
                 "AgentExecutions",
                 "AgentExecutionMetrics",

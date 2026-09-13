@@ -73,6 +73,16 @@ public class Component1EndToEndPostgreSqlTests : PostgreSqlIntegrationTestBase
             };
             await context.ServiceRequests.AddAsync(req);
             await context.SaveChangesAsync();
+            // Upload evidence before the existing text-only workflow; Phase 1 must persist
+            // its revision without leaking the normalized binary or storage metadata into audit input.
+            var storage = new AssistLK.Tests.Shared.FakeAttachmentStorage();
+            var attachments = new AssistLK.Application.Attachments.ServiceRequestAttachmentService(
+                new ServiceRequestAttachmentRepository(context), storage,
+                new AssistLK.Infrastructure.Attachments.AttachmentImageNormalizer(),
+                NullLogger<AssistLK.Application.Attachments.ServiceRequestAttachmentService>.Instance);
+            using var photo = new ImageMagick.MagickImage(ImageMagick.MagickColors.Blue, 10, 10);
+            await attachments.UploadAsync(req.Id, customer.Id,
+                new MemoryStream(photo.ToByteArray(ImageMagick.MagickFormat.Jpeg)), "photo.jpg", "image/jpeg");
         }
 
         // 2. Execute full Component 1 Workflow backed by real PostgreSQL
@@ -103,6 +113,8 @@ public class Component1EndToEndPostgreSqlTests : PostgreSqlIntegrationTestBase
 
             Assert.Single(savedRequest.ProblemAnalyses);
             var savedAnalysis = savedRequest.ProblemAnalyses.First();
+            Assert.Equal(2, savedRequest.EvidenceRevision);
+            Assert.Equal(savedRequest.EvidenceRevision, savedAnalysis.EvidenceRevision);
             Assert.NotEmpty(savedAnalysis.DetectedProblem);
             Assert.True(savedAnalysis.Confidence >= 0.80m);
             Assert.Equal("ProblemUnderstandingAgent", savedAnalysis.AgentName);
@@ -131,6 +143,13 @@ public class Component1EndToEndPostgreSqlTests : PostgreSqlIntegrationTestBase
             Assert.NotNull(workflowRecord);
             Assert.Equal("Completed", workflowRecord.Status);
             Assert.NotEmpty(workflowRecord.Executions);
+            foreach (var execution in workflowRecord.Executions)
+            {
+                using var input = System.Text.Json.JsonDocument.Parse(execution.Input!);
+                Assert.Equal(2, input.RootElement.GetProperty("EvidenceRevision").GetInt64());
+                var allowed = new[] { "EvidenceRevision", "ServiceRequestId", "Description", "LocationText", "Latitude", "Longitude", "CategoryHint", "ClarificationHistory" };
+                Assert.All(input.RootElement.EnumerateObject(), property => Assert.Contains(property.Name, allowed));
+            }
             Assert.NotEmpty(workflowRecord.AuditLogs);
 
             // Verify AgentMemory keys recorded in PostgreSQL

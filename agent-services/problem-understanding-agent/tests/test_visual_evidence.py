@@ -76,10 +76,19 @@ class CapableStub(OfflineSimulationProvider):
     def supports_images(self):
         return True
 
+    async def generate_problem_understanding(self, prompt, system_instruction, visual_evidence=None):
+        result = await self._generate_text_result(prompt, system_instruction)
+        result.additional_information = {}
+        if visual_evidence:
+            result = result.model_copy(update={"vision_status": "used",
+                "attachment_ids_used": [i.attachment_id for i in visual_evidence],
+                "visual_limitations": ["The exact cause is not visible."]})
+        return result
+
 
 @pytest.mark.parametrize("provider", [OfflineSimulationProvider(), GeminiProvider("fake"), OpenAIProvider("fake")])
-def test_current_adapters_are_not_vision_ready(provider):
-    assert provider.supports_images is False
+def test_current_adapters_report_implemented_capability(provider):
+    assert provider.supports_images is (not isinstance(provider, OfflineSimulationProvider))
 
 
 @pytest.mark.parametrize("provider,status", [(OfflineSimulationProvider(), "unsupported"), (CapableStub(), "available")])
@@ -93,7 +102,12 @@ async def test_preparation_and_reasoning_are_separate(provider, status):
     visual = await graph.ainvoke({**initial, "visual_evidence": images})
     assert plain["vision_status"] == "not_requested"
     assert visual["vision_status"] == status
-    assert plain["output"] == visual["output"]  # Offline cannot invent image findings.
+    assert {k: v for k, v in plain["output"].items() if k not in {
+        "visionStatus", "attachmentIdsUsed", "visualObservations", "visualLimitations"}} == {
+        k: v for k, v in visual["output"].items() if k not in {
+        "visionStatus", "attachmentIdsUsed", "visualObservations", "visualLimitations"}}
+    assert visual["output"]["visionStatus"] == ("used" if provider.supports_images else "unsupported")
+    assert visual["output"]["visualObservations"] == []
     assert plain["prompt"] == visual["prompt"]
     assert [t["tool"] for t in visual["tool_executions"]] == [
         "LocationExtractionTool", "ProblemClassificationTool", "ServiceKnowledgeTool"]
@@ -120,7 +134,7 @@ async def test_api_transports_to_graph_without_echoing_content(async_client, val
     payload["input"]["visualEvidence"] = [item()]
     response = await async_client.post("/agent/execute", json=payload)
     assert response.status_code == 200
-    assert response.json()["result"] == plain["result"]
+    assert response.json()["result"] == {**plain["result"], "visionStatus": "unsupported"}
     assert "dataBase64" not in response.text
     payload["input"]["visualEvidence"][0]["width"] = 0
     invalid = await async_client.post("/agent/execute", json=payload)

@@ -34,7 +34,7 @@ flowchart TD
 
 [problem_graph.py](app/graphs/problem_graph.py) defines this order; [state.py](app/graphs/state.py) defines transient state. Validation can finalize an empty-input result directly. HTTP schema validation rejects an empty string before graph invocation; whitespace and direct graph calls still require the graph guard. The ASP.NET adapter also handles whitespace input without a remote call.
 
-Grounding runs before model reasoning. Ambiguity evaluation includes answered clarification history. A non-degraded `Unclassified` model result can be aligned to a canonical deterministic category; degraded results are not promoted.
+Grounding runs before model reasoning. Ambiguity evaluation includes answered clarification history. On the text-only/unsupported path, a non-degraded `Unclassified` model result can be aligned to a canonical deterministic category. Image-informed uncertainty and degraded results are not promoted by text-only heuristics.
 
 ## Input contract
 
@@ -57,15 +57,33 @@ The [request schema](app/schemas/request.py) and [.NET wire DTOs](../../backend/
 
 ASP.NET supplies answered history ordered by round and sequence. The Python round field has a lower bound of one; the two-round business limit is enforced by ASP.NET, not by a Python schema upper bound. Customer content is data, not permission to override system instructions.
 
-### Phase 3 visual transport (no live vision)
+### Bounded visual transport (Phase 3 foundation)
 
 `input.visualEvidence` contains provider-neutral [VisualEvidence](app/schemas/visual_evidence.py) items with `attachmentId` (unique nonempty UUID), `contentType` (`image/jpeg` only), `dataBase64` (canonical Base64), `width` and `height` (strict integers 1â€“2048). Maximum three items, 2 MiB decoded per item and 4 MiB decoded total; the encoded ceilings are 2,796,204 characters per item and 5,592,412 total including padding. Validation bounds encoded length before decoding and checks decoded size independently. Decoded validation bytes are discarded; no Pillow/OpenCV dependency or second normalization pipeline is introduced.
 
 ASP.NET owns authorization, secure image normalization and private storage. It constructs this payload only after persisting a small workflow input containing text, evidence revision and attachment IDs. Base64, binary contents, filenames and storage paths never enter persisted agent audit or memory. See [backend contract and limits](../../backend/ATTACHMENTS.md#phase-3-internal-visual-evidence-contract).
 
-The graph holds one request-scoped evidence collection. `prepare_visual_evidence` only reports internal `not_requested`, `available`, `unsupported` or `failed` status. `available` means structurally valid evidence and a declared capability, not interpreted images. All current provider implementations inherit `supports_images = false`; Gemini/OpenAI payloads remain text-only, and Offline never invents visual findings. Preparation does not alter category, urgency, prompts, tool counts or response fields. Invalid HTTP input returns generic 422 without echoing Base64. Empty input still follows direct finalization.
+The graph holds one request-scoped evidence collection. `prepare_visual_evidence` only reports internal `not_requested`, `available`, `unsupported` or `failed` status. `available` means structurally valid evidence and adapter capability, not interpreted images. Preparation does not classify or describe pixels. Invalid HTTP input returns generic 422 without echoing Base64. Empty input still follows direct finalization.
 
-There is no persisted/checkpointed graph state, live vision, new response observation field or public client change in Phase 3. Phase 4 must implement and test provider-specific image conversion/reasoning before enabling image capability. Do not log or enable tracing that exports transient image-bearing state.
+There is no persisted/checkpointed graph state. Do not log or enable tracing that exports transient image-bearing state. No arbitrary image URL, filename, storage path or database lookup is accepted by Python.
+
+### Phase 4 multimodal reasoning
+
+`BaseLLMProvider.generate_problem_understanding(prompt, system_instruction, visual_evidence=None)` accepts provider-neutral `VisualEvidence` objects. `reason_problem` sends the bounded image set with customer text, non-authoritative CategoryHint, location and answered clarification history in **one reasoning request**. There is no separate vision pass or per-image call.
+
+| Adapter | Image capability | Payload and verification |
+|---|---|---|
+| Gemini | `supports_images = true` | Existing `generateContent` endpoint; ordered ID text plus JPEG `inline_data` parts. Mock-tested; live status below. |
+| OpenAI | `supports_images = true` | Existing Chat Completions endpoint; ordered ID text plus `image_url` content blocks containing fixed JPEG data URIs. Implemented and mock-tested, **not live-verified**. |
+| Offline | `supports_images = false` | Text heuristics continue; final `unsupported`, no inspected IDs or visual observations. |
+
+Only adapters construct vendor payloads. Text-only payload shape and configured model names remain unchanged. These formats follow [Gemini image input documentation](https://ai.google.dev/gemini-api/docs/generate-content/image-understanding?hl=en) and [OpenAI image input documentation](https://developers.openai.com/api/docs/guides/images-vision?api-mode=chat). Capability does not prove model availability or inference quality.
+
+[Multimodal instructions](app/providers/visual_reasoning.py) require visible, cautious observations and useful limitations. Images cannot establish sound, smell, temperature, timing, power/cooling performance or hidden damage without customer text. Image presence earns no deterministic confidence bonus. Material category conflict or an explicit model conflict flag produces uncertainty, capped confidence and a neutral clarification question. Specific safe observations can resolve short-text ambiguity; an appliance exterior does not resolve “not working” symptoms. CategoryHint remains an unverified customer preference.
+
+Image labels, screenshots and other visible text are untrusted evidence, never instructions or lifecycle authority. The prompt prohibits identifying people, face recognition, sensitive-trait inference and reproducing personal identifiers. Listed unsafe claims, injection echoes and payload-like strings are rejected; existing dangerous-advice filters also remove unsafe observations/limitations. Explicit textual hazards retain a conservative urgency floor when images are present. These checks and model instructions are defense in depth, not an exhaustive safety/privacy classifier.
+
+The two-round clarification flow is unchanged: answered history informs re-analysis; images never answer questions, reset rounds or create Round 3. ASP.NET alone authorizes attachments and applies lifecycle/readiness rules.
 
 ## Output contract
 
@@ -82,6 +100,17 @@ The [response schema](app/schemas/response.py) returns one envelope:
 `result` contains `category`, `problemSummary`, `urgency`, `needsMoreInformation`, `followUpQuestions`, `confidence`, `extractedLocation`, and `additionalInformation`. Confidence and clarification fields are inside `result`, not duplicated at envelope level. ASP.NET maps `problemSummary` to its persisted detected-problem field.
 
 Canonical categories are Plumbing, Electrical, Vehicle Repair, Appliance Repair, and Unclassified. Urgency is Unknown, Low, Medium, High, or Critical. Confidence is normalized to 0â€“1. Follow-up questions are bounded to three.
+
+[Visual result fields](app/schemas/visual_result.py) are flat within `result`:
+
+- `visionStatus`: `not_requested`, `used`, `unsupported`, or `failed`.
+- `attachmentIdsUsed`: at most three unique supplied UUIDs, restored to input order. An atomic successful multimodal response must acknowledge the complete supplied set. This acknowledges processed inputs, not certainty about their contents.
+- `visualObservations`: at most five total, two per attachment; each `{attachmentId, observation}` has a known inspected ID and 1–240 characters.
+- `visualLimitations`: at most three nonblank strings, 240 characters each.
+
+There is no `visualConfidence`. Unknown IDs, malformed visual fields and falsely claimed image usage fail validation. `partial` is rejected because the implemented calls are atomic and provide no trustworthy per-image acceptance signal. Non-used statuses cannot claim inspected IDs or observations. Hidden reasoning/extra lifecycle fields and model-supplied free-form metadata are excluded; Gemini thought parts are ignored. Only deterministic agent metadata is reconstructed.
+
+ASP.NET maps a compact `VisualResult` value into the existing serialized **AgentExecution output**; no new schema/migration is needed. ProblemAnalysis visual-evidence storage and public/client presentation are deferred to Phase 5. Audit output contains bounded semantic summaries and IDs, never Base64, raw bytes, provider request/response payloads or hidden reasoning. Semantic memory retains its existing explicit field mapping.
 
 Metadata contains `agentName`, `provider`, `degraded`, `durationMs`, and `toolExecutions`; each tool audit contains `tool`, `success`, and `durationMs`. This internal provider metadata is not customer-facing branding: clients use **AssistLK AI**.
 
@@ -107,7 +136,7 @@ Nominatim is not a LangGraph node or agent tool. Python processes location conte
 
 [ProviderFactory](app/providers/factory.py) selects `gemini`, `openai`, or `offline` through [BaseLLMProvider](app/providers/base.py). Provider-specific HTTP behavior stays inside provider implementations. Missing selected-provider keys use offline simulation only when allowed; explicit `offline` selection does not need a model key. This is not automatic failover between live providers.
 
-[Guardrails](app/safety/guardrails.py) normalize categories and urgency, bound confidence, filter listed dangerous advice, and add uncertainty language. Unclassified output requires more information, Unknown urgency, and confidence at most 0.4. Follow-up questions are filtered and bounded. These deterministic checks are not a guarantee of comprehensive sanitization or diagnostic correctness. ASP.NET validates outputs again before domain changes.
+[Guardrails](app/safety/guardrails.py) normalize categories and urgency, bound confidence, filter listed dangerous advice, and add uncertainty language. Unclassified output requires more information and confidence at most 0.4. Its ordinary urgency is Unknown; when images are present, explicit text hazards preserve a conservative urgency floor. Follow-up questions are filtered and bounded. These deterministic checks are not a guarantee of comprehensive sanitization or diagnostic correctness. ASP.NET validates outputs again before domain changes.
 
 ## Clarification behavior
 
@@ -120,9 +149,11 @@ ASP.NET permits at most two persisted clarification rounds. Answered Round 2 mus
 
 ## Failure and degraded behavior
 
-- **Successful degraded output:** A reasoning failure caught inside the graph produces an uncertainty-aware Unclassified result, Unknown urgency, low confidence, clarification questions, and `metadata.degraded=true`. The envelope can still have `success=true`; ASP.NET applies the structured result under domain rules.
+- **Successful degraded text-only output:** A reasoning failure caught inside the graph produces an uncertainty-aware Unclassified result, Unknown urgency, low confidence, clarification questions, and `metadata.degraded=true`. The envelope can still have `success=true`; ASP.NET applies the structured result under domain rules.
 - **Transport/service failure:** Unreachable service, timeout, invalid response, or unsuccessful execution causes adapter failure. ASP.NET workflow recovery restores the valid pre-analysis state when analysis has begun, and records failure evidence. There is no native C# agent fallback.
 - **Configuration failure:** Provider creation happens before the graph exception handler. For example, a missing required key with offline simulation disabled can fail the request rather than produce a degraded graph result.
+
+With images, an exhausted/rejected/malformed multimodal call fails through the existing workflow recovery. No second text-only call starts with a fresh retry/timeout budget. Existing per-attempt timeout and `LLM_MAX_ATTEMPTS` apply to the whole image set, including transient 429/502/503/504 and network timeouts. Cancellation remains cancellation. An unsupported provider may continue text processing honestly. `failed` is reserved for explicit failed-vision results (such as a future budget-aware fallback); current live failures return `success=false`, null result, and safe error metadata. Global Python and ASP.NET timeout values are unchanged.
 
 Python owns bounded provider retries. The .NET HTTP client does not implement an automatic retry loop. Recovery is implemented by [ProblemUnderstandingWorkflowService](../../backend/src/AssistLK.Application/Services/ProblemUnderstandingWorkflowService.cs).
 
@@ -214,6 +245,20 @@ python -m pytest
 
 [Tests](tests/) cover schemas, tools, graph behavior, guardrails, providers, and FastAPI. They use controlled/offline dependencies, not successful live inference as a prerequisite. See the [cross-stack testing guide](../../docs/development/testing-guide.md) for .NET, Flutter, React, and the explicitly opt-in live smoke path. Normal .NET tests do not require Python running.
 
+### Explicit live Gemini vision check
+
+This path is **outside ordinary pytest** and requires both opt-ins. From this service directory:
+
+```powershell
+$env:ASSISTLK_RUN_LIVE_VISION = "1"
+.\.venv\Scripts\python.exe scripts/verify_gemini_vision.py --run-live
+Remove-Item Env:ASSISTLK_RUN_LIVE_VISION
+```
+
+[The script](scripts/verify_gemini_vision.py) reads local configuration without printing credentials, disables optional tracing, and invokes the actual configured Gemini adapter through the graph. Its [synthetic JPEG](scripts/fixtures/synthetic_sink_leak.jpg) depicts a sink pipe, blue drops and a puddle (768×512 RGB, quality 85, freshly encoded without EXIF/GPS/comments; no personal photo). Success requires `used`, the supplied ID and a water-related observation. Output is limited to validated structured results and elapsed time. No OpenAI request is made. The synthetic illustration is a transport/grounding smoke check, not a real-photo quality evaluation.
+
+Phase 4 verification results and changed-file manifest are recorded below.
+
 ## Security and known limitations
 
 - No model API keys belong in Flutter or React. Keep provider secrets local/server-side in Python, and never commit `.env` values.
@@ -223,3 +268,47 @@ python -m pytest
 - Guardrails are deterministic checks, not exhaustive safety guarantees. Diagnostic exception paths can contain details; do not promise comprehensive log/error sanitization.
 - Neither health nor mocked tests proves live inference. Successful live OpenAI inference has not been established by the available verification history.
 - Category grounding and ambiguity checks are heuristic; confidence is not a calibrated probability or a guaranteed diagnosis.
+
+## Phase 4 verification (2026-09-13)
+
+- `dotnet build backend/AssistLK.sln`: 0 warnings, 0 errors.
+- `dotnet test backend/AssistLK.sln`: 159 API + 355 integration = **514 passed**, 0 failed, 0 skipped; all 498 baseline cases retained plus 16 new cases.
+- `.\.venv\Scripts\python.exe -m pytest`: **162 passed**, 0 failed, 0 skipped; all 78 baseline cases retained (Phase 3 capability assertions updated) plus 84 new cases.
+- Ordinary tests mock provider HTTP; the backend uses its existing fake Python client. No live provider or running Python service is required by normal .NET tests.
+- `git diff --check`: passed. Nothing staged. No mobile/, web/, normalization/upload/lifecycle implementation, database migration, timeout/model configuration or C2–C4 changes.
+- Gated **live Gemini vision passed** using configured `gemini-3.6-flash`, 15-second per-attempt timeout, two-attempt maximum, in **14.11 seconds**. It returned `used`, the fixture attachment ID, Plumbing/Medium, confidence 0.85, and: “Illustration shows water dripping from a pipe connection under a sink, forming a puddle.” It also identified the limitation that this was a simplified diagram rather than actual piping. This establishes one actual multimodal inference, not real-photo diagnostic accuracy or a latency guarantee. No timeout change was needed.
+- **OpenAI not live-verified.** Adapter payload, parsing, cancellation and retry behavior are mock-tested; no live OpenAI call was made.
+- Phase 5 remains responsible for ProblemAnalysis visual-evidence representation/persistence and public/client presentation. Phase 4 stops at reasoning, bounded internal response and execution-audit metadata.
+
+### Phase 4 file manifest
+
+Created (paths relative to this service):
+
+- `app/providers/visual_reasoning.py`
+- `app/safety/visual_guardrails.py`
+- `app/schemas/visual_result.py`
+- `scripts/verify_gemini_vision.py`
+- `scripts/fixtures/synthetic_sink_leak.jpg`
+- `tests/test_multimodal_providers.py`
+- `tests/test_multimodal_graph.py`
+
+Modified:
+
+- `README.md`
+- `app/graphs/problem_graph.py`, `app/graphs/state.py`
+- `app/providers/base.py`, `app/providers/gemini_provider.py`, `app/providers/openai_provider.py`, `app/providers/offline_provider.py`
+- `app/schemas/response.py`
+- `tests/test_visual_evidence.py`
+
+Backend created (repository-relative):
+
+- `backend/src/AssistLK.Agents/Models/VisualUnderstandingResult.cs`
+- `backend/src/AssistLK.Agents/Adapters/VisualResultValidation.cs`
+
+Backend modified:
+
+- `backend/ATTACHMENTS.md`
+- `backend/src/AssistLK.Agents/DTOs/AgentExecutionWireDtos.cs`
+- `backend/src/AssistLK.Agents/Models/ProblemUnderstandingOutput.cs`
+- `backend/src/AssistLK.Agents/Adapters/ExternalProblemUnderstandingAgentAdapter.cs`
+- `backend/tests/AssistLK.IntegrationTests/VisualEvidenceTransportTests.cs`

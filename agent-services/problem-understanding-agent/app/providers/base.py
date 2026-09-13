@@ -1,17 +1,23 @@
 """Base LLM Provider interface and result models."""
 from abc import ABC, abstractmethod
-from pydantic import BaseModel, Field
+from typing import Annotated
+from pydantic import Field
+from app.schemas.visual_result import VisualResultFields
+from app.schemas.visual_evidence import VisualEvidence
+from app.schemas.response import CanonicalCategory, ServiceUrgency
 
 
-class LLMProviderResult(BaseModel):
+class LLMProviderResult(VisualResultFields):
     """Raw structured result returned by foundational model providers."""
 
-    category: str = "Unclassified"
-    problem_summary: str = Field(alias="problemSummary")
-    urgency: str = "Unknown"
+    category: CanonicalCategory = "Unclassified"
+    problem_summary: str = Field(alias="problemSummary", min_length=1, max_length=1000)
+    urgency: ServiceUrgency = "Unknown"
     needs_more_information: bool = Field(default=False, alias="needsMoreInformation")
-    follow_up_questions: list[str] = Field(default_factory=list, alias="followUpQuestions")
-    confidence: float = 0.5
+    follow_up_questions: list[Annotated[str, Field(min_length=1, max_length=500)]] = Field(default_factory=list, alias="followUpQuestions", max_length=3)
+    confidence: float = Field(default=0.5, ge=0, le=1, allow_inf_nan=False)
+    text_image_conflict: bool = Field(default=False, alias="textImageConflict", strict=True)
+    visual_ambiguity_resolved: bool = Field(default=False, alias="visualAmbiguityResolved", strict=True)
     additional_information: dict[str, str] = Field(
         default_factory=dict, alias="additionalInformation"
     )
@@ -42,7 +48,7 @@ class BaseLLMProvider(ABC):
 
     @property
     def supports_images(self) -> bool:
-        """Implementation capability, not vendor marketing. All adapters are text-only in Phase 3."""
+        """Implementation capability, not vendor marketing. Only adapters with implemented image payloads enable this."""
         return False
 
     @property
@@ -62,6 +68,7 @@ class BaseLLMProvider(ABC):
         self,
         prompt: str,
         system_instruction: str,
+        visual_evidence: list[VisualEvidence] | None = None,
     ) -> LLMProviderResult:
         """
         Executes reasoning call against the underlying provider.

@@ -6,7 +6,10 @@ from typing import Any, Callable, Literal
 from langgraph.graph import END, START, StateGraph
 from app.graphs.state import ProblemUnderstandingState
 from app.graphs.visual_evidence import prepare_visual_evidence
-from app.providers.base import BaseLLMProvider, ProviderError
+from app.providers.base import BaseLLMProvider, ProviderError, PermanentProviderError
+from app.providers.visual_reasoning import parse_result
+from app.safety.visual_guardrails import sanitize_visual_result, text_urgency_floor
+from app.schemas.visual_result import safe_evidence_text
 from app.safety.guardrails import apply_safety_guardrails
 from app.tools.location_extraction import extract_location_tool
 from app.tools.problem_classification import classify_problem_tool
@@ -208,9 +211,26 @@ def create_problem_understanding_graph(
         )
 
         try:
-            llm_result = await provider.generate_problem_understanding(prompt, SYSTEM_INSTRUCTION)
+            images = state.get("visual_evidence", [])
+            preparation = state.get("vision_status", "not_requested")
+            if preparation == "failed":
+                raise PermanentProviderError("Visual evidence preparation failed.")
+            if images and preparation == "available":
+                llm_result = await provider.generate_problem_understanding(prompt, SYSTEM_INSTRUCTION, visual_evidence=images)
+                llm_result = parse_result(llm_result.model_dump(by_alias=True, mode="json"), images)
+                visual_result = llm_result.model_dump(by_alias=True, mode="json", include={
+                    "vision_status", "attachment_ids_used", "visual_observations", "visual_limitations"})
+            else:
+                llm_result = await provider.generate_problem_understanding(prompt, SYSTEM_INSTRUCTION)
+                visual_result = {"visionStatus": "unsupported" if images else "not_requested",
+                                 "attachmentIdsUsed": [], "visualObservations": [], "visualLimitations": []}
+            visual_result = sanitize_visual_result(visual_result)
             return {
                 "prompt": prompt,
+                "visual_result": visual_result,
+                "text_image_conflict": bool(images and llm_result.text_image_conflict),
+                "visual_ambiguity_resolved": bool(images and llm_result.visual_ambiguity_resolved
+                    and visual_result["visualObservations"]),
                 "llm_raw_category": llm_result.category,
                 "llm_raw_summary": llm_result.problem_summary,
                 "llm_raw_urgency": llm_result.urgency,
@@ -222,7 +242,10 @@ def create_problem_understanding_graph(
                 "llm_error": None,
             }
         except (ProviderError, Exception) as ex:
-            logger.warning("LLM reasoning failed (%s). Engaging degraded fallback.", ex)
+            logger.warning("LLM reasoning failed (%s).", type(ex).__name__)
+            if state.get("visual_evidence"):
+                # One atomic multimodal call uses the existing retry budget. No fresh-budget fallback.
+                raise PermanentProviderError("Image-enhanced reasoning failed; no visual result was applied.") from None
             return {
                 "prompt": prompt,
                 "llm_raw_category": "Unclassified",
@@ -236,7 +259,7 @@ def create_problem_understanding_graph(
                 ],
                 "additional_info": {"Degraded": "True"},
                 "degraded": True,
-                "llm_error": str(ex),
+                "llm_error": type(ex).__name__,
             }
 
     def evaluate_ambiguity_and_alignment_node(state: ProblemUnderstandingState) -> dict[str, Any]:
@@ -253,7 +276,7 @@ def create_problem_understanding_graph(
         # If LLM returned Unclassified but deterministic tool found canonical category with higher confidence, promote it
         # (Degraded outputs must preserve Unclassified and never be promoted)
         is_degraded = state.get("degraded", False)
-        if not is_degraded:
+        if not is_degraded and state.get("visual_result", {}).get("visionStatus") != "used":
             det_cat = state.get("deterministic_category", "Unclassified")
             det_conf = state.get("deterministic_confidence", 0.0)
             if (
@@ -283,6 +306,21 @@ def create_problem_understanding_graph(
             if any(term in context_lower for term in ["broken", "not working", "something wrong"]):
                 if len(words) <= 6:
                     is_ambiguous = True
+
+        if state.get("visual_ambiguity_resolved") and not any(
+            phrase in context_lower for phrase in ["not working", "not cooling", "noise", "smell", "intermittent"]
+        ):
+            is_ambiguous = False
+        conflict = state.get("text_image_conflict", False)
+        if state.get("visual_evidence") and state.get("visual_result", {}).get("visionStatus") == "used":
+            det_cat = state.get("deterministic_category", "Unclassified")
+            conflict = conflict or (det_cat != "Unclassified" and raw_category != "Unclassified" and det_cat != raw_category)
+        if conflict:
+            is_ambiguous = True
+            raw_category = "Unclassified"
+            raw_confidence = min(raw_confidence, 0.4)
+            raw_summary = "Possible service issue. The description and image evidence need clarification."
+            raw_questions = ["Could you confirm which pictured equipment relates to the problem you described?"]
 
         if is_ambiguous:
             raw_needs_more = True
@@ -336,6 +374,19 @@ def create_problem_understanding_graph(
             follow_up_questions=questions,
         )
 
+        if state.get("visual_evidence"):
+            if not safe_evidence_text(safe_summary):
+                safe_summary = "Possible safety issue. Professional inspection is recommended."
+            safe_questions = [q for q in safe_questions if safe_evidence_text(q)]
+            if safe_needs_more and not safe_questions:
+                safe_questions = ["Could you describe the symptoms affecting the equipment?"]
+            text = state.get("description", "") + " " + " ".join(
+                str(item.get("answer", "")) for item in state.get("clarification_history", []))
+            floor = text_urgency_floor(text)
+            levels = {"Unknown": 0, "Low": 1, "Medium": 2, "High": 3, "Critical": 4}
+            if floor and levels[floor] > levels.get(safe_urgency, 0):
+                safe_urgency = floor
+
         return {
             "final_category": safe_category,
             "final_summary": safe_summary,
@@ -347,6 +398,8 @@ def create_problem_understanding_graph(
 
     def finalize_output_node(state: ProblemUnderstandingState) -> dict[str, Any]:
         output_dto = {
+            **state.get("visual_result", {"visionStatus": "unsupported" if state.get("visual_evidence") else "not_requested",
+                                           "attachmentIdsUsed": [], "visualObservations": [], "visualLimitations": []}),
             "category": state.get("final_category", "Unclassified"),
             "problemSummary": state.get("final_summary", "Possible service issue."),
             "urgency": state.get("final_urgency", "Unknown"),

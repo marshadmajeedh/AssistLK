@@ -1,6 +1,6 @@
 # Component 1 attachment foundation — Phase 1
 
-Optional customer problem photos are stored as normalized private files, with metadata in PostgreSQL. Phase 3 transports bounded normalized evidence internally to Python but does **not** interpret images. Flutter/React attachment endpoints are unchanged.
+Optional customer problem photos are stored as normalized private files, with metadata in PostgreSQL. Phase 3 transports bounded normalized evidence internally to Python; Phase 4 adds real multimodal provider reasoning and bounded audit results. Flutter/React attachment endpoints are unchanged.
 
 ## Dependency
 
@@ -125,7 +125,7 @@ Migration: `20260913011940_AddServiceRequestAttachmentsAndEvidenceRevision`. It 
 
 Test hosts inject fake attachment storage; filesystem unit tests use unique temporary directories and synthetic images. Coverage includes authorization/ownership, multipart validation, image normalization/privacy, path containment, compensation/reconciliation, lifecycle restrictions, PostgreSQL constraints/concurrent uploads/status races/cascade, revision readiness and audit input safety. Existing clarification, Smart Location and workflow regressions remain part of the full suite. No Python/Nominatim/cloud dependency is required.
 
-Phase 2 still needs the Flutter camera/gallery selection flow, optional upload/list/preview/remove UI, lifecycle-aware controls and appropriate upload failure/retry handling. Vision transport/agent work and React presentation are outside this phase.
+The Phase 1 foundation is complete. Flutter selection/upload (Phase 2) and internal transport (Phase 3) are also complete; Phase 4 provider reasoning is documented below. Public visual-result presentation remains deferred.
 
 ## Implementation file manifest
 
@@ -181,3 +181,15 @@ Modified:
 - No Python processes running during final verification. No mobile/, web/, or agent-services/ changes.
 - Migration verified through the existing disposable PostgreSQL migration test; not applied to the primary database.
 - No commit or Phase 2 implementation performed.
+
+## Phase 4 structured visual-result contract
+
+Gemini and OpenAI now implement one multimodal reasoning request containing the bounded ordered JPEG set; Offline remains text-only with `unsupported`. No upload, normalization, ownership, revision or lifecycle rules change.
+
+Python result fields `visionStatus`, `attachmentIdsUsed`, `visualObservations` and `visualLimitations` map through `ProblemUnderstandingOutputPayloadDto` to a compact `ProblemUnderstandingOutput.VisualResult` value. Validation permits `not_requested`, `used`, `unsupported`, `failed`; rejects fabricated `partial`; and requires `used` to acknowledge the entire supplied set. Observations reference only known inspected IDs: maximum five total, two per image, 240 characters each; limitations maximum three, 240 characters each. Duplicate/unknown IDs, excess limits, payload echoes and listed unsafe content fail safely. A legacy omitted status maps to `not_requested` with no images, or conservatively `unsupported` with images; it can never claim successful vision.
+
+**Persistence decision:** the existing `AgentWorkflowService` serialized execution output is a clean audit location for bounded `VisualResult`. No database schema change or migration is required. ProblemAnalysis-specific visual evidence persistence and public response/client presentation are deferred to Phase 5. Existing semantic memory mappings do not acquire image content or arbitrary provider metadata.
+
+Image-enhanced output/error paths reject or suppress image payload echoes; additional metadata is allowlisted and provider metadata is bounded to implemented provider names. No Base64, raw bytes, storage keys, vendor request/response payloads or hidden reasoning belongs in persisted results. Regressions inspect successful and rejected persisted execution fields and existing semantic memory. Previous stale-revision, two-round re-analysis, ReadyForMatching, ownership and recovery tests remain intact.
+
+Provider failures exhaust only the existing retry budget and return unsuccessful execution through existing ASP.NET recovery; no extra fresh-budget text fallback or per-image retry loop. Normal backend tests continue to use the fake internal service and do not require Python. See the [canonical agent README](../agent-services/problem-understanding-agent/README.md) for provider support, mock coverage, gated live verification and Phase 4 results.

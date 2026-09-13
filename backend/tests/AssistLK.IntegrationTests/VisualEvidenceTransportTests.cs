@@ -37,6 +37,7 @@ public class VisualEvidenceTransportTests
         public string? WireJson;
         public string? AuthHeader;
         public Action? DuringExecution;
+        public Action<AgentExecutionResponseDto>? RewriteResponse;
         public HttpStatusCode ResponseStatus = HttpStatusCode.OK;
         public string ErrorBody = "";
         public bool NetworkFailure;
@@ -56,6 +57,7 @@ public class VisualEvidenceTransportTests
                 DuringExecution?.Invoke();
                 if (NetworkFailure) throw new HttpRequestException("unavailable");
                 var response = await new FakeProblemUnderstandingClient().ExecuteAsync(Sent);
+                RewriteResponse?.Invoke(response);
                 return new HttpResponseMessage(ResponseStatus)
                 {
                     Content = new StringContent(ResponseStatus == HttpStatusCode.OK
@@ -88,9 +90,111 @@ public class VisualEvidenceTransportTests
         public void Dispose() => Db.Dispose();
     }
 
+    [Theory]
+    [InlineData("used")] [InlineData("unsupported")] [InlineData("failed")]
+    public async Task BoundedVisualResultIsMappedAndAuditedWithoutBinaryOrProviderPayload(string status)
+    {
+        using var f = new Fixture();
+        var attachment = f.Add(1);
+        f.RewriteResponse = response =>
+        {
+            response.Result!.VisionStatus = status;
+            response.Metadata!.Provider = "gemini";
+            if (status == "used")
+            {
+                response.Result.AttachmentIdsUsed = [attachment.Id];
+                response.Result.VisualObservations = [new() { AttachmentId = attachment.Id,
+                    Observation = "Moisture appears visible around the pipe connection." }];
+                response.Result.VisualLimitations = ["The internal cause cannot be seen."];
+            }
+        };
+        var result = await f.Run();
+        Assert.True(result.Success, result.ErrorMessage);
+        var execution = Assert.Single(f.Db.AgentExecutions);
+        using var document = JsonDocument.Parse(execution.Output!);
+        var visual = document.RootElement.GetProperty("VisualResult");
+        Assert.Equal(status, visual.GetProperty("visionStatus").GetString());
+        Assert.Equal(status == "used" ? 1 : 0, visual.GetProperty("visualObservations").GetArrayLength());
+        if (status == "used") Assert.Equal(attachment.Id,
+            visual.GetProperty("visualObservations")[0].GetProperty("attachmentId").GetGuid());
+        var persisted = JsonSerializer.Serialize(new
+        {
+            execution.Input, execution.Output, Memory = f.Db.AgentMemories.Select(m => m.Value).ToArray()
+        });
+        Assert.DoesNotContain(f.Sent!.Input.VisualEvidence[0].DataBase64, persisted);
+        foreach (var forbidden in new[] { "dataBase64", "inline_data", "image_url", "chainOfThought", attachment.StorageKey })
+            Assert.DoesNotContain(forbidden, persisted);
+        Assert.True(execution.Output!.Length < 5000);
+        Assert.Equal(7, Assert.Single(f.Db.ProblemAnalyses).EvidenceRevision);
+    }
+
+    [Theory]
+    [InlineData("unknown-id")] [InlineData("too-many")] [InlineData("long")]
+    [InlineData("per-image")] [InlineData("partial")] [InlineData("no-ack")]
+    [InlineData("payload")] [InlineData("summary-payload")] [InlineData("metadata-payload")]
+    [InlineData("provider-payload")] [InlineData("failure-payload")] [InlineData("limitations")]
+    public async Task InvalidVisualOutputFailsWithoutPersistingRejectedContent(string fault)
+    {
+        using var f = new Fixture();
+        var attachment = f.Add(1);
+        f.RewriteResponse = response =>
+        {
+            var output = response.Result!;
+            response.Metadata!.Provider = "gemini";
+            output.VisionStatus = "used";
+            output.AttachmentIdsUsed = [attachment.Id];
+            output.VisualObservations = [new() { AttachmentId = attachment.Id, Observation = "Moisture appears visible." }];
+            var encoded = f.Sent!.Input.VisualEvidence[0].DataBase64;
+            switch (fault)
+            {
+                case "unknown-id": output.VisualObservations = [new() { AttachmentId = Guid.NewGuid(), Observation = "Moisture appears visible." }]; break;
+                case "too-many": output.VisualObservations = Enumerable.Repeat(output.VisualObservations[0], 6).ToList(); break;
+                case "per-image": output.VisualObservations = Enumerable.Repeat(output.VisualObservations[0], 3).ToList(); break;
+                case "long": output.VisualObservations = [new() { AttachmentId = attachment.Id, Observation = new string('x', 241) }]; break;
+                case "partial": output.VisionStatus = "partial"; break;
+                case "no-ack": output.AttachmentIdsUsed = []; break;
+                case "payload": output.VisualObservations = [new() { AttachmentId = attachment.Id, Observation = encoded }]; break;
+                case "summary-payload": output.ProblemSummary = encoded; break;
+                case "metadata-payload": output.AdditionalInformation = new() { ["rawProviderPayload"] = encoded }; break;
+                case "provider-payload": response.Metadata.Provider = encoded; break;
+                case "failure-payload": response.Success = false; response.ErrorMessage = encoded; break;
+                case "limitations": output.VisualLimitations = ["Cannot see.", "Cannot hear.", "Cannot smell.", "Cannot assess."]; break;
+            }
+        };
+        var result = await f.Run();
+        Assert.False(result.Success);
+        Assert.Empty(f.Db.ProblemAnalyses);
+        Assert.Empty(f.Db.AgentMemories);
+        Assert.Equal(ServiceRequestStatus.Created, f.Request.Status);
+        var persisted = JsonSerializer.Serialize(f.Db.AgentExecutions.Select(e => new { e.Input, e.Output, e.Status }).ToArray());
+        Assert.DoesNotContain(f.Sent!.Input.VisualEvidence[0].DataBase64, persisted);
+        Assert.DoesNotContain(f.Sent.Input.VisualEvidence[0].DataBase64, result.ErrorMessage!);
+        Assert.Equal("Failed", Assert.Single(f.Db.AgentExecutions).Status);
+    }
+
     private sealed class Handler(Func<HttpRequestMessage, Task<HttpResponseMessage>> send) : HttpMessageHandler
     {
         protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken ct) => send(request);
+    }
+
+    [Fact]
+    public async Task EmptyTextCannotClaimImageUnderstandingOrCallPython()
+    {
+        var client = new FakeProblemUnderstandingClient
+        {
+            CustomHandler = _ => throw new InvalidOperationException("Should not call Python for empty text.")
+        };
+        var result = await new ExternalProblemUnderstandingAgentAdapter(client).ExecuteAsync(new AgentContext
+        {
+            Input = " ",
+            VisualEvidence = [new() { AttachmentId = Guid.NewGuid(), Width = 80, Height = 40,
+                DataBase64 = Convert.ToBase64String(new byte[64]) }]
+        });
+        Assert.True(result.Success);
+        var output = Assert.IsType<ProblemUnderstandingOutput>(result.Data);
+        Assert.Equal("unsupported", output.VisualResult.VisionStatus);
+        Assert.Empty(output.VisualResult.VisualObservations);
+        Assert.True(output.NeedsMoreInformation);
     }
 
     [Theory]

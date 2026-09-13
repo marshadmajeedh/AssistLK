@@ -108,6 +108,15 @@ public class AgentExecutionResponseDto
 /// </summary>
 public class ProblemUnderstandingOutputPayloadDto
 {
+    [JsonPropertyName("visionStatus")]
+    public string? VisionStatus { get; set; }
+    [JsonPropertyName("attachmentIdsUsed")]
+    public List<Guid> AttachmentIdsUsed { get; set; } = new();
+    [JsonPropertyName("visualObservations")]
+    public List<AssistLK.Agents.Models.VisualObservation> VisualObservations { get; set; } = new();
+    [JsonPropertyName("visualLimitations")]
+    public List<string> VisualLimitations { get; set; } = new();
+
     [JsonPropertyName("category")]
     public string Category { get; set; } = "Unclassified";
 

@@ -2,6 +2,7 @@
 import html
 import re
 from app.providers.base import BaseLLMProvider, LLMProviderResult
+from app.schemas.visual_evidence import VisualEvidence
 
 
 def extract_customer_description(prompt: str) -> str:
@@ -32,6 +33,13 @@ class OfflineSimulationProvider(BaseLLMProvider):
         return self._model_name
 
     async def generate_problem_understanding(
+        self, prompt: str, system_instruction: str,
+        visual_evidence: list[VisualEvidence] | None = None,
+    ) -> LLMProviderResult:
+        result = await self._generate_text_result(prompt, system_instruction)
+        return result.model_copy(update={"vision_status": "unsupported" if visual_evidence else "not_requested"})
+
+    async def _generate_text_result(
         self,
         prompt: str,
         system_instruction: str,

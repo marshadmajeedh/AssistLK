@@ -2,6 +2,7 @@
 from typing import Any, Literal
 from uuid import UUID
 from pydantic import BaseModel, ConfigDict, Field, field_validator
+from app.schemas.visual_result import VisualResultFields
 
 CanonicalCategory = Literal[
     "Plumbing",
@@ -20,7 +21,7 @@ ServiceUrgency = Literal[
 ]
 
 
-class ProblemUnderstandingOutputDto(BaseModel):
+class ProblemUnderstandingOutputDto(VisualResultFields):
     """The single authoritative structured analysis result for Problem Understanding."""
 
     model_config = ConfigDict(populate_by_name=True)

@@ -19,6 +19,9 @@ class ProblemUnderstandingState(TypedDict, total=False):
     # One transient collection, never copied into prompts/output/memory.
     visual_evidence: list[VisualEvidence]
     vision_status: VisionStatus
+    visual_result: dict[str, Any]
+    text_image_conflict: bool
+    visual_ambiguity_resolved: bool
 
     # Validation
     is_empty_input: bool

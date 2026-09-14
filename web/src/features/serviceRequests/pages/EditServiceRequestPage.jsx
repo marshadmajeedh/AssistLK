@@ -231,7 +231,7 @@ function EditServiceRequestPage() {
   // Loading state
   if (loading) {
     return (
-      <div style={{ maxWidth: 680, margin: "0 auto", width: "100%" }}>
+      <div className="narrow-stack" style={{ width: "100%" }}>
         <LoadingSpinner message="Loading service request..." />
       </div>
     );
@@ -240,8 +240,8 @@ function EditServiceRequestPage() {
   // Load error state
   if (loadError || !request) {
     return (
-      <div style={{ maxWidth: 680, margin: "0 auto", width: "100%" }}>
-        <AppCard>
+      <div className="feature-stack narrow-stack" style={{ width: "100%" }}>
+        <AppCard className="section-card">
           <h2
             style={{
               ...typography.sectionHeading,
@@ -277,8 +277,8 @@ function EditServiceRequestPage() {
   // Invalid edit state guard: Request cannot be edited in current status
   if (!isEditable) {
     return (
-      <div style={{ maxWidth: 680, margin: "0 auto", width: "100%" }}>
-        <AppCard>
+      <div className="feature-stack narrow-stack" style={{ width: "100%" }}>
+        <AppCard className="section-card">
           <div
             style={{
               display: "flex",
@@ -349,49 +349,29 @@ function EditServiceRequestPage() {
 
   return (
     <div
+      className="feature-stack narrow-stack"
       style={{
-        maxWidth: 680,
-        margin: "0 auto",
         width: "100%",
         boxSizing: "border-box",
       }}
     >
-      {/* Page Header */}
-      <div style={{ marginBottom: spacing.lg }}>
-        <div
-          style={{
-            display: "flex",
-            justifyContent: "space-between",
-            alignItems: "flex-start",
-            flexWrap: "wrap",
-            gap: spacing.sm,
-            marginBottom: spacing.xs,
-          }}
-        >
-          <h1
-            style={{
-              ...typography.pageTitle,
-              margin: 0,
-              color: colors.textPrimary,
-            }}
-          >
-            Edit Service Request
-          </h1>
-          <StatusBadge status={request.status} />
+      <section className="page-hero">
+        <div className="page-hero-content">
+          <div>
+            <div className="page-kicker">Request Update</div>
+            <h1 className="page-hero-title">Refine the details before the workflow moves forward.</h1>
+            <p className="page-hero-copy">Update the description, location, or GPS information while this request is still editable.</p>
+          </div>
+          <div className="page-hero-meta">
+            <div className="page-stat">
+              <strong>{request.status}</strong>
+              <span>Current lifecycle status</span>
+            </div>
+          </div>
         </div>
+      </section>
 
-        <p
-          style={{
-            ...typography.body,
-            margin: 0,
-            color: colors.textSecondary,
-          }}
-        >
-          Update the description or location details for your service request.
-        </p>
-      </div>
-
-      <AppCard>
+      <AppCard className="section-card">
         <form onSubmit={handleSubmit} noValidate>
           {/* Problem Description Field */}
           <div>

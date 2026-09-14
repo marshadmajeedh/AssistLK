@@ -5,19 +5,23 @@ import { typography } from "./typography";
 
 export const buttonStyles = {
   base: {
-    minHeight: 48,
+    minHeight: 50,
     padding: `0 ${spacing.md}px`,
     borderRadius: radius.medium,
-    border: "none",
+    border: "1px solid transparent",
     cursor: "pointer",
     fontFamily: typography.fontFamily,
     fontSize: typography.button.fontSize,
     fontWeight: typography.button.fontWeight,
+    letterSpacing: typography.button.letterSpacing,
+    transition: "transform 160ms ease, box-shadow 160ms ease, border-color 160ms ease, background-color 160ms ease",
+    boxShadow: "0 12px 30px rgba(22, 34, 53, 0.10)",
   },
 
   primary: {
     backgroundColor: colors.primary,
     color: colors.surface,
+    boxShadow: "0 18px 40px rgba(232, 93, 63, 0.22)",
   },
 
   secondary: {
@@ -31,26 +35,28 @@ export const buttonStyles = {
   },
 
   outline: {
-    backgroundColor: colors.surface,
-    color: colors.primary,
-    border: `1px solid ${colors.primary}`,
+    backgroundColor: "rgba(255, 253, 249, 0.78)",
+    color: colors.textPrimary,
+    border: `1px solid ${colors.border}`,
+    boxShadow: "none",
   },
 
   disabled: {
     backgroundColor: colors.disabled,
     color: colors.surface,
     cursor: "not-allowed",
+    boxShadow: "none",
   },
 };
 
 export const inputStyles = {
   display: "block",
   width: "100%",
-  minHeight: 48,
+  minHeight: 54,
 
   padding: `0 ${spacing.md}px`,
 
-  backgroundColor: colors.surface,
+  backgroundColor: "rgba(255, 253, 249, 0.88)",
 
   color: colors.textPrimary,
 
@@ -65,20 +71,22 @@ export const inputStyles = {
   outline: "none",
 
   boxSizing: "border-box",
+  boxShadow: "inset 0 1px 0 rgba(255,255,255,0.7)",
 };
 
 export const cardStyles = {
-  backgroundColor: colors.surface,
+  backgroundColor: "rgba(255, 253, 249, 0.84)",
 
   border: `1px solid ${colors.border}`,
 
   borderRadius: radius.large,
 
-  padding: spacing.md,
+  padding: spacing.lg,
 
   color: colors.textPrimary,
 
-  boxShadow: "0 2px 8px rgba(0, 0, 0, 0.06)",
+  boxShadow: "0 24px 60px rgba(22, 34, 53, 0.08)",
+  backdropFilter: "blur(18px)",
 };
 
 export const pageStyles = {
@@ -104,6 +112,7 @@ export const badgeStyles = {
     fontWeight: 600,
     lineHeight: typography.small.lineHeight,
     whiteSpace: "nowrap",
+    border: `1px solid rgba(22, 34, 53, 0.08)`,
   },
 
   Created: {

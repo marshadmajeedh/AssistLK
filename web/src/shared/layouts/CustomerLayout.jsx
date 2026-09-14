@@ -39,29 +39,29 @@ function CustomerLayout() {
 
   return (
     <div
+      className="customer-layout"
       style={{
         minHeight: "100vh",
         display: "flex",
         flexDirection: "column",
-        backgroundColor: colors.background,
+        backgroundColor: "transparent",
         fontFamily: typography.fontFamily,
       }}
     >
       <header
+        className="customer-header"
         style={{
-          backgroundColor: colors.surface,
-          borderBottom: `1px solid ${colors.border}`,
+          borderBottom: `1px solid rgba(216, 211, 200, 0.7)`,
           padding: `${spacing.sm}px ${spacing.md}px`,
           position: "sticky",
           top: 0,
           zIndex: 100,
-          boxShadow: "0 1px 3px rgba(0, 0, 0, 0.04)",
+          boxShadow: "0 10px 30px rgba(22, 34, 53, 0.05)",
         }}
       >
         <div
+          className="app-shell customer-header-inner"
           style={{
-            maxWidth: 1120,
-            margin: "0 auto",
             display: "flex",
             alignItems: "center",
             justifyContent: "space-between",
@@ -79,10 +79,11 @@ function CustomerLayout() {
           >
             <Link
               to="/service-requests"
+              className="customer-brand"
               style={{
                 ...typography.sectionHeading,
                 textDecoration: "none",
-                color: colors.primary,
+                color: colors.textPrimary,
                 fontWeight: 700,
                 letterSpacing: "-0.5px",
               }}
@@ -90,6 +91,7 @@ function CustomerLayout() {
               AssistLK
             </Link>
             <span
+              className="customer-role-badge"
               style={{
                 ...typography.small,
                 backgroundColor: colors.primaryLight,
@@ -105,6 +107,7 @@ function CustomerLayout() {
 
           {/* Navigation Links */}
           <nav
+            className="customer-nav"
             style={{
               display: "flex",
               alignItems: "center",
@@ -156,16 +159,17 @@ function CustomerLayout() {
 
       {/* Main Content Area */}
       <main
+        className="customer-main"
         style={{
           flex: 1,
-          maxWidth: 1120,
           width: "100%",
-          margin: "0 auto",
           padding: `${spacing.lg}px ${spacing.md}px`,
           boxSizing: "border-box",
         }}
       >
-        <Outlet />
+        <div className="app-shell app-page">
+          <Outlet />
+        </div>
       </main>
     </div>
   );

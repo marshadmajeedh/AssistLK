@@ -19,6 +19,7 @@ function AppButton({
       type={type}
       disabled={disabled}
       onClick={onClick}
+      className={`app-button app-button-${variant}`}
       style={{
         ...buttonStyles.base,
         ...variantStyle,

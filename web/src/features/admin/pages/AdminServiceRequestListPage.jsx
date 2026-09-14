@@ -64,9 +64,22 @@ export default function AdminServiceRequestListPage() {
   return <div className="request-monitoring" style={{ ...typography.body, color: colors.textPrimary,
     "--monitoring-border": colors.border, "--monitoring-muted": colors.textSecondary,
     "--monitoring-background": colors.background, "--monitoring-focus": colors.primary, "--monitoring-gap": `${spacing.md}px` }}>
-    <h1 style={{ ...typography.pageTitle, color: colors.textPrimary }}>Service Request Monitoring</h1>
-    <p className="monitoring-muted">Monitor customer service requests, AI analysis results, clarification progress, and lifecycle status.</p>
-    <AppCard>
+    <section className="page-hero">
+      <div className="page-hero-content">
+        <div>
+          <div className="page-kicker">Admin Monitoring</div>
+          <h1 className="page-hero-title">Inspect every request without leaving the operational workflow.</h1>
+          <p className="page-hero-copy">Filter platform requests, review the latest analysis state, and open a read-only monitoring view for detailed inspection.</p>
+        </div>
+        <div className="page-hero-meta">
+          <div className="page-stat">
+            <strong>{list.data.length}</strong>
+            <span>Requests in current result set</span>
+          </div>
+        </div>
+      </div>
+    </section>
+    <AppCard className="section-card">
       <div className="monitoring-filters">
         {Object.entries(options).map(([key, values]) => <label key={key} htmlFor={`filter-${key}`}>
           {key[0].toUpperCase() + key.slice(1)}
@@ -81,10 +94,10 @@ export default function AdminServiceRequestListPage() {
     {list.loading ? <LoadingSpinner message="Loading service requests..." /> : list.error ? <div>
       <ErrorMessage message={list.error} />
       <AppButton variant="outline" onClick={() => { setList({ loading: true, data: [], error: "" }); setAttempt(attempt + 1); }}>Retry</AppButton>
-    </div> : list.data.length === 0 ? <AppCard>
+    </div> : list.data.length === 0 ? <AppCard className="section-card">
       <p>No service requests found.</p>
       {active && <p className="monitoring-muted">No requests match the selected filters.</p>}
-    </AppCard> : <AppCard>
+    </AppCard> : <AppCard className="table-shell">
       <table className="monitoring-table">
         <caption>{list.data.length} service request{list.data.length === 1 ? "" : "s"}</caption>
         <thead><tr>{["Request", "Category", "Urgency", "Status", "Location", "Confidence", "Created", "Action"].map((label) => <th key={label} scope="col">{label}</th>)}</tr></thead>

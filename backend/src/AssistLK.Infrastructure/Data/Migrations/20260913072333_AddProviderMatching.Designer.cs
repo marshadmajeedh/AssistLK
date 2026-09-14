@@ -3,6 +3,7 @@ using System;
 using AssistLK.Infrastructure.Data;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 
@@ -11,9 +12,11 @@ using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 namespace AssistLK.Infrastructure.Data.Migrations
 {
     [DbContext(typeof(AssistLKDbContext))]
-    partial class AssistLKDbContextModelSnapshot : ModelSnapshot
+    [Migration("20260913072333_AddProviderMatching")]
+    partial class AddProviderMatching
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
@@ -390,22 +393,11 @@ namespace AssistLK.Infrastructure.Data.Migrations
                         .IsRequired()
                         .HasColumnType("text");
 
-                    b.Property<long>("EvidenceRevision")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("bigint")
-                        .HasDefaultValue(1L);
-
                     b.Property<Guid>("ServiceRequestId")
                         .HasColumnType("uuid");
 
                     b.Property<DateTime>("UpdatedAt")
                         .HasColumnType("timestamp with time zone");
-
-                    b.Property<string>("VisualEvidence")
-                        .IsRequired()
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("jsonb")
-                        .HasDefaultValueSql("'{\"visionStatus\":\"not_requested\",\"attachmentIdsUsed\":[],\"observations\":[],\"limitations\":[]}'::jsonb");
 
                     b.HasKey("Id");
 
@@ -414,8 +406,6 @@ namespace AssistLK.Infrastructure.Data.Migrations
                     b.ToTable("ProblemAnalyses", null, t =>
                         {
                             t.HasCheckConstraint("CK_ProblemAnalyses_Confidence", "\"Confidence\" >= 0 AND \"Confidence\" <= 1");
-
-                            t.HasCheckConstraint("CK_ProblemAnalyses_EvidenceRevision", "\"EvidenceRevision\" > 0");
                         });
                 });
 
@@ -614,12 +604,6 @@ namespace AssistLK.Infrastructure.Data.Migrations
                         .IsRequired()
                         .HasColumnType("text");
 
-                    b.Property<long>("EvidenceRevision")
-                        .IsConcurrencyToken()
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("bigint")
-                        .HasDefaultValue(1L);
-
                     b.Property<decimal?>("Latitude")
                         .HasPrecision(9, 6)
                         .HasColumnType("numeric(9,6)");
@@ -641,7 +625,6 @@ namespace AssistLK.Infrastructure.Data.Migrations
                         .HasColumnType("numeric(9,6)");
 
                     b.Property<string>("Status")
-                        .IsConcurrencyToken()
                         .IsRequired()
                         .HasMaxLength(40)
                         .HasColumnType("character varying(40)");
@@ -662,71 +645,9 @@ namespace AssistLK.Infrastructure.Data.Migrations
 
                     b.ToTable("ServiceRequests", null, t =>
                         {
-                            t.HasCheckConstraint("CK_ServiceRequests_EvidenceRevision", "\"EvidenceRevision\" > 0");
-
                             t.HasCheckConstraint("CK_ServiceRequests_Latitude", "\"Latitude\" IS NULL OR \"Latitude\" BETWEEN -90 AND 90");
 
                             t.HasCheckConstraint("CK_ServiceRequests_Longitude", "\"Longitude\" IS NULL OR \"Longitude\" BETWEEN -180 AND 180");
-                        });
-                });
-
-            modelBuilder.Entity("AssistLK.Domain.Entities.ServiceRequestAttachment", b =>
-                {
-                    b.Property<Guid>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("uuid");
-
-                    b.Property<string>("ContentHash")
-                        .IsRequired()
-                        .HasMaxLength(64)
-                        .HasColumnType("character varying(64)");
-
-                    b.Property<string>("ContentType")
-                        .IsRequired()
-                        .HasMaxLength(32)
-                        .HasColumnType("character varying(32)");
-
-                    b.Property<DateTime>("CreatedAt")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.Property<long>("FileSizeBytes")
-                        .HasColumnType("bigint");
-
-                    b.Property<int>("Height")
-                        .HasColumnType("integer");
-
-                    b.Property<Guid>("ServiceRequestId")
-                        .HasColumnType("uuid");
-
-                    b.Property<int>("Slot")
-                        .HasColumnType("integer");
-
-                    b.Property<string>("StorageKey")
-                        .IsRequired()
-                        .HasMaxLength(36)
-                        .HasColumnType("character varying(36)");
-
-                    b.Property<DateTime>("UpdatedAt")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.Property<int>("Width")
-                        .HasColumnType("integer");
-
-                    b.HasKey("Id");
-
-                    b.HasIndex("StorageKey")
-                        .IsUnique();
-
-                    b.HasIndex("ServiceRequestId", "Slot")
-                        .IsUnique();
-
-                    b.ToTable("ServiceRequestAttachments", null, t =>
-                        {
-                            t.HasCheckConstraint("CK_Attachments_Dimensions", "\"Width\" > 0 AND \"Height\" > 0");
-
-                            t.HasCheckConstraint("CK_Attachments_Size", "\"FileSizeBytes\" > 0");
-
-                            t.HasCheckConstraint("CK_Attachments_Slot", "\"Slot\" BETWEEN 1 AND 3");
                         });
                 });
 
@@ -981,17 +902,6 @@ namespace AssistLK.Infrastructure.Data.Migrations
                     b.Navigation("Customer");
                 });
 
-            modelBuilder.Entity("AssistLK.Domain.Entities.ServiceRequestAttachment", b =>
-                {
-                    b.HasOne("AssistLK.Domain.Entities.ServiceRequest", "ServiceRequest")
-                        .WithMany("Attachments")
-                        .HasForeignKey("ServiceRequestId")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
-
-                    b.Navigation("ServiceRequest");
-                });
-
             modelBuilder.Entity("AssistLK.Domain.Entities.ServiceRequestClarification", b =>
                 {
                     b.HasOne("AssistLK.Domain.Entities.ServiceRequest", "ServiceRequest")
@@ -1028,8 +938,6 @@ namespace AssistLK.Infrastructure.Data.Migrations
 
             modelBuilder.Entity("AssistLK.Domain.Entities.ServiceRequest", b =>
                 {
-                    b.Navigation("Attachments");
-
                     b.Navigation("Clarifications");
 
                     b.Navigation("ProblemAnalyses");

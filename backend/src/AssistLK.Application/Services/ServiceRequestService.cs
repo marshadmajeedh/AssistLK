@@ -97,7 +97,7 @@ public class ServiceRequestService : IServiceRequestService
         await _serviceRequestRepository.AddAsync(serviceRequest, cancellationToken);
         await _serviceRequestRepository.SaveChangesAsync(cancellationToken);
 
-        return MapResponse(serviceRequest);
+        return MapResponse(serviceRequest, includeVisualEvidence: true);
     }
 
     public async Task<ServiceRequestResponse> GetByIdAsync(
@@ -112,7 +112,7 @@ public class ServiceRequestService : IServiceRequestService
             includeClarifications: true,
             cancellationToken: cancellationToken);
 
-        return MapResponse(serviceRequest);
+        return MapResponse(serviceRequest, includeVisualEvidence: true);
     }
 
     public async Task<IReadOnlyList<ServiceRequestResponse>> GetCurrentCustomerRequestsAsync(
@@ -123,7 +123,7 @@ public class ServiceRequestService : IServiceRequestService
             customerId,
             cancellationToken);
 
-        return requests.Select(MapResponse).ToArray();
+        return requests.Select(r => MapResponse(r)).ToArray();
     }
 
     public async Task<ServiceRequestResponse> UpdateAsync(
@@ -169,6 +169,12 @@ public class ServiceRequestService : IServiceRequestService
             }
         }
 
+        CanonicalServiceCategories.IsValidHint(request.CategoryHint, out var revisionHint);
+        if (descriptionChanged || serviceRequest.CategoryHint != revisionHint ||
+            serviceRequest.LocationText != request.LocationText.Trim() ||
+            serviceRequest.Latitude != request.Latitude || serviceRequest.Longitude != request.Longitude)
+            serviceRequest.EvidenceRevision = checked(serviceRequest.EvidenceRevision + 1);
+
         serviceRequest.Description = request.Description.Trim();
         serviceRequest.LocationText = request.LocationText.Trim();
         serviceRequest.LocationSource = request.LocationSource;
@@ -181,7 +187,7 @@ public class ServiceRequestService : IServiceRequestService
         _serviceRequestRepository.Update(serviceRequest);
         await _serviceRequestRepository.SaveChangesAsync(cancellationToken);
 
-        return MapResponse(serviceRequest);
+        return MapResponse(serviceRequest, includeVisualEvidence: true);
     }
 
     public async Task<ServiceRequestResponse> CancelAsync(
@@ -204,7 +210,7 @@ public class ServiceRequestService : IServiceRequestService
         _serviceRequestRepository.Update(serviceRequest);
         await _serviceRequestRepository.SaveChangesAsync(cancellationToken);
 
-        return MapResponse(serviceRequest);
+        return MapResponse(serviceRequest, includeVisualEvidence: true);
     }
 
     public async Task<ProblemAnalysisResponse> ApplyProblemAnalysisResultAsync(
@@ -232,9 +238,16 @@ public class ServiceRequestService : IServiceRequestService
                 "Problem analysis cannot be applied in the current status.");
         }
 
+        if (result.EvidenceRevision.HasValue && result.EvidenceRevision.Value != serviceRequest.EvidenceRevision)
+            throw new ConflictException("Analysis was produced for outdated request evidence.");
+
+        var visualEvidence = result.VisualEvidence.ValidateFor(result.SuppliedAttachmentIds,
+            serviceRequest.Attachments.Select(a => a.Id));
         var analysis = new ProblemAnalysis
         {
+            VisualEvidence = visualEvidence,
             ServiceRequestId = serviceRequest.Id,
+            EvidenceRevision = result.EvidenceRevision ?? serviceRequest.EvidenceRevision,
             DetectedProblem = result.DetectedProblem.Trim(),
             Confidence = result.Confidence,
             AgentName = result.AgentName.Trim()
@@ -386,7 +399,7 @@ public class ServiceRequestService : IServiceRequestService
         _serviceRequestRepository.Update(serviceRequest);
         await _serviceRequestRepository.SaveChangesAsync(cancellationToken);
 
-        return MapResponse(serviceRequest);
+        return MapResponse(serviceRequest, includeVisualEvidence: true);
     }
 
     public virtual async Task<ServiceRequestStatus> GetPreAnalysisStatusAsync(
@@ -424,7 +437,7 @@ public class ServiceRequestService : IServiceRequestService
                 $"Invalid recovery target status '{previousStatus}'. Analysis can only be recovered to Created or AwaitingInformation.");
         }
 
-        var serviceRequest = await _serviceRequestRepository.GetByIdAsync(
+        var serviceRequest = await _serviceRequestRepository.ReloadForRecoveryAsync(
             serviceRequestId,
             cancellationToken: cancellationToken);
 
@@ -443,7 +456,7 @@ public class ServiceRequestService : IServiceRequestService
         _serviceRequestRepository.Update(serviceRequest);
         await _serviceRequestRepository.SaveChangesAsync(cancellationToken);
 
-        return MapResponse(serviceRequest);
+        return MapResponse(serviceRequest, includeVisualEvidence: true);
     }
 
     public async Task<ServiceRequestResponse> MarkReadyForMatchingAsync(
@@ -509,6 +522,9 @@ public class ServiceRequestService : IServiceRequestService
                 "Service request must have at least one problem analysis to be marked ready for matching.");
         }
 
+        if (latestAnalysis.EvidenceRevision != serviceRequest.EvidenceRevision)
+            throw new ConflictException("The latest analysis is outdated. Re-analysis is required.");
+
         if (latestAnalysis.Confidence <= 0m || latestAnalysis.Confidence > 1m)
         {
             throw new ConflictException(
@@ -519,7 +535,7 @@ public class ServiceRequestService : IServiceRequestService
         _serviceRequestRepository.Update(serviceRequest);
         await _serviceRequestRepository.SaveChangesAsync(cancellationToken);
 
-        return MapResponse(serviceRequest);
+        return MapResponse(serviceRequest, includeVisualEvidence: true);
     }
 
     public async Task<IReadOnlyList<ServiceRequestClarificationDto>> SubmitClarificationAnswersAsync(
@@ -594,6 +610,8 @@ public class ServiceRequestService : IServiceRequestService
             }
         }
 
+        if (actionableQuestions.Any(q => q.Answer != submittedAnswers[q.Id]))
+            serviceRequest.EvidenceRevision = checked(serviceRequest.EvidenceRevision + 1);
         var now = DateTime.UtcNow;
         foreach (var q in actionableQuestions)
         {
@@ -659,7 +677,7 @@ public class ServiceRequestService : IServiceRequestService
             parsedUrgency,
             cancellationToken);
 
-        return requests.Select(MapResponse).ToArray();
+        return requests.Select(r => MapResponse(r)).ToArray();
     }
 
     public async Task<ServiceRequestResponse> GetByIdForAdminAsync(
@@ -801,7 +819,7 @@ public class ServiceRequestService : IServiceRequestService
         }
     }
 
-    private static ServiceRequestResponse MapResponse(ServiceRequest serviceRequest)
+    private static ServiceRequestResponse MapResponse(ServiceRequest serviceRequest, bool includeVisualEvidence = false)
     {
         ProblemAnalysisSummaryDto? latestAnalysis = null;
         if (serviceRequest.ProblemAnalyses != null && serviceRequest.ProblemAnalyses.Any())
@@ -813,6 +831,8 @@ public class ServiceRequestService : IServiceRequestService
             latestAnalysis = new ProblemAnalysisSummaryDto
             {
                 Id = latest.Id,
+                VisualEvidence = includeVisualEvidence && latest.EvidenceRevision == serviceRequest.EvidenceRevision
+                    ? latest.VisualEvidence : null,
                 DetectedProblem = latest.DetectedProblem,
                 Confidence = latest.Confidence,
                 AgentName = latest.AgentName,
@@ -831,6 +851,7 @@ public class ServiceRequestService : IServiceRequestService
         return new ServiceRequestResponse
         {
             ServiceRequestId = serviceRequest.Id,
+            EvidenceRevision = serviceRequest.EvidenceRevision,
             CustomerId = serviceRequest.CustomerId,
             CategoryHint = serviceRequest.CategoryHint,
             Category = serviceRequest.Category,

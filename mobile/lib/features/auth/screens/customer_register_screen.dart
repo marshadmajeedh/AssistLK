@@ -53,8 +53,8 @@ class _CustomerRegisterScreenState extends State<CustomerRegisterScreen> {
     );
 
     if (success && mounted) {
-      // Pop back past registration flow
-      Navigator.of(context).pop();
+      // Also works when this screen is hosted without the app session boundary.
+      Navigator.of(context).popUntil((route) => route.isFirst);
     }
   }
 
@@ -248,8 +248,9 @@ class _CustomerRegisterScreenState extends State<CustomerRegisterScreen> {
                                 padding: const EdgeInsets.all(AppSpacing.sm),
                                 decoration: BoxDecoration(
                                   color: AppColors.error.withValues(alpha: 0.1),
-                                  borderRadius:
-                                      BorderRadius.circular(AppRadius.small),
+                                  borderRadius: BorderRadius.circular(
+                                    AppRadius.small,
+                                  ),
                                 ),
                                 child: Row(
                                   children: [

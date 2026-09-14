@@ -58,6 +58,8 @@ public class ProblemUnderstandingHttpClient : IProblemUnderstandingClient
     {
         ArgumentNullException.ThrowIfNull(request);
 
+        VisualEvidenceLimits.Validate(request.Input.VisualEvidence);
+
         var requestJson = JsonSerializer.Serialize(request, JsonOptions);
         using var httpRequest = new HttpRequestMessage(HttpMethod.Post, ExecuteEndpoint)
         {
@@ -83,7 +85,7 @@ public class ProblemUnderstandingHttpClient : IProblemUnderstandingClient
             if (!response.IsSuccessStatusCode)
             {
                 var statusCode = (int)response.StatusCode;
-                var rawBody = await response.Content.ReadAsStringAsync(cancellationToken);
+                // Do not read or echo validation bodies: Pydantic can include rejected image content.
 
                 _logger.LogWarning(
                     "Python agent service returned non-success HTTP status {StatusCode} for request {RequestId}",
@@ -97,7 +99,7 @@ public class ProblemUnderstandingHttpClient : IProblemUnderstandingClient
                 }
                 else if (response.StatusCode == HttpStatusCode.UnprocessableEntity)
                 {
-                    sanitizedDetail = $"Payload validation failed at agent service (HTTP 422): {Truncate(rawBody, 200)}";
+                    sanitizedDetail = "Payload validation failed at agent service (HTTP 422).";
                 }
                 else
                 {
@@ -256,9 +258,4 @@ public class ProblemUnderstandingHttpClient : IProblemUnderstandingClient
         request.Headers.Authorization = null;
     }
 
-    private static string Truncate(string? value, int maxLength)
-    {
-        if (string.IsNullOrEmpty(value)) return string.Empty;
-        return value.Length <= maxLength ? value : value.Substring(0, maxLength) + "...";
-    }
 }

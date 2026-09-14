@@ -10,8 +10,14 @@ namespace AssistLK.Agents.Models;
 public class ProblemUnderstandingInput
 {
     /// <summary>
-    /// The unique identifier of the ServiceRequest being analysed.
+    /// Small internal audit metadata; never sent to the Python wire contract.
     /// </summary>
+    public long? EvidenceRevision { get; set; }
+
+    /// <summary>Bounded identities only; binary content belongs exclusively to transient HTTP transport.</summary>
+    public IReadOnlyList<Guid> AttachmentIds { get; set; } = Array.Empty<Guid>();
+
+    /// <summary>The unique identifier of the ServiceRequest being analysed.</summary>
     public Guid ServiceRequestId { get; set; }
 
     /// <summary>

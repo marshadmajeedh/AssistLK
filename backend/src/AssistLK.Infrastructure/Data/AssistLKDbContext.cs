@@ -17,6 +17,8 @@ public class AssistLKDbContext : DbContext, IAgentWorkflowDbContext
 
     public DbSet<ServiceRequest> ServiceRequests => Set<ServiceRequest>();
 
+    public DbSet<ServiceRequestAttachment> ServiceRequestAttachments => Set<ServiceRequestAttachment>();
+
     public DbSet<ProblemAnalysis> ProblemAnalyses => Set<ProblemAnalysis>();
 
     public DbSet<ServiceRequestClarification> ServiceRequestClarifications => Set<ServiceRequestClarification>();
@@ -210,6 +212,26 @@ public class AssistLKDbContext : DbContext, IAgentWorkflowDbContext
 
         ConfigureUser(modelBuilder);
         ConfigureServiceRequest(modelBuilder);
+        modelBuilder.Entity<ServiceRequest>().Property(x => x.EvidenceRevision).HasDefaultValue(1L).IsConcurrencyToken();
+        modelBuilder.Entity<ServiceRequest>().Property(x => x.Status).IsConcurrencyToken();
+        modelBuilder.Entity<ProblemAnalysis>().Property(x => x.EvidenceRevision).HasDefaultValue(1L);
+        modelBuilder.Entity<ServiceRequest>().ToTable(t => t.HasCheckConstraint("CK_ServiceRequests_EvidenceRevision", "\"EvidenceRevision\" > 0"));
+        modelBuilder.Entity<ProblemAnalysis>().ToTable(t => t.HasCheckConstraint("CK_ProblemAnalyses_EvidenceRevision", "\"EvidenceRevision\" > 0"));
+        var attachment = modelBuilder.Entity<ServiceRequestAttachment>();
+        attachment.ToTable("ServiceRequestAttachments", t =>
+        {
+            t.HasCheckConstraint("CK_Attachments_Slot", "\"Slot\" BETWEEN 1 AND 3");
+            t.HasCheckConstraint("CK_Attachments_Size", "\"FileSizeBytes\" > 0");
+            t.HasCheckConstraint("CK_Attachments_Dimensions", "\"Width\" > 0 AND \"Height\" > 0");
+        });
+        attachment.HasKey(x => x.Id);
+        attachment.Property(x => x.StorageKey).HasMaxLength(36).IsRequired();
+        attachment.Property(x => x.ContentType).HasMaxLength(32).IsRequired();
+        attachment.Property(x => x.ContentHash).HasMaxLength(64).IsRequired();
+        attachment.HasIndex(x => x.StorageKey).IsUnique();
+        attachment.HasIndex(x => new { x.ServiceRequestId, x.Slot }).IsUnique();
+        attachment.HasOne(x => x.ServiceRequest).WithMany(x => x.Attachments)
+            .HasForeignKey(x => x.ServiceRequestId).OnDelete(DeleteBehavior.Cascade);
         ConfigureProblemAnalysis(modelBuilder);
         ConfigureServiceRequestClarification(modelBuilder);
     }
@@ -333,6 +355,14 @@ public class AssistLKDbContext : DbContext, IAgentWorkflowDbContext
     private static void ConfigureProblemAnalysis(ModelBuilder modelBuilder)
     {
         var analysis = modelBuilder.Entity<ProblemAnalysis>();
+        analysis.Property(x => x.VisualEvidence)
+            .HasColumnType("jsonb")
+            .HasConversion(value => VisualEvidenceJson.Write(value), json => VisualEvidenceJson.Read(json))
+            .HasDefaultValueSql("'{\"visionStatus\":\"not_requested\",\"attachmentIdsUsed\":[],\"observations\":[],\"limitations\":[]}'::jsonb")
+            .Metadata.SetValueComparer(new Microsoft.EntityFrameworkCore.ChangeTracking.ValueComparer<ProblemAnalysisVisualEvidence>(
+                (a, b) => VisualEvidenceJson.Write(a!) == VisualEvidenceJson.Write(b!),
+                value => VisualEvidenceJson.Write(value).GetHashCode(),
+                value => VisualEvidenceJson.Read(VisualEvidenceJson.Write(value))));
 
         analysis.ToTable(
             "ProblemAnalyses",

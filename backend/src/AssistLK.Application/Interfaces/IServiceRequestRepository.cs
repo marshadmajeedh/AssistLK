@@ -5,6 +5,10 @@ namespace AssistLK.Application.Interfaces;
 
 public interface IServiceRequestRepository
 {
+    // Recovery must use current persisted revision/status, not an EF tracked snapshot.
+    Task<ServiceRequest?> ReloadForRecoveryAsync(Guid serviceRequestId, CancellationToken cancellationToken = default)
+        => GetByIdAsync(serviceRequestId, cancellationToken: cancellationToken);
+
     Task<ServiceRequest?> GetByIdAsync(
         Guid serviceRequestId,
         bool includeProblemAnalyses = false,

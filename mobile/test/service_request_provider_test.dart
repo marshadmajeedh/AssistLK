@@ -1,3 +1,4 @@
+import 'package:mobile/features/service_requests/models/service_request_attachment.dart';
 import 'dart:async';
 
 import 'package:dio/dio.dart';
@@ -27,6 +28,9 @@ class FakeServiceRequestService extends ServiceRequestService {
   int analyzeCallCount = 0;
   Completer<ProblemUnderstandingResultModel>? analyzeCompleter;
   List<ServiceRequestModel>? getByIdResponses;
+
+  @override
+  Future<List<ServiceRequestAttachment>> listAttachments(String id, {CancelToken? cancelToken}) async => [];
 
   @override
   Future<List<ServiceRequestModel>> getMyRequests() async {

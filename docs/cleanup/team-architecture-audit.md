@@ -1,5 +1,7 @@
 # AssistLK Team Architecture & Developer Experience Audit Report
 
+> **Historical / Superseded:** This document records an earlier implementation state. Its original conclusions and verification results are retained as historical evidence, not current instructions. Component 1 is now Python-only. See [current Agentic AI architecture](../../agent-services/README.md). References repaired during documentation consolidation point to replacement explanations, not the original historical implementation.
+
 **Audit Date:** September 9, 2026  
 **Auditor:** Antigravity Engineering AI Assistant  
 **Branch:** `chore/team-architecture-hardening`  
@@ -160,7 +162,7 @@ Documented authoritatively in:
 ## 6. Developer Onboarding Paths
 
 ### 6.1 .NET Agent Onboarding
-Detailed in **[`docs/development/how-to-create-dotnet-agent.md`](../development/how-to-create-dotnet-agent.md)**:
+Detailed in **[`docs/development/how-to-create-dotnet-agent.md`](../../agent-services/README.md)**:
 1. Define single responsibility.
 2. Define structured input/output records in `AssistLK.Agents/Models/`.
 3. Implement `IAgent` interface (`ExecuteAsync`).
@@ -173,7 +175,7 @@ Detailed in **[`docs/development/how-to-create-dotnet-agent.md`](../development/
 10. Cover with automated tests using `FakeGeminiService` or offline simulation.
 
 ### 6.2 Python Agent Onboarding
-Detailed in **[`docs/architecture/external-python-agent-service.md`](../architecture/external-python-agent-service.md)** and **[`docs/architecture/external-agent-contract.md`](../architecture/external-agent-contract.md)**:
+Detailed in **[`docs/architecture/external-python-agent-service.md`](../../agent-services/problem-understanding-agent/README.md)** and **[`docs/architecture/external-agent-contract.md`](../../agent-services/problem-understanding-agent/README.md)**:
 1. Service resides in `agent-services/<agent-name>/` (e.g. `agent-services/provider-matching-agent/`).
 2. Implemented with FastAPI / Pydantic / LangChain / LangGraph.
 3. Must adhere to the standard JSON wire contract (`requestId`, `agentName`, `operation`, `input` → `success`, `result`, `needsMoreInformation`, `errors`).

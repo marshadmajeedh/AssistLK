@@ -6,7 +6,7 @@
 
 | Member | Component | Domain Scope | Primary AI Agent | Frontend Feature Directories |
 |---|---|---|---|---|
-| **Member 1** | **Component 1** | Service Request & Problem Understanding | `ProblemUnderstandingAgent` (.NET 8 native) | Web: `web/src/features/serviceRequests/`<br>Mobile: `mobile/lib/features/service_requests/` |
+| **Member 1** | **Component 1** | Service Request & Problem Understanding | `ProblemUnderstandingAgent` (Python, via ASP.NET adapter) | Web: `web/src/features/serviceRequests/`<br>Mobile: `mobile/lib/features/service_requests/` |
 | **Member 2** | **Component 2** | Provider Management & Intelligent Matching | `ProviderMatchingAgent` (.NET or Python) | Web: `web/src/features/providers/`<br>Mobile: `mobile/lib/features/providers/` |
 | **Member 3** | **Component 3** | Quotation, Booking & Service Coordination | `ServiceCoordinationAgent` (.NET or Python) | Web: `web/src/features/quotations/`<br>Mobile: `mobile/lib/features/quotations/` |
 | **Member 4** | **Component 4** | Service Tracking, Completion & Feedback | `ValidationSafetyAgent` (.NET or Python) | Web: `web/src/features/tracking/`<br>Mobile: `mobile/lib/features/tracking/` |

@@ -1,5 +1,7 @@
 # Component 2: Provider Matching
 
+> **Scope:** This overview describes planned component responsibilities and completion criteria, not verified implementation status.
+
 ## Responsibility
 
 Owns provider profiles, skills, categories, availability, service areas, verification, provider search, matching, and accept or reject actions.
@@ -13,7 +15,7 @@ The Provider Matching Agent ranks eligible providers using validated request req
 - Backend providers and matching use cases
 - React admin and provider workflows
 - Flutter provider workflows
-- Agent service `agents/provider_matching/`
+- Agent integration location is not established by this overview; follow the shared internal-service boundary.
 
 ## Completion criteria
 

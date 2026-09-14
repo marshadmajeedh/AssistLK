@@ -1,4 +1,9 @@
+import '../../auth/providers/auth_provider.dart';
+import '../providers/problem_photos_controller.dart';
+import '../services/problem_image_picker.dart';
+import '../widgets/problem_photos.dart';
 import '../models/location_source.dart';
+import '../../customer/models/location_suggestion.dart';
 import '../widgets/location_attribution.dart';
 import '../providers/location_selection_controller.dart';
 import '../services/location_geocoding_service.dart';
@@ -24,15 +29,19 @@ import '../widgets/step_indicator.dart';
 import 'service_request_detail_screen.dart';
 
 class CreateServiceRequestScreen extends StatefulWidget {
+  final ProblemImagePicker? imagePicker;
   final String? initialCategoryPreference;
   final LocationService? locationService;
   final LocationGeocodingService? geocodingService;
+  final LocationSuggestion? initialLocationSuggestion;
 
   const CreateServiceRequestScreen({
     super.key,
+    this.imagePicker,
     this.initialCategoryPreference,
     this.locationService,
     this.geocodingService,
+    this.initialLocationSuggestion,
   });
 
   @override
@@ -42,6 +51,7 @@ class CreateServiceRequestScreen extends StatefulWidget {
 
 class _CreateServiceRequestScreenState
     extends State<CreateServiceRequestScreen> {
+  late final ProblemPhotosController _photos;
   int _currentStep = 0;
   String? _selectedPreference;
   late final LocationSelectionController _location;
@@ -53,8 +63,19 @@ class _CreateServiceRequestScreenState
   @override
   void initState() {
     super.initState();
+    _photos = ProblemPhotosController(
+      service: context.read<ServiceRequestProvider>().serviceRequestService,
+      picker:
+          widget.imagePicker ??
+          context.read<ProblemImagePicker?>() ??
+          NativeProblemImagePicker(),
+      auth: context.read<AuthProvider?>(),
+    );
+    _photos.addListener(_photoChanged);
+    _photos.recover();
     _selectedPreference = widget.initialCategoryPreference;
     _location = LocationSelectionController(
+      initialSuggestion: widget.initialLocationSuggestion,
       gps: widget.locationService ?? GeolocatorLocationService(),
       geocoding:
           widget.geocodingService ??
@@ -67,8 +88,14 @@ class _CreateServiceRequestScreenState
     );
   }
 
+  void _photoChanged() {
+    if (mounted) setState(() {});
+  }
+
   @override
   void dispose() {
+    _photos.removeListener(_photoChanged);
+    _photos.dispose();
     _descriptionController.dispose();
     _location.dispose();
     super.dispose();
@@ -240,7 +267,7 @@ class _CreateServiceRequestScreenState
   }
 
   Future<void> _submit() async {
-    if (_location.validate() != null) return;
+    if (_photos.busy || !_photos.active || _location.validate() != null) return;
     final provider = context.read<ServiceRequestProvider>();
     final canonicalHint = CanonicalServiceCategory.toCanonicalCategoryHint(
       _selectedPreference,
@@ -254,55 +281,117 @@ class _CreateServiceRequestScreenState
       categoryHint: canonicalHint,
     );
 
-    final created = await provider.createRequest(dto);
-
-    if (!mounted) return;
-
-    if (created != null) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Service request created successfully!'),
-          backgroundColor: AppColors.success,
-        ),
-      );
-
-      // Navigate to detail screen so customer can trigger AI analysis
-      Navigator.of(context).pushReplacement(
-        MaterialPageRoute(
-          builder: (_) =>
-              ServiceRequestDetailScreen(requestId: created.serviceRequestId),
-        ),
-      );
-    } else {
-      final errorMessage =
-          provider.error ?? 'Failed to create request. Please try again.';
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(errorMessage), backgroundColor: AppColors.error),
-      );
+    final complete = await _photos.submit(
+      create: () => provider.createRequest(dto),
+    );
+    if (!mounted || !_photos.active) return;
+    if (complete) {
+      _openCreatedRequest();
+    } else if (_photos.requestId == null && provider.error != null) {
+      ScaffoldMessenger.of(context)
+          .showSnackBar(SnackBar(content: Text(provider.error!)));
     }
+  }
+
+  void _openCreatedRequest() {
+    final id = _photos.requestId;
+    if (id == null || !_photos.active) return;
+    _photos.continueWithoutFailed();
+    Navigator.of(context).pushReplacement(
+      MaterialPageRoute(
+        builder: (_) => ServiceRequestDetailScreen(requestId: id),
+      ),
+    );
   }
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(title: const Text('Create Service Request')),
-      body: SafeArea(
-        child: Column(
-          children: [
-            StepIndicator(currentStep: _currentStep),
-            Expanded(
-              child: SingleChildScrollView(
-                padding: const EdgeInsets.all(AppSpacing.lg),
-                child: _buildCurrentStep(context),
+    return PopScope(
+      canPop: !_photos.busy,
+      child: Scaffold(
+        appBar: AppBar(title: const Text('Create Service Request')),
+        body: SafeArea(
+          child: Column(
+            children: [
+              StepIndicator(currentStep: _currentStep),
+              Expanded(
+                child: SingleChildScrollView(
+                  padding: const EdgeInsets.all(AppSpacing.lg),
+                  child: _buildCurrentStep(context),
+                ),
               ),
-            ),
-          ],
+              Padding(
+                key: const Key('wizard_actions'),
+                padding: const EdgeInsets.fromLTRB(
+                  AppSpacing.lg,
+                  AppSpacing.sm,
+                  AppSpacing.lg,
+                  AppSpacing.md,
+                ),
+                child: _buildWizardActions(context),
+              ),
+            ],
+          ),
         ),
       ),
     );
   }
 
+  Widget _buildWizardActions(BuildContext context) {
+    final provider = context.watch<ServiceRequestProvider>();
+    if (_photos.sessionEnded || _photos.requestId != null) {
+      return const SizedBox.shrink();
+    }
+    if (_currentStep == 0) {
+      return AppButton(text: 'Next: Location', onPressed: _nextFromDetails);
+    }
+    final back = OutlinedButton(
+      onPressed: _currentStep == 1
+          ? _backToDetails
+          : (provider.isLoading || _photos.busy ? null : _backToLocation),
+      child: const Text('Back'),
+    );
+    final next = AppButton(
+      text: _currentStep == 1 ? 'Next: Review' : 'Submit Request',
+      isLoading: _currentStep == 2 && (provider.isLoading || _photos.busy),
+      onPressed: _currentStep == 1 ? _nextFromLocation : _submit,
+    );
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final scale = MediaQuery.textScalerOf(context).scale(14) / 14;
+        if (constraints.maxWidth < 280 * scale) {
+          return Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              next,
+              const SizedBox(height: AppSpacing.sm),
+              back,
+            ],
+          );
+        }
+        return Row(
+          children: [
+            Expanded(child: back),
+            const SizedBox(width: AppSpacing.md),
+            Expanded(child: next),
+          ],
+        );
+      },
+    );
+  }
+
   Widget _buildCurrentStep(BuildContext context) {
+    if (_photos.sessionEnded) {
+      return const Text('Your session has ended. Please sign in again.');
+    }
+    if (_photos.requestId != null) {
+      return PhotoUploadProgress(
+        controller: _photos,
+        onContinue: _openCreatedRequest,
+        onRetry: _submit,
+      );
+    }
     switch (_currentStep) {
       case 0:
         return _buildDetailsStep();
@@ -335,52 +424,59 @@ class _CreateServiceRequestScreenState
               borderRadius: BorderRadius.circular(AppRadius.large),
               border: Border.all(color: AppColors.border),
             ),
-            child: Row(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Container(
-                  width: 44,
-                  height: 44,
-                  padding: const EdgeInsets.all(AppSpacing.xs),
-                  decoration: BoxDecoration(
-                    color: selectedCategory != null
-                        ? AppColors.primarySurface
-                        : AppColors.aiSurface,
-                    borderRadius: BorderRadius.circular(AppRadius.medium),
-                  ),
-                  child: Center(
-                    child: AppImageAsset(
-                      assetPath: selectedCategory != null
-                          ? _getCategoryAssetPath(selectedCategory)
-                          : AppAssets.aiDiagnosisSpark,
-                      width: 32,
-                      height: 32,
-                      fit: BoxFit.contain,
-                      fallbackIcon:
-                          selectedCategory?.icon ?? Icons.auto_awesome_rounded,
-                      semanticLabel:
-                          selectedCategory?.displayName ??
-                          'AssistLK AI Problem Understanding',
+                Row(
+                  children: [
+                    Container(
+                      width: 44,
+                      height: 44,
+                      padding: const EdgeInsets.all(AppSpacing.xs),
+                      decoration: BoxDecoration(
+                        color: selectedCategory != null
+                            ? AppColors.primarySurface
+                            : AppColors.aiSurface,
+                        borderRadius: BorderRadius.circular(AppRadius.medium),
+                      ),
+                      child: Center(
+                        child: AppImageAsset(
+                          assetPath: selectedCategory != null
+                              ? _getCategoryAssetPath(selectedCategory)
+                              : AppAssets.aiDiagnosisSpark,
+                          width: 32,
+                          height: 32,
+                          fit: BoxFit.contain,
+                          fallbackIcon:
+                              selectedCategory?.icon ??
+                              Icons.auto_awesome_rounded,
+                          semanticLabel:
+                              selectedCategory?.displayName ??
+                              'AssistLK AI Problem Understanding',
+                        ),
+                      ),
                     ),
-                  ),
-                ),
-                const SizedBox(width: AppSpacing.md),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      const Text(
-                        'Service preference',
-                        style: AppTextStyles.small,
+                    const SizedBox(width: AppSpacing.md),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          const Text(
+                            'Service preference',
+                            style: AppTextStyles.small,
+                          ),
+                          const SizedBox(height: 2),
+                          Text(
+                            selectedCategory?.displayName ??
+                                'Let AssistLK AI identify',
+                            style: AppTextStyles.cardHeading,
+                          ),
+                        ],
                       ),
-                      const SizedBox(height: 2),
-                      Text(
-                        selectedCategory?.displayName ??
-                            'Let AssistLK AI identify',
-                        style: AppTextStyles.cardHeading,
-                      ),
-                    ],
-                  ),
+                    ),
+                  ],
                 ),
+                const SizedBox(height: AppSpacing.sm),
                 TextButton(
                   onPressed: _showChangePreferenceSheet,
                   child: Text(
@@ -425,7 +521,8 @@ class _CreateServiceRequestScreenState
           ),
           const SizedBox(height: AppSpacing.xl),
 
-          AppButton(text: 'Next: Location', onPressed: _nextFromDetails),
+          DraftProblemPhotos(controller: _photos),
+          const SizedBox(height: AppSpacing.md),
         ],
       ),
     );
@@ -435,32 +532,11 @@ class _CreateServiceRequestScreenState
     key: _locationFormKey,
     child: Column(
       crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        LocationSelection(controller: _location),
-        const SizedBox(height: AppSpacing.md),
-        Row(
-          children: [
-            Expanded(
-              child: OutlinedButton(
-                onPressed: _backToDetails,
-                child: const Text('Back'),
-              ),
-            ),
-            const SizedBox(width: AppSpacing.md),
-            Expanded(
-              child: AppButton(
-                text: 'Next: Review',
-                onPressed: _nextFromLocation,
-              ),
-            ),
-          ],
-        ),
-      ],
+      children: [LocationSelection(controller: _location)],
     ),
   );
 
   Widget _buildReviewStep(BuildContext context) {
-    final provider = context.watch<ServiceRequestProvider>();
     final selectedCategory =
         CanonicalServiceCategory.fromCanonicalOrDisplayName(
           _selectedPreference,
@@ -562,11 +638,13 @@ class _CreateServiceRequestScreenState
                       color: AppColors.success,
                     ),
                     const SizedBox(width: AppSpacing.xs),
-                    Text(
-                      'GPS location captured',
-                      style: AppTextStyles.small.copyWith(
-                        color: AppColors.success,
-                        fontWeight: FontWeight.w600,
+                    Flexible(
+                      child: Text(
+                        'GPS location captured',
+                        style: AppTextStyles.small.copyWith(
+                          color: AppColors.success,
+                          fontWeight: FontWeight.w600,
+                        ),
                       ),
                     ),
                   ],
@@ -577,6 +655,8 @@ class _CreateServiceRequestScreenState
         ),
         const SizedBox(height: AppSpacing.md),
 
+        DraftProblemPhotos(controller: _photos, review: true),
+        const SizedBox(height: AppSpacing.md),
         // AI Confirmation Disclosure Banner
         Container(
           width: double.infinity,
@@ -608,25 +688,6 @@ class _CreateServiceRequestScreenState
           ),
         ),
         const SizedBox(height: AppSpacing.xl),
-
-        Row(
-          children: [
-            Expanded(
-              child: OutlinedButton(
-                onPressed: provider.isLoading ? null : _backToLocation,
-                child: const Text('Back'),
-              ),
-            ),
-            const SizedBox(width: AppSpacing.md),
-            Expanded(
-              child: AppButton(
-                text: 'Submit Request',
-                isLoading: provider.isLoading,
-                onPressed: _submit,
-              ),
-            ),
-          ],
-        ),
       ],
     );
   }

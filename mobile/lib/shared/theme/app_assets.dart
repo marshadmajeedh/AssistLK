@@ -14,6 +14,8 @@ class AppAssets {
       'assets/images/hero/home_service_hero.png';
 
   // Categories
+  static const String unclassifiedService =
+      'assets/images/categories/unclassified_service.png';
   static const String plumbingService =
       'assets/images/categories/plumbing_service.png';
   static const String electricalService =

@@ -87,7 +87,8 @@ public class ExternalProblemUnderstandingWorkflowIntegrationTests
                 SafetyService,
                 Orchestrator,
                 Registry,
-                RequestService);
+                RequestService,
+                AssistLK.IntegrationTests.TestDoubles.TestAnalysisEvidence.Create(reqRepo));
         }
     }
 

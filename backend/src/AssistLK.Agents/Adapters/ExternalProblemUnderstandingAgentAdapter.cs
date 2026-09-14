@@ -57,6 +57,7 @@ public sealed class ExternalProblemUnderstandingAgentAdapter : IAgent
 
             var emptyOutput = new ProblemUnderstandingOutput
             {
+                VisualResult = new() { VisionStatus = context.VisualEvidence.Count > 0 ? "unsupported" : "not_requested" },
                 Category = "Unclassified",
                 ProblemSummary = "Insufficient information provided to determine the problem.",
                 Urgency = ServiceRequestUrgency.Unknown,
@@ -88,6 +89,7 @@ public sealed class ExternalProblemUnderstandingAgentAdapter : IAgent
                 {
                     ServiceRequestId = input?.ServiceRequestId ?? Guid.NewGuid(),
                     Description = description,
+                    VisualEvidence = context.VisualEvidence,
                     LocationText = input?.LocationText,
                     Latitude = (double?)input?.Latitude,
                     Longitude = (double?)input?.Longitude,
@@ -112,12 +114,12 @@ public sealed class ExternalProblemUnderstandingAgentAdapter : IAgent
                 _logger.LogWarning(
                     "Python agent service returned failure for request {RequestId}: {ErrorMessage}",
                     requestDto.RequestId,
-                    response.ErrorMessage);
+                    context.VisualEvidence.Count > 0 ? "Image-enhanced execution failed." : response.ErrorMessage);
 
                 return new AgentResult
                 {
                     Success = false,
-                    Message = response.ErrorMessage ?? "Python agent execution failed."
+                    Message = context.VisualEvidence.Count > 0 ? "Image-enhanced execution failed." : response.ErrorMessage ?? "Python agent execution failed."
                 };
             }
 
@@ -136,6 +138,10 @@ public sealed class ExternalProblemUnderstandingAgentAdapter : IAgent
             }
 
             var rawResult = response.Result;
+            var visualResult = VisualResultValidation.Validate(rawResult, context.VisualEvidence);
+            if (context.VisualEvidence.Count > 0 && response.Metadata?.Provider is { } providerName
+                && providerName is not ("gemini" or "openai" or "offline"))
+                throw new InvalidOperationException("Invalid image-enhanced provider metadata.");
 
             // 5. Authoritative validation
             // 5a. Canonical category validation
@@ -228,6 +234,13 @@ public sealed class ExternalProblemUnderstandingAgentAdapter : IAgent
             // Prepare safe additional information
             var additionalInfo = new Dictionary<string, string>(
                 rawResult.AdditionalInformation ?? new Dictionary<string, string>());
+            if (context.VisualEvidence.Count > 0)
+            {
+                // Only deterministic agent metadata belongs in the execution audit.
+                string[] allowed = ["ServiceFamily", "SafeTerminology", "InspectionAdvised", "Degraded", "Simulation", "Simulated"];
+                additionalInfo = additionalInfo.Where(pair => allowed.Contains(pair.Key))
+                    .ToDictionary(pair => pair.Key, pair => pair.Value);
+            }
 
             if (isDegraded && !additionalInfo.ContainsKey("Degraded"))
             {
@@ -242,6 +255,7 @@ public sealed class ExternalProblemUnderstandingAgentAdapter : IAgent
             // 7. Assemble final domain output
             var output = new ProblemUnderstandingOutput
             {
+                VisualResult = visualResult,
                 Category = canonicalCategory,
                 ProblemSummary = rawResult.ProblemSummary.Trim(),
                 Urgency = urgency,
@@ -266,6 +280,12 @@ public sealed class ExternalProblemUnderstandingAgentAdapter : IAgent
         }
         catch (Exception ex)
         {
+            if (context.VisualEvidence.Count > 0)
+            {
+                _logger.LogWarning("Image-enhanced agent execution failed ({ErrorType}) for workflow {WorkflowId}.",
+                    ex.GetType().Name, context.WorkflowId);
+                return new AgentResult { Success = false, Message = "Image-enhanced agent execution failed." };
+            }
             _logger.LogError(
                 ex,
                 "Unexpected failure during external agent adapter execution for workflow {WorkflowId}: {Message}",

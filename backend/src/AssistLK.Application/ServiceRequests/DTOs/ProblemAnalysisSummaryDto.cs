@@ -6,6 +6,9 @@ namespace AssistLK.Application.ServiceRequests.DTOs;
 /// </summary>
 public class ProblemAnalysisSummaryDto
 {
+    [System.Text.Json.Serialization.JsonIgnore(Condition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull)]
+    public AssistLK.Domain.Entities.ProblemAnalysisVisualEvidence? VisualEvidence { get; set; }
+
     public Guid Id { get; set; }
 
     public string DetectedProblem { get; set; } = string.Empty;

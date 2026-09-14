@@ -28,4 +28,7 @@
     <ProjectReference Include="..\..\src\AssistLK.Api\AssistLK.Api.csproj" />
   </ItemGroup>
 
+  <ItemGroup>
+    <Compile Include="../Shared/FakeAttachmentStorage.cs" Link="TestDoubles/FakeAttachmentStorage.cs" />
+  </ItemGroup>
 </Project>

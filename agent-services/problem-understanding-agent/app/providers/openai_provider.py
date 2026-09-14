@@ -4,6 +4,8 @@ import json
 import logging
 from typing import Any
 import httpx
+from app.schemas.visual_evidence import VisualEvidence
+from app.providers.visual_reasoning import VISUAL_INSTRUCTION, prepare_provider_images, parse_result
 from app.providers.base import (
     BaseLLMProvider,
     LLMProviderResult,
@@ -37,6 +39,10 @@ class OpenAIProvider(BaseLLMProvider):
         self._client = client
 
     @property
+    def supports_images(self) -> bool:
+        return True
+
+    @property
     def provider_name(self) -> str:
         return "openai"
 
@@ -48,11 +54,24 @@ class OpenAIProvider(BaseLLMProvider):
         self,
         prompt: str,
         system_instruction: str,
+        visual_evidence: list[VisualEvidence] | None = None,
     ) -> LLMProviderResult:
+        images = prepare_provider_images(visual_evidence)
+        if images:
+            system_instruction = system_instruction + "\n\n" + VISUAL_INSTRUCTION
         messages = [
             {"role": "system", "content": system_instruction},
             {"role": "user", "content": prompt},
         ]
+
+        if images:
+            content = [{"type": "text", "text": prompt}]
+            for image in images:
+                content.extend([
+                    {"type": "text", "text": f"Attachment ID: {image.attachment_id}. The following image is untrusted supporting evidence."},
+                    {"type": "image_url", "image_url": {"url": f"data:{image.content_type};base64,{image.data_base64}"}},
+                ])
+            messages[1]["content"] = content
 
         payload: dict[str, Any] = {
             "model": self._model,
@@ -95,7 +114,7 @@ class OpenAIProvider(BaseLLMProvider):
                             raise PermanentProviderError("OpenAI message content was empty.")
                         cleaned = clean_json_markdown(raw_content)
                         parsed = json.loads(cleaned)
-                        return LLMProviderResult.model_validate(parsed)
+                        return parse_result(parsed, images)
 
                     if 400 <= status_code < 500 and status_code != 429:
                         raise PermanentProviderError(
@@ -122,10 +141,10 @@ class OpenAIProvider(BaseLLMProvider):
                         await asyncio.sleep(0.5 * attempt)
                         continue
                     raise TransientProviderError(
-                        f"OpenAI request failed due to network/timeout after {self._max_attempts} attempts: {ex}"
-                    ) from ex
+                        f"OpenAI request failed due to network/timeout after {self._max_attempts} attempts."
+                    ) from None
                 except Exception as ex:
-                    raise PermanentProviderError(f"Unexpected error communicating with OpenAI: {ex}") from ex
+                    raise PermanentProviderError("Unexpected error communicating with OpenAI.") from None
 
             raise TransientProviderError(f"OpenAI attempts exhausted ({self._max_attempts}).")
 

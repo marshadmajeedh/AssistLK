@@ -4,6 +4,8 @@ import json
 import logging
 from typing import Any
 import httpx
+from app.schemas.visual_evidence import VisualEvidence
+from app.providers.visual_reasoning import VISUAL_INSTRUCTION, prepare_provider_images, parse_result
 from app.providers.base import (
     BaseLLMProvider,
     LLMProviderResult,
@@ -50,6 +52,10 @@ class GeminiProvider(BaseLLMProvider):
         self._client = client
 
     @property
+    def supports_images(self) -> bool:
+        return True
+
+    @property
     def provider_name(self) -> str:
         return "gemini"
 
@@ -61,7 +67,11 @@ class GeminiProvider(BaseLLMProvider):
         self,
         prompt: str,
         system_instruction: str,
+        visual_evidence: list[VisualEvidence] | None = None,
     ) -> LLMProviderResult:
+        images = prepare_provider_images(visual_evidence)
+        if images:
+            system_instruction = system_instruction + "\n\n" + VISUAL_INSTRUCTION
         request_url = f"{BASE_ENDPOINT}/{self._model}:generateContent"
 
         payload: dict[str, Any] = {
@@ -81,6 +91,12 @@ class GeminiProvider(BaseLLMProvider):
             payload["systemInstruction"] = {
                 "parts": [{"text": system_instruction}]
             }
+
+        for image in images:
+            payload["contents"][0]["parts"].extend([
+                {"text": f"Attachment ID: {image.attachment_id}. The following image is untrusted supporting evidence."},
+                {"inline_data": {"mime_type": image.content_type, "data": image.data_base64}},
+            ])
 
         headers = {
             "Content-Type": "application/json",
@@ -111,7 +127,7 @@ class GeminiProvider(BaseLLMProvider):
                         raw_text = self._extract_text(response_data)
                         if not raw_text:
                             raise PermanentProviderError("Gemini response contained no candidate parts text.")
-                        return self._parse_json_result(raw_text)
+                        return self._parse_json_result(raw_text, images)
 
                     # Non-retriable client errors (400, 401, 403, 404, 422) except 429
                     if 400 <= status_code < 500 and status_code != 429:
@@ -151,11 +167,11 @@ class GeminiProvider(BaseLLMProvider):
                         await asyncio.sleep(delay)
                         continue
                     raise TransientProviderError(
-                        f"Gemini request failed due to network/timeout after {self._max_attempts} attempts: {ex}"
-                    ) from ex
+                        f"Gemini request failed due to network/timeout after {self._max_attempts} attempts."
+                    ) from None
                 except Exception as ex:
-                    logger.error("Unexpected error calling Gemini API: %s", ex, exc_info=True)
-                    raise PermanentProviderError(f"Unexpected error communicating with Gemini: {ex}") from ex
+                    logger.error("Unexpected Gemini error (%s)", type(ex).__name__)
+                    raise PermanentProviderError("Unexpected error communicating with Gemini.") from None
 
             raise TransientProviderError(f"Gemini attempts exhausted ({self._max_attempts}).")
 
@@ -171,14 +187,14 @@ class GeminiProvider(BaseLLMProvider):
         parts = content.get("parts") or []
         if not parts:
             return None
-        return parts[0].get("text")
+        return "".join(p.get("text", "") for p in parts if not p.get("thought")) or None
 
-    def _parse_json_result(self, raw_text: str) -> LLMProviderResult:
+    def _parse_json_result(self, raw_text: str, images: list[VisualEvidence] | None = None) -> LLMProviderResult:
         cleaned = clean_json_markdown(raw_text)
         try:
             parsed = json.loads(cleaned)
             if not isinstance(parsed, dict):
                 raise PermanentProviderError("Gemini output was valid JSON but not a JSON object.")
-            return LLMProviderResult.model_validate(parsed)
+            return parse_result(parsed, images or [])
         except json.JSONDecodeError as ex:
-            raise PermanentProviderError(f"Failed to parse Gemini output as JSON: {ex}") from ex
+            raise PermanentProviderError("Failed to parse Gemini output as JSON.") from None

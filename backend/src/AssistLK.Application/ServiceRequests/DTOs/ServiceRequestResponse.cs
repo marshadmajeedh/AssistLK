@@ -4,6 +4,9 @@ namespace AssistLK.Application.ServiceRequests.DTOs;
 
 public class ServiceRequestResponse
 {
+    [System.Text.Json.Serialization.JsonIgnore]
+    public long EvidenceRevision { get; set; } = 1;
+
     public Guid ServiceRequestId { get; set; }
     public Guid CustomerId { get; set; }
     public string? CategoryHint { get; set; }

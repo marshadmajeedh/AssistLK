@@ -1,3 +1,5 @@
+import 'package:dio/dio.dart';
+import 'package:mobile/features/service_requests/models/service_request_attachment.dart';
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -15,7 +17,8 @@ import 'package:mobile/features/service_requests/models/service_request_urgency.
 import 'package:mobile/features/service_requests/models/update_service_request_dto.dart';
 import 'package:mobile/features/service_requests/providers/service_request_provider.dart';
 import 'package:mobile/features/service_requests/screens/create_service_request_screen.dart';
-import 'package:mobile/features/service_requests/screens/customer_home_screen.dart';
+import 'package:mobile/features/service_requests/screens/customer_activity_screen.dart';
+import 'package:mobile/features/service_requests/screens/customer_services_screen.dart';
 import 'package:mobile/features/service_requests/screens/service_request_detail_screen.dart';
 import 'package:mobile/features/service_requests/services/service_request_service.dart';
 import 'package:mobile/features/service_requests/widgets/analysis_result_card.dart';
@@ -29,6 +32,9 @@ class MockLayoutServiceRequestService extends ServiceRequestService {
 
   List<ServiceRequestModel> requests = [];
   ProblemUnderstandingResultModel? analysisResult;
+
+  @override
+  Future<List<ServiceRequestAttachment>> listAttachments(String id, {CancelToken? cancelToken}) async => [];
 
   @override
   Future<List<ServiceRequestModel>> getMyRequests() async => List.of(requests);
@@ -149,21 +155,22 @@ void main() {
   }
 
   group('Component 1 UI Layout & RenderBox Verification Under AppTheme.lightTheme', () {
-    testWidgets('1. CustomerHomeScreen empty state renders and handles hover without exceptions',
+    testWidgets('1. CustomerActivityScreen empty state renders and handles hover without exceptions',
         (tester) async {
       mockService.requests = [];
 
-      await tester.pumpWidget(buildThemedApp(const CustomerHomeScreen()));
+      await requestProvider.loadMyRequests();
+      await tester.pumpWidget(buildThemedApp(const Scaffold(body: CustomerActivityScreen())));
       await tester.pumpAndSettle();
 
-      expect(find.text('Welcome, Kamal Perera'), findsOneWidget);
+      expect(find.text('My Requests'), findsOneWidget);
       expect(find.text('No Service Requests Yet'), findsOneWidget);
 
       await simulateMouseHoverSweep(tester);
     });
 
     testWidgets(
-        '2. CustomerHomeScreen populated request list renders and handles hover without exceptions',
+        '2. CustomerActivityScreen populated request list renders and handles hover without exceptions',
         (tester) async {
       mockService.requests = [
         ServiceRequestModel(
@@ -179,7 +186,8 @@ void main() {
         ),
       ];
 
-      await tester.pumpWidget(buildThemedApp(const CustomerHomeScreen()));
+      await requestProvider.loadMyRequests();
+      await tester.pumpWidget(buildThemedApp(const Scaffold(body: CustomerActivityScreen())));
       await tester.pumpAndSettle();
 
       expect(find.text('My Requests'), findsOneWidget);
@@ -203,6 +211,7 @@ void main() {
         find.widgetWithText(TextFormField, 'Problem Description'),
         'Major ceiling leak in the living room after heavy rain',
       );
+      await tester.ensureVisible(find.text('Next: Location'));
       await tester.tap(find.text('Next: Location'));
       await tester.pumpAndSettle();
 
@@ -214,6 +223,7 @@ void main() {
         find.widgetWithText(TextFormField, 'Location / Address'),
         '123 Galle Road, Colombo 03',
       );
+      await tester.ensureVisible(find.text('Next: Review'));
       await tester.tap(find.text('Next: Review'));
       await tester.pumpAndSettle();
 
@@ -342,7 +352,7 @@ void main() {
     });
   });
 
-  group('CustomerHomeScreen Responsive Layout Verification (320px, 360px, Desktop)', () {
+  group('CustomerActivityScreen Responsive Layout Verification (320px, 360px, Desktop)', () {
     testWidgets('Renders safely on narrow 320px viewport without overflow or truncation',
         (tester) async {
       tester.view.physicalSize = const Size(320, 568);
@@ -366,12 +376,16 @@ void main() {
         ),
       ];
 
-      await tester.pumpWidget(buildThemedApp(const CustomerHomeScreen()));
+      await requestProvider.loadMyRequests();
+      await tester.pumpWidget(buildThemedApp(const Scaffold(body: CustomerActivityScreen())));
       await tester.pumpAndSettle();
 
       expect(tester.takeException(), isNull);
       expect(find.text('My Requests'), findsOneWidget);
       expect(find.widgetWithText(ElevatedButton, 'Create Request'), findsOneWidget);
+
+      await tester.pumpWidget(buildThemedApp(const Scaffold(body: CustomerServicesScreen())));
+      await tester.pumpAndSettle();
       expect(find.text('Not sure what service you need?'), findsOneWidget);
       expect(
         find.text(
@@ -380,9 +394,10 @@ void main() {
         findsOneWidget,
       );
       expect(find.text('Let AssistLK AI analyze your problem'), findsOneWidget);
+      expect(tester.takeException(), isNull);
     });
 
-    testWidgets('Renders safely on 360px viewport without overflow with same-row alignment', (tester) async {
+    testWidgets('Renders safely on 360px viewport without overflow with stacked actions', (tester) async {
       tester.view.physicalSize = const Size(360, 640);
       tester.view.devicePixelRatio = 1.0;
       addTearDown(() {
@@ -392,12 +407,21 @@ void main() {
 
       mockService.requests = [];
 
-      await tester.pumpWidget(buildThemedApp(const CustomerHomeScreen()));
+      await requestProvider.loadMyRequests();
+      await tester.pumpWidget(buildThemedApp(const Scaffold(body: CustomerActivityScreen())));
       await tester.pumpAndSettle();
 
       expect(tester.takeException(), isNull);
       expect(find.text('My Requests'), findsOneWidget);
       expect(find.widgetWithText(ElevatedButton, 'Create Request').first, findsOneWidget);
+
+
+      // Verify the narrow Activity header stacks its action.
+      final titleCenter = tester.getCenter(find.text('My Requests'));
+      final buttonCenter = tester.getCenter(find.widgetWithText(ElevatedButton, 'Create Request').first);
+      expect(buttonCenter.dy, greaterThan(titleCenter.dy)); // Stack on narrow widths.
+      await tester.pumpWidget(buildThemedApp(const Scaffold(body: CustomerServicesScreen())));
+      await tester.pumpAndSettle();
       expect(find.text('Not sure what service you need?'), findsOneWidget);
       expect(
         find.text(
@@ -406,12 +430,7 @@ void main() {
         findsOneWidget,
       );
       expect(find.text('Let AssistLK AI analyze your problem'), findsOneWidget);
-
-      // Verify "My Requests" and "Create Request" are on the SAME horizontal row
-      final titleCenter = tester.getCenter(find.text('My Requests'));
-      final buttonCenter = tester.getCenter(find.widgetWithText(ElevatedButton, 'Create Request').first);
-      expect((titleCenter.dy - buttonCenter.dy).abs(), lessThan(5.0)); // Horizontally aligned on same row
-      expect(titleCenter.dx, lessThan(buttonCenter.dx)); // Title on left, button on right
+      expect(tester.takeException(), isNull);
     });
 
     testWidgets('Renders on physical device viewport (390x844) with same-row alignment', (tester) async {
@@ -424,7 +443,8 @@ void main() {
 
       mockService.requests = [];
 
-      await tester.pumpWidget(buildThemedApp(const CustomerHomeScreen()));
+      await requestProvider.loadMyRequests();
+      await tester.pumpWidget(buildThemedApp(const Scaffold(body: CustomerActivityScreen())));
       await tester.pumpAndSettle();
 
       expect(tester.takeException(), isNull);
@@ -440,7 +460,8 @@ void main() {
     testWidgets('Tapping Create Request navigates from responsive header', (tester) async {
       mockService.requests = [];
 
-      await tester.pumpWidget(buildThemedApp(const CustomerHomeScreen()));
+      await requestProvider.loadMyRequests();
+      await tester.pumpWidget(buildThemedApp(const Scaffold(body: CustomerActivityScreen())));
       await tester.pumpAndSettle();
 
       final createBtn = find.widgetWithText(ElevatedButton, 'Create Request').first;
@@ -455,7 +476,7 @@ void main() {
         (tester) async {
       mockService.requests = [];
 
-      await tester.pumpWidget(buildThemedApp(const CustomerHomeScreen()));
+      await tester.pumpWidget(buildThemedApp(const Scaffold(body: CustomerServicesScreen())));
       await tester.pumpAndSettle();
 
       final aiCard = find.text('Not sure what service you need?');

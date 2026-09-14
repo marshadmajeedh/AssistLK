@@ -1,5 +1,7 @@
 # AssistLK Component Development Rules and Integration Guide
 
+> **Runtime scope:** [Current C1 architecture](../../agent-services/README.md) is Python-only. Layer diagrams and the ProviderMatchingAgent example below are conceptual extension guidance; they do not establish a native C1 runtime or completed Component 2 implementation. Application services own domain persistence; Python tools do not implement C# interfaces.
+
 This document is the shared rule book for all four component developers. Every component must follow the same architecture, coding style, Git workflow, and AI integration pattern.
 
 ## 1. Purpose
@@ -54,7 +56,8 @@ AssistLK.Agents
     Tools/                     # Domain agent tools implementing IAgentTool
     Core/                      # AgentOrchestrator, ToolExecutor, AgentSafetyPolicyEngine
     Models/                    # AgentResult, AgentSafetyRule, Input/Output models
-    Services/                  # GeminiService (Google Gemini API LLM integration)
+    Adapters/                  # ExternalProblemUnderstandingAgentAdapter
+    Clients/                   # ProblemUnderstandingHttpClient
 
 AssistLK.Domain
     Entities/                  # Enterprise entities (ServiceRequest, ProblemAnalysis, User, BaseEntity)
@@ -68,13 +71,13 @@ AssistLK.Infrastructure
 ### Layer Placement Standards:
 1. **Controllers** belong in `AssistLK.Api/Controllers/`. They must remain thin, enforcing route security, parsing JWT claims, and delegating use cases to Application services.
 2. **Business Services** belong in `AssistLK.Application/Services/`. Services manage business rules and coordinate workflow execution without directly depending on EF Core DbContext.
-3. **AI Agents & Tools** belong in `AssistLK.Agents/Agents/` and `AssistLK.Agents/Tools/`. Agents use `GeminiService` for LLM reasoning and invoke tools via `ToolExecutor`.
+3. **Runtime placement:** Shared C# tool abstractions belong in `AssistLK.Agents`; Python C1 modules belong in `agent-services/problem-understanding-agent/app/`. For C1, reasoning and deterministic tools live in the Python service; .NET adapters and clients remain in `AssistLK.Agents`.
 4. **Domain Entities** belong in `AssistLK.Domain/Entities/`. They define enterprise invariants and entity relationships.
 5. **Data Access & Persistence** belong in `AssistLK.Infrastructure/Data/` and `Repositories/`.
 
 ## 4. Agent Development Rules
 
-Every agent must implement `IAgent`, expose a meaningful name, and provide an asynchronous execution method that accepts `AgentContext` and returns `AgentResult`.
+Every .NET agent adapter must implement `IAgent`, expose a meaningful name, and provide an asynchronous execution method that accepts `AgentContext` and returns `AgentResult`.
 
 Example:
 
@@ -90,7 +93,7 @@ public class ProviderMatchingAgent : IAgent
 }
 ```
 
-Agents must use the shared context, memory, safety, monitoring, and tool-execution services.
+ASP.NET workflows use shared context, persisted memory, safety, and monitoring services. Python uses request-scoped state and Python tools, and returns structured output for validation and persistence.
 
 ## 5. Agent Communication Rules
 
@@ -129,7 +132,7 @@ Component 2 reads that shared workflow information. Memory should contain struct
 
 ## 7. Tool Development Rules
 
-Agents must not directly access databases, external APIs, or external services.
+Python must not access the database. Provider API calls belong inside Python provider implementations; ASP.NET integrations use approved adapters/clients. The following tool diagram is a conceptual shared C# pattern, not the C1 Python persistence path.
 
 Correct flow:
 
@@ -140,7 +143,7 @@ Agent
 	-> Database or API
 ```
 
-Every tool must implement `IAgentTool`, have a clear responsibility, be reusable, handle errors properly, and be authorized and observable.
+Every C# tool using the shared tool framework must implement `IAgentTool`, have a clear responsibility, be reusable, handle errors properly, and be authorized and observable.
 
 ## 8. Safety Rules
 

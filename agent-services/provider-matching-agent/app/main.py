@@ -1,13 +1,13 @@
 from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel
-from typing import Optional
-from datetime import datetime, timezone
+from typing import Optional, Dict, Any
 import uuid
-from langgraph.types import Command
-from .agent import graph
-from .state import MatchingState
 
-app = FastAPI()
+# Import the compiled graph from your agent.py
+from .agent import graph
+from langgraph.types import Command
+
+app = FastAPI(title="Provider Matching Agent API")
 
 class MatchRequest(BaseModel):
     objective: str
@@ -18,51 +18,64 @@ class ResumeRequest(BaseModel):
     admin_id: str
 
 @app.post("/match/start")
-def start_match(req: MatchRequest):
+async def start_match(req: MatchRequest):
     thread_id = str(uuid.uuid4())
     config = {"configurable": {"thread_id": thread_id}}
     
-    initial_state: MatchingState = {
+    initial_state = {
         "WorkflowId": thread_id,
         "Objective": req.objective,
-        "Plan": [],
-        "CurrentStep": "Initialized",
+        "Plan": ["Score Candidates", "Await Admin Approval", "Finalize"],
         "CompletedSteps": [],
-        "ToolResults": [],
-        "ValidationResults": [],
         "Errors": [],
         "Retries": 0,
         "ApprovalStatus": "Running",
         "FinalOutcome": None,
-        "StartedAt": datetime.now(timezone.utc).isoformat(),
-        "UpdatedAt": datetime.now(timezone.utc).isoformat(),
+        "StartedAt": "",
+        "UpdatedAt": "",
         "CompletedAt": None
     }
     
-    # Run until interrupt
-    result = graph.invoke(initial_state, config=config)
-    
-    return {
-        "thread_id": thread_id,
-        "status": result.get("ApprovalStatus"),
-        "recommended_provider": result.get("FinalOutcome", {}).get("recommended_provider")
-    }
+    try:
+        # Run the graph until it hits the interrupt()
+        result = graph.invoke(initial_state, config=config)
+        
+        # Safely extract token usage per Lab 5 rules
+        token_usage = result.get("usage_metadata", {"total_tokens": 0})
+        
+        # Safely extract FinalOutcome without throwing NoneType errors
+        final_outcome = result.get("FinalOutcome") or {}
+        recommended = final_outcome.get("recommended_provider") or final_outcome.get("recommended_candidate")
+        
+        return {
+            "thread_id": thread_id,
+            "status": result.get("ApprovalStatus"),
+            "recommended_provider": recommended,
+            "tokens_consumed": token_usage
+        }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
 
 @app.post("/match/resume")
-def resume_match(req: ResumeRequest):
+async def resume_match(req: ResumeRequest):
     config = {"configurable": {"thread_id": req.thread_id}}
-    state = graph.get_state(config)
     
-    if not state or not state.next:
-        raise HTTPException(status_code=400, detail="No pending human approval found for this thread.")
+    try:
+        # Verify state exists and is paused
+        current_state = graph.get_state(config)
+        if not current_state or not current_state.next:
+            raise HTTPException(status_code=400, detail="No pending approval found for this thread.")
+            
+        # Resume the graph using the Lab 6 Command pattern
+        result = graph.invoke(
+            Command(resume={"action": req.action, "admin_id": req.admin_id}), 
+            config=config
+        )
         
-    approval_status = "Approved" if req.action == "Approve" else "Rejected"
-    
-    # Resume with Command
-    result = graph.invoke(Command(resume={"ApprovalStatus": approval_status}), config=config)
-    
-    return {
-        "thread_id": req.thread_id,
-        "status": result.get("ApprovalStatus"),
-        "final_outcome": result.get("FinalOutcome")
-    }
+        return {
+            "thread_id": req.thread_id,
+            "status": result.get("ApprovalStatus"),
+            "final_outcome": result.get("FinalOutcome")
+        }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))

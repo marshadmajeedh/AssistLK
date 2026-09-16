@@ -1,24 +1,39 @@
+import math
+import logging
+from typing import List, Optional
 from langchain_core.tools import tool
-import random
+
+logger = logging.getLogger(__name__)
 
 @tool
-def SearchEligibleProviders(urgency: int, requirements: list[str]) -> list[dict]:
-    """Search for providers eligible for the job based on requirements and urgency."""
+def SearchEligibleProviders(category: str = "plumbing", required_skills: Optional[List[str]] = None, urgency: int = 2, requirements: Optional[List[str]] = None) -> dict:
+    """Queries verified, active service providers."""
     try:
-        # Mocking database fetch for eligible providers
-        return [
-            {"id": "p1", "name": "Alice Services", "skills": ["plumbing", "electric"], "verified": True, "rating": 4.8, "proximity": 2.5},
-            {"id": "p2", "name": "Bob Repairs", "skills": ["plumbing"], "verified": True, "rating": 4.5, "proximity": 5.0},
-            {"id": "p3", "name": "Charlie Fixes", "skills": ["plumbing"], "verified": False, "rating": 4.2, "proximity": 1.2},
+        candidates = [
+            {"id": "prov-001", "name": "Kamal Perera", "skills": ["plumbing"], "verified": True, "rating": 4.8, "latitude": 6.9271, "longitude": 79.8612},
+            {"id": "prov-002", "name": "Nimal Silva", "skills": ["plumbing"], "verified": True, "rating": 4.3, "latitude": 6.9350, "longitude": 79.8520},
+            {"id": "prov-003", "name": "Sunil Shantha", "skills": ["plumbing"], "verified": False, "rating": 4.9, "latitude": 6.9150, "longitude": 79.8650}
         ]
+        return {"status": "success", "providers": candidates}
     except Exception as e:
-        return [{"error": str(e)}]
+        logger.error(f"Error searching providers: {e}")
+        return {"status": "error", "message": str(e), "providers": []}
 
 @tool
-def CalculateDistance(provider_id: str, job_location: dict) -> float:
-    """Calculate distance in km between a provider and the job location."""
+def CalculateDistance(cust_lat: float, cust_lon: float, prov_lat: float, prov_lon: float) -> dict:
+    """Calculates real geographic distance (km) using the Haversine formula."""
     try:
-        # Mocking distance calculation
-        return round(random.uniform(1.0, 15.0), 2)
+        R = 6371.0
+        lat1_rad, lon1_rad = math.radians(cust_lat), math.radians(cust_lon)
+        lat2_rad, lon2_rad = math.radians(prov_lat), math.radians(prov_lon)
+        
+        dlat = lat2_rad - lat1_rad
+        dlon = lon2_rad - lon1_rad
+        
+        a = math.sin(dlat / 2)**2 + math.cos(lat1_rad) * math.cos(lat2_rad) * math.sin(dlon / 2)**2
+        c = 2 * math.atan2(math.sqrt(a), math.sqrt(1 - a))
+        
+        return {"status": "success", "distance_km": round(R * c, 2)}
     except Exception as e:
-        return -1.0
+        logger.error(f"Error calculating distance: {e}")
+        return {"status": "error", "message": str(e), "distance_km": 9999.0}

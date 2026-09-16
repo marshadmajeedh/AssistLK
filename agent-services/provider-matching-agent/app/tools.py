@@ -10,10 +10,10 @@ def SearchEligibleProviders(category: str = "plumbing", required_skills: Optiona
     """Queries verified, active service providers."""
     try:
         candidates = [
-            {"id": "prov-001", "name": "Kamal Perera", "skills": ["plumbing"], "verified": True, "rating": 4.8, "latitude": 6.9271, "longitude": 79.8612},
-            {"id": "prov-002", "name": "Nimal Silva", "skills": ["plumbing"], "verified": True, "rating": 4.3, "latitude": 6.9350, "longitude": 79.8520},
-            {"id": "prov-003", "name": "Sunil Shantha", "skills": ["plumbing"], "verified": False, "rating": 4.9, "latitude": 6.9150, "longitude": 79.8650}
-        ]
+    {"id": "11111111-1111-1111-1111-111111111111", "name": "Kamal Perera", "skills": ["plumbing"], "verified": True, "rating": 4.8, "latitude": 6.9271, "longitude": 79.8612},
+    {"id": "22222222-2222-2222-2222-222222222222", "name": "Nimal Silva", "skills": ["plumbing"], "verified": True, "rating": 4.3, "latitude": 6.9350, "longitude": 79.8520},
+    {"id": "33333333-3333-3333-3333-333333333333", "name": "Sunil Shantha", "skills": ["plumbing"], "verified": False, "rating": 4.9, "latitude": 6.9150, "longitude": 79.8650}
+]
         return {"status": "success", "providers": candidates}
     except Exception as e:
         logger.error(f"Error searching providers: {e}")

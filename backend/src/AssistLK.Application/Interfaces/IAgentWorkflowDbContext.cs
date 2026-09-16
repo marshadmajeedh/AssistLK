@@ -19,6 +19,18 @@ public interface IAgentWorkflowDbContext
 
     DbSet<AgentAction> AgentActions { get; }
 
+    DbSet<ProviderProfile> ProviderProfiles { get; }
+
+    DbSet<ProviderSkill> ProviderSkills { get; }
+
+    DbSet<ProviderLocation> ProviderLocations { get; }
+
+    DbSet<ProviderAvailability> ProviderAvailabilities { get; }
+
+    DbSet<MatchingExecution> MatchingExecutions { get; }
+
+    DbSet<MatchedCandidate> MatchedCandidates { get; }
+
     Task<int> SaveChangesAsync(
         CancellationToken cancellationToken = default);
 }

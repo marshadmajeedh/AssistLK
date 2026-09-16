@@ -38,7 +38,9 @@ class MatchingState(TypedDict):
 # Initialize Gemini model
 llm = ChatGoogleGenerativeAI(
     model="gemini-3.6-flash",
-    google_api_key=os.getenv("GOOGLE_API_KEY")
+    google_api_key=os.getenv("GOOGLE_API_KEY"),
+    request_timeout=10.0,
+    temperature=0.2
 )
 
 def match_and_score_providers(state: MatchingState) -> Dict[str, Any]:

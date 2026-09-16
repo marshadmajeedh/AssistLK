@@ -604,12 +604,16 @@ public class AssistLKDbContext : DbContext, IAgentWorkflowDbContext
         execution.Property(x => x.ServiceRequestId).IsRequired();
         execution.Property(x => x.StrategyUsed).HasConversion<string>().IsRequired().HasMaxLength(40);
         execution.Property(x => x.Status).HasConversion<string>().IsRequired().HasMaxLength(30);
+        execution.Property(x => x.ThreadId).HasMaxLength(100);
         execution.Property(x => x.ExecutedAt).IsRequired();
+        execution.Property(x => x.StartedAt);
+        execution.Property(x => x.CompletedAt);
         execution.Property(x => x.CreatedAt).IsRequired();
         execution.Property(x => x.UpdatedAt).IsRequired();
 
         execution.HasIndex(x => x.ServiceRequestId);
         execution.HasIndex(x => x.Status);
+        execution.HasIndex(x => x.ThreadId);
     }
 
     private static void ConfigureMatchedCandidate(ModelBuilder modelBuilder)

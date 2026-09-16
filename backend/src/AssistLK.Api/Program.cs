@@ -132,6 +132,13 @@ builder.Services.AddHttpClient<IProblemUnderstandingClient, ProblemUnderstanding
     client.Timeout = TimeSpan.FromSeconds(options.TimeoutSeconds > 0 ? options.TimeoutSeconds : 45);
 });
 
+// Provider Matching Microservice Client
+builder.Services.AddHttpClient<AssistLK.Application.Services.Providers.IProviderMatchingService, AssistLK.Application.Services.Providers.ProviderMatchingService>(client =>
+{
+    client.BaseAddress = new Uri("http://127.0.0.1:8000");
+    client.Timeout = TimeSpan.FromSeconds(90);
+});
+
 builder.Services.AddScoped<ExternalProblemUnderstandingAgentAdapter>();
 
 // Agent Registry (Scoped, Lifetime-safe)

@@ -1,6 +1,8 @@
 import 'dart:async';
+
 import 'package:flutter/foundation.dart';
 import 'package:geolocator/geolocator.dart';
+
 import '../services/provider_service.dart';
 
 class ProviderDashboardProvider extends ChangeNotifier {
@@ -10,11 +12,14 @@ class ProviderDashboardProvider extends ChangeNotifier {
 
   bool _isOnline = false;
   double _operatingRadiusKm = 10.0;
-  double _latitude = 6.9271; // Default to Colombo, Sri Lanka
+  double _latitude = 6.9271; // Default fallback to Colombo, Sri Lanka
   double _longitude = 79.8612;
   bool _isLoading = false;
   String? _error;
-  
+
+  // Stores the real job dispatched from your Python/C# backend
+  Map<String, dynamic>? activeJobMatch;
+
   bool get isOnline => _isOnline;
   double get operatingRadiusKm => _operatingRadiusKm;
   double get latitude => _latitude;
@@ -27,7 +32,7 @@ class ProviderDashboardProvider extends ChangeNotifier {
   Future<void> init() async {
     await _checkPermissionsAndFetchLocation();
   }
-  
+
   Future<void> _checkPermissionsAndFetchLocation() async {
     _setLoading(true);
     _error = null;
@@ -55,21 +60,48 @@ class ProviderDashboardProvider extends ChangeNotifier {
         return;
       }
 
-      Position? position = await Geolocator.getLastKnownPosition();
-      position ??= await Geolocator.getCurrentPosition();
-      
+      // Web-safe location acquisition:
+      // Chrome/Web throws an UnsupportedOperationException on getLastKnownPosition.
+      Position position;
+      if (kIsWeb) {
+        position = await Geolocator.getCurrentPosition(
+          desiredAccuracy: LocationAccuracy.high,
+        );
+      } else {
+        Position? lastKnown = await Geolocator.getLastKnownPosition();
+        position =
+            lastKnown ??
+            await Geolocator.getCurrentPosition(
+              desiredAccuracy: LocationAccuracy.high,
+            );
+      }
+
       _latitude = position.latitude;
       _longitude = position.longitude;
 
-      _positionStreamSubscription = Geolocator.getPositionStream().listen((Position pos) {
-        _latitude = pos.latitude;
-        _longitude = pos.longitude;
-        notifyListeners();
-        if (_isOnline) {
-          _syncAvailability();
-        }
-      });
-      
+      // Listen for dynamic positional movement
+      _positionStreamSubscription?.cancel();
+      _positionStreamSubscription =
+          Geolocator.getPositionStream(
+            locationSettings: const LocationSettings(
+              accuracy: LocationAccuracy.high,
+              distanceFilter: 50,
+            ),
+          ).listen((Position pos) {
+            _latitude = pos.latitude;
+            _longitude = pos.longitude;
+            notifyListeners();
+            if (_isOnline) {
+              _syncAvailability();
+            }
+          });
+
+      // Clear any prior error state
+      _error = null;
+
+      if (_isOnline) {
+        _syncAvailability();
+      }
     } catch (e) {
       _error = 'Error fetching location: $e';
     } finally {
@@ -81,6 +113,14 @@ class ProviderDashboardProvider extends ChangeNotifier {
     _isOnline = value;
     notifyListeners();
     _syncAvailability();
+
+    // Query for active dispatches when turning online
+    if (_isOnline) {
+      fetchLatestDispatchedJob();
+    } else {
+      activeJobMatch = null;
+      notifyListeners();
+    }
   }
 
   void setOperatingRadius(double value) {
@@ -103,6 +143,25 @@ class ProviderDashboardProvider extends ChangeNotifier {
     } catch (e) {
       debugPrint('Failed to sync availability: $e');
     }
+  }
+
+  // Fetches approved matches from PostgreSQL via ASP.NET Core
+  Future<void> fetchLatestDispatchedJob() async {
+    try {
+      final response = await providerService.apiClient.client.get(
+        '/providers/active-dispatch',
+      );
+      if (response.statusCode == 200 && response.data != null) {
+        activeJobMatch = Map<String, dynamic>.from(response.data);
+        notifyListeners();
+        return;
+      }
+    } catch (e) {
+      debugPrint('Network fetch for active dispatch failed or was empty: $e');
+    }
+
+    // Retain previous match state if already populated
+    notifyListeners();
   }
 
   void _setLoading(bool value) {

@@ -21,6 +21,49 @@ public class ProvidersController : ControllerBase
         _logger = logger;
     }
 
+    [HttpGet("active-dispatch")]
+[Authorize(Roles = "Provider")]
+public async Task<IActionResult> GetActiveDispatch(CancellationToken cancellationToken)
+{
+    var userIdString = User.FindFirstValue(ClaimTypes.NameIdentifier);
+    if (!Guid.TryParse(userIdString, out var userId))
+    {
+        return Unauthorized("Invalid user claim.");
+    }
+
+    // 1. Find the profile belonging to the logged-in provider
+    var profile = await _dbContext.ProviderProfiles
+        .Include(p => p.Skills)
+        .FirstOrDefaultAsync(p => p.UserId == userId, cancellationToken);
+
+    if (profile == null)
+    {
+        return NotFound("Provider profile not found.");
+    }
+
+    // 2. Fetch the latest approved/recommended match for this provider
+    var latestMatch = await _dbContext.MatchedCandidates
+        .Where(m => m.ProviderId == profile.Id && m.Status == MatchedCandidateStatus.Recommended)
+        .OrderByDescending(m => m.CreatedAt)
+        .FirstOrDefaultAsync(cancellationToken);
+
+    if (latestMatch == null)
+    {
+        return NoContent(); // No pending jobs for this provider
+    }
+
+    // Determine category from provider's primary skill, defaulting to Plumbing
+    var category = profile.Skills.FirstOrDefault()?.Category ?? "Plumbing";
+
+    return Ok(new
+    {
+        category = category,
+        distanceKm = latestMatch.DistanceKm, // Real Haversine distance from Python
+        urgency = "High",
+        rationale = latestMatch.MatchRationale,
+        score = latestMatch.Score
+    });
+}
     /// <summary>
     /// Flutter Mobile: Toggle provider online/offline status and update GPS coordinates.
     /// </summary>

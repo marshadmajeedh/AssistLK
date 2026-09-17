@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
-import 'package:google_maps_flutter/google_maps_flutter.dart';
+import 'package:flutter_map/flutter_map.dart';
+import 'package:latlong2/latlong.dart' as latlong;
 
 import '../auth/providers/auth_provider.dart';
 import '../../shared/theme/app_spacing.dart';
@@ -18,6 +19,7 @@ class ProviderHomeScreen extends StatefulWidget {
 
 class _ProviderHomeScreenState extends State<ProviderHomeScreen> {
   ProviderDashboardProvider? _dashboardProvider;
+  bool _hasAcceptedActiveMatch = false;
 
   @override
   void initState() {
@@ -35,6 +37,108 @@ class _ProviderHomeScreenState extends State<ProviderHomeScreen> {
     super.dispose();
   }
 
+  void _onAcceptMatch(BuildContext context) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(
+        backgroundColor: Colors.green,
+        duration: Duration(seconds: 2),
+        content: Row(
+          children: [
+            Icon(Icons.check_circle, color: Colors.white),
+            SizedBox(width: 8),
+            Expanded(
+              child: Text(
+                'Match Accepted! Creating booking payload...',
+                style: TextStyle(fontWeight: FontWeight.bold),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (sheetContext) {
+        return Padding(
+          padding: const EdgeInsets.all(AppSpacing.lg),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  const Text(
+                    'Component 3 Handoff',
+                    style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
+                  ),
+                  IconButton(
+                    icon: const Icon(Icons.close),
+                    onPressed: () => Navigator.of(sheetContext).pop(),
+                  ),
+                ],
+              ),
+              const Divider(),
+              const SizedBox(height: 8),
+              const Text(
+                'Matched Candidate Contract:',
+                style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
+              ),
+              const SizedBox(height: 6),
+              Container(
+                width: double.infinity,
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: Colors.grey.shade100,
+                  borderRadius: BorderRadius.circular(8),
+                  border: Border.all(color: Colors.grey.shade300),
+                ),
+                child: Text(
+                  '{\n'
+                  '  "ServiceRequestId": "d8b4b485-3c0b-401a-849e-f0f116219903",\n'
+                  '  "ProviderId": "prov-001",\n'
+                  '  "DistanceKm": ${_dashboardProvider?.activeJobMatch?['distanceKm'] ?? 0.0},\n'
+                  '  "Status": "AcceptedForQuotation"\n'
+                  '}',
+                  style: const TextStyle(fontFamily: 'monospace', fontSize: 13),
+                ),
+              ),
+              const SizedBox(height: 16),
+              const Text(
+                'The dispatch request has been transferred to the Quotation & Booking subsystem.',
+                style: TextStyle(color: Colors.black87, fontSize: 13),
+              ),
+              const SizedBox(height: 20),
+              SizedBox(
+                width: double.infinity,
+                child: ElevatedButton(
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: Colors.green.shade700,
+                    foregroundColor: Colors.white,
+                    padding: const EdgeInsets.symmetric(vertical: 14),
+                  ),
+                  onPressed: () {
+                    Navigator.of(sheetContext).pop();
+                    setState(() {
+                      _hasAcceptedActiveMatch = true;
+                    });
+                  },
+                  child: const Text('Proceed to Quotation Workspace'),
+                ),
+              ),
+              const SizedBox(height: 10),
+            ],
+          ),
+        );
+      },
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     if (_dashboardProvider == null) {
@@ -43,18 +147,32 @@ class _ProviderHomeScreenState extends State<ProviderHomeScreen> {
 
     return ChangeNotifierProvider.value(
       value: _dashboardProvider!,
-      child: const _ProviderHomeView(),
+      child: _ProviderHomeView(
+        hasAcceptedActiveMatch: _hasAcceptedActiveMatch,
+        onAcceptMatch: () => _onAcceptMatch(context),
+      ),
     );
   }
 }
 
 class _ProviderHomeView extends StatelessWidget {
-  const _ProviderHomeView();
+  final bool hasAcceptedActiveMatch;
+  final VoidCallback onAcceptMatch;
+
+  const _ProviderHomeView({
+    required this.hasAcceptedActiveMatch,
+    required this.onAcceptMatch,
+  });
 
   @override
   Widget build(BuildContext context) {
     final dashboard = context.watch<ProviderDashboardProvider>();
     final auth = context.read<AuthProvider>();
+
+    final centerLocation = latlong.LatLng(
+      dashboard.latitude,
+      dashboard.longitude,
+    );
 
     return Scaffold(
       appBar: AppBar(
@@ -99,7 +217,7 @@ class _ProviderHomeView extends StatelessWidget {
                                   const SizedBox(height: 4),
                                   Text(
                                     dashboard.isOnline
-                                        ? '🟢 ONLINE (On Duty - Receiving Jobs)'
+                                        ? '🟢 ONLINE (Receiving Jobs)'
                                         : '⚫ OFFLINE (Off Duty)',
                                     style: TextStyle(
                                       color: dashboard.isOnline
@@ -158,41 +276,66 @@ class _ProviderHomeView extends StatelessWidget {
                 Expanded(
                   child: Stack(
                     children: [
-                      GoogleMap(
-                        initialCameraPosition: CameraPosition(
-                          target: LatLng(
-                            dashboard.latitude,
-                            dashboard.longitude,
-                          ),
-                          zoom: 12,
+                      FlutterMap(
+                        options: MapOptions(
+                          initialCenter: centerLocation,
+                          initialZoom: 13.0,
                         ),
-                        myLocationEnabled: dashboard.error == null,
-                        myLocationButtonEnabled: dashboard.error == null,
-                        circles: {
-                          Circle(
-                            circleId: const CircleId('radius_overlay'),
-                            center: LatLng(
-                              dashboard.latitude,
-                              dashboard.longitude,
-                            ),
-                            radius: dashboard.operatingRadiusKm * 1000,
-                            fillColor: Colors.blue.withOpacity(0.18),
-                            strokeColor: Colors.blueAccent,
-                            strokeWidth: 2,
+                        children: [
+                          TileLayer(
+                            urlTemplate: 'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
+                            userAgentPackageName: 'com.example.mobile',
                           ),
-                        },
+                          CircleLayer(
+                            circles: [
+                              CircleMarker(
+                                point: centerLocation,
+                                radius: dashboard.operatingRadiusKm * 1000,
+                                useRadiusInMeter: true,
+                                color: Colors.blue.withOpacity(0.18),
+                                borderColor: Colors.blueAccent,
+                                borderStrokeWidth: 2,
+                              ),
+                            ],
+                          ),
+                          MarkerLayer(
+                            markers: [
+                              Marker(
+                                point: centerLocation,
+                                width: 40,
+                                height: 40,
+                                child: const Icon(
+                                  Icons.location_on,
+                                  color: Colors.red,
+                                  size: 40,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ],
                       ),
 
-                      // Dispatched Job Alert Card overlay (active when Online)
-                      if (dashboard.isOnline)
-                        const Positioned(
+                      // Dynamic Job Alert Card overlay
+                      if (dashboard.isOnline &&
+                          dashboard.activeJobMatch != null &&
+                          !hasAcceptedActiveMatch)
+                        Positioned(
                           bottom: AppSpacing.md,
                           left: AppSpacing.md,
                           right: AppSpacing.md,
                           child: JobAlertCard(
-                            category: 'Plumbing Repair',
-                            distance: '3.2 km',
-                            urgency: 'High',
+                            // Populates live data straight from the backend dictionary
+                            category:
+                                dashboard.activeJobMatch!['category']
+                                    ?.toString() ??
+                                'Service Request',
+                            distance:
+                                '${dashboard.activeJobMatch!['distanceKm']} km',
+                            urgency:
+                                dashboard.activeJobMatch!['urgency']
+                                    ?.toString() ??
+                                'Standard',
+                            onAccept: onAcceptMatch,
                           ),
                         ),
                     ],

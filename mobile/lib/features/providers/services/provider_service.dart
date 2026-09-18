@@ -21,4 +21,11 @@ class ProviderService {
       },
     );
   }
+
+  Future<void> acceptActiveDispatch([String endpoint = '/api/providers/active-dispatch/accept']) async {
+    final path = endpoint.startsWith('/api') && apiClient.client.options.baseUrl.endsWith('/api')
+        ? endpoint.substring(4)
+        : endpoint;
+    await apiClient.client.post(path);
+  }
 }

@@ -155,12 +155,21 @@ class ProviderDashboardProvider extends ChangeNotifier {
         activeJobMatch = Map<String, dynamic>.from(response.data);
         notifyListeners();
         return;
+      } else {
+        activeJobMatch = null;
+        notifyListeners();
+        return;
       }
     } catch (e) {
       debugPrint('Network fetch for active dispatch failed or was empty: $e');
+      activeJobMatch = null;
     }
 
-    // Retain previous match state if already populated
+    notifyListeners();
+  }
+
+  void clearActiveJobMatch() {
+    activeJobMatch = null;
     notifyListeners();
   }
 

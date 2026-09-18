@@ -55,15 +55,63 @@ public async Task<IActionResult> GetActiveDispatch(CancellationToken cancellatio
     // Determine category from provider's primary skill, defaulting to Plumbing
     var category = profile.Skills.FirstOrDefault()?.Category ?? "Plumbing";
 
-    return Ok(new
+        return Ok(new
+        {
+            category = category,
+            distanceKm = latestMatch.DistanceKm, // Real Haversine distance from Python
+            urgency = "High",
+            rationale = latestMatch.MatchRationale,
+            score = latestMatch.Score
+        });
+    }
+
+    /// <summary>
+    /// Flutter Mobile: Accept an active recommended dispatch match.
+    /// </summary>
+    [HttpPost("active-dispatch/accept")]
+    [Authorize(Roles = "Provider")]
+    public async Task<IActionResult> AcceptActiveDispatch(CancellationToken cancellationToken)
     {
-        category = category,
-        distanceKm = latestMatch.DistanceKm, // Real Haversine distance from Python
-        urgency = "High",
-        rationale = latestMatch.MatchRationale,
-        score = latestMatch.Score
-    });
-}
+        var userIdString = User.FindFirstValue(ClaimTypes.NameIdentifier);
+        if (!Guid.TryParse(userIdString, out var userId))
+        {
+            return Unauthorized("Invalid user claim.");
+        }
+
+        // 1. Resolve the authenticated provider profile
+        var profile = await _dbContext.ProviderProfiles
+            .FirstOrDefaultAsync(p => p.UserId == userId, cancellationToken);
+
+        if (profile == null)
+        {
+            return NotFound("Provider profile not found.");
+        }
+
+        // 2. Find the active MatchedCandidate where Status == MatchedCandidateStatus.Recommended
+        var candidate = await _dbContext.MatchedCandidates
+            .Where(m => m.ProviderId == profile.Id && m.Status == MatchedCandidateStatus.Recommended)
+            .OrderByDescending(m => m.CreatedAt)
+            .FirstOrDefaultAsync(cancellationToken);
+
+        if (candidate == null)
+        {
+            return NotFound("No active recommended match found.");
+        }
+
+        // 3. Update candidate.Status = MatchedCandidateStatus.Accepted and call SaveChangesAsync()
+        candidate.Status = MatchedCandidateStatus.Accepted;
+        candidate.UpdatedAt = DateTime.UtcNow;
+
+        await _dbContext.SaveChangesAsync(cancellationToken);
+
+        return Ok(new
+        {
+            message = "Match accepted successfully.",
+            candidateId = candidate.Id,
+            status = candidate.Status.ToString()
+        });
+    }
+
     /// <summary>
     /// Flutter Mobile: Toggle provider online/offline status and update GPS coordinates.
     /// </summary>

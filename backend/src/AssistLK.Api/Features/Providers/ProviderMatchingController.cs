@@ -58,6 +58,7 @@ public class ProviderMatchingController : ControllerBase
                 Rating = (double)p.Rating,
                 Latitude = (double)(p.Locations.Select(l => l.Latitude).FirstOrDefault()),
                 Longitude = (double)(p.Locations.Select(l => l.Longitude).FirstOrDefault()),
+                OperatingRadiusKm = (double)(p.Locations.Select(l => l.OperatingRadiusKm).FirstOrDefault()),
                 Verified = true,
                 Skills = p.Skills.Select(s => s.SkillName.ToLower()).ToList()
             })
@@ -116,7 +117,12 @@ public class ProviderMatchingController : ControllerBase
 
             await _dbContext.SaveChangesAsync(cancellationToken);
 
-            return Ok(new { threadId = matchResponse.ThreadId, status = matchResponse.Status });
+            return Ok(new 
+{ 
+    threadId = matchResponse.ThreadId, 
+    status = matchResponse.Status,
+    tokensConsumed = matchResponse.TokensConsumed
+});
         }
         catch (ApplicationException ex)
         {

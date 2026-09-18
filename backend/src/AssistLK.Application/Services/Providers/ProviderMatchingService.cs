@@ -30,6 +30,9 @@ namespace AssistLK.Application.Services.Providers
 
         [JsonPropertyName("skills")]
         public List<string> Skills { get; set; } = new();
+        
+        [JsonPropertyName("operating_radius_km")]
+        public double OperatingRadiusKm { get; set; }
     }
 
     public class MatchStartRequest
@@ -89,20 +92,35 @@ namespace AssistLK.Application.Services.Providers
         public int Rank { get; set; }
     }
 
-    public class MatchResponse
-    {
-        [JsonPropertyName("thread_id")]
-        public string ThreadId { get; set; } = string.Empty;
+    public class TokenUsageDto
+{
+    [JsonPropertyName("input_tokens")]
+    public int InputTokens { get; set; }
 
-        [JsonPropertyName("status")]
-        public string Status { get; set; } = string.Empty;
+    [JsonPropertyName("output_tokens")]
+    public int OutputTokens { get; set; }
 
-        [JsonPropertyName("recommended_provider")]
-        public RecommendedProvider? RecommendedProvider { get; set; }
+    [JsonPropertyName("total_tokens")]
+    public int TotalTokens { get; set; }
+}
 
-        [JsonPropertyName("final_outcome")]
-        public object? FinalOutcome { get; set; }
-    }
+public class MatchResponse
+{
+    [JsonPropertyName("thread_id")]
+    public string ThreadId { get; set; } = string.Empty;
+
+    [JsonPropertyName("status")]
+    public string Status { get; set; } = string.Empty;
+
+    [JsonPropertyName("recommended_provider")]
+    public RecommendedProvider? RecommendedProvider { get; set; }
+
+    [JsonPropertyName("tokens_consumed")]
+    public TokenUsageDto? TokensConsumed { get; set; }
+
+    [JsonPropertyName("final_outcome")]
+    public object? FinalOutcome { get; set; }
+}
 
     public interface IProviderMatchingService
     {

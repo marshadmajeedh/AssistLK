@@ -1,5 +1,5 @@
 from fastapi import FastAPI, HTTPException
-from pydantic import BaseModel
+from pydantic import BaseModel, Field, AliasChoices, ConfigDict
 from typing import Optional, List, Dict, Any
 import uuid
 
@@ -9,11 +9,17 @@ from langgraph.types import Command
 app = FastAPI(title="Provider Matching Agent API")
 
 class ProviderCandidateDTO(BaseModel):
+    model_config = ConfigDict(populate_by_name=True)
+
     provider_id: str
     name: str
     rating: float
     latitude: float
     longitude: float
+    operating_radius_km: float = Field(
+        default=5.0,
+        validation_alias=AliasChoices("operating_radius_km", "OperatingRadiusKm", "operatingRadiusKm")
+    )
     verified: bool
     skills: List[str]
 

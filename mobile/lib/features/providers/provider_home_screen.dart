@@ -37,7 +37,37 @@ class _ProviderHomeScreenState extends State<ProviderHomeScreen> {
     super.dispose();
   }
 
-  void _onAcceptMatch(BuildContext context) {
+  Future<void> _onAcceptMatch(BuildContext context) async {
+    final distanceKm = _dashboardProvider?.activeJobMatch?['distanceKm'] ?? 0.0;
+
+    try {
+      await _dashboardProvider?.providerService.acceptActiveDispatch(
+        '/api/providers/active-dispatch/accept',
+      );
+      if (_dashboardProvider != null) {
+        _dashboardProvider!.activeJobMatch = null;
+        _dashboardProvider!.clearActiveJobMatch();
+      }
+      if (mounted) {
+        setState(() {
+          _hasAcceptedActiveMatch = true;
+        });
+      }
+    } catch (e) {
+      debugPrint('Failed to accept match: $e');
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            backgroundColor: Colors.red,
+            content: Text('Failed to accept match: $e'),
+          ),
+        );
+      }
+      return;
+    }
+
+    if (!mounted) return;
+
     ScaffoldMessenger.of(context).showSnackBar(
       const SnackBar(
         backgroundColor: Colors.green,
@@ -102,7 +132,7 @@ class _ProviderHomeScreenState extends State<ProviderHomeScreen> {
                   '{\n'
                   '  "ServiceRequestId": "d8b4b485-3c0b-401a-849e-f0f116219903",\n'
                   '  "ProviderId": "prov-001",\n'
-                  '  "DistanceKm": ${_dashboardProvider?.activeJobMatch?['distanceKm'] ?? 0.0},\n'
+                  '  "DistanceKm": $distanceKm,\n'
                   '  "Status": "AcceptedForQuotation"\n'
                   '}',
                   style: const TextStyle(fontFamily: 'monospace', fontSize: 13),

@@ -42,7 +42,7 @@ class MatchingState(TypedDict):
 
 # Initialize Gemini model
 llm = ChatGoogleGenerativeAI(
-    model="gemini-2.5-flash",
+    model="gemini-3.6-flash",
     google_api_key=os.getenv("GOOGLE_API_KEY")
 )
 
@@ -85,6 +85,7 @@ def match_and_score_providers(state: MatchingState) -> Dict[str, Any]:
         for p in providers:
             p_lat = p.get("latitude", 6.9271)
             p_lon = p.get("longitude", 79.8612)
+            radius_limit = p.get("operating_radius_km") or p.get("OperatingRadiusKm") or 5.0
 
             dist_res = CalculateDistance.invoke({
                 "cust_lat": cust_lat,
@@ -93,6 +94,9 @@ def match_and_score_providers(state: MatchingState) -> Dict[str, Any]:
                 "prov_lon": p_lon
             })
             distance = dist_res.get("distance_km", 999.0) if isinstance(dist_res, dict) else 999.0
+
+            if distance > radius_limit:
+                continue
 
             rating = float(p.get("rating", 4.0))
             verified = bool(p.get("verified", False))

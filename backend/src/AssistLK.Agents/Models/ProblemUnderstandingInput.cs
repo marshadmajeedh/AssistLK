@@ -10,8 +10,14 @@ namespace AssistLK.Agents.Models;
 public class ProblemUnderstandingInput
 {
     /// <summary>
-    /// The unique identifier of the ServiceRequest being analysed.
+    /// Small internal audit metadata; never sent to the Python wire contract.
     /// </summary>
+    public long? EvidenceRevision { get; set; }
+
+    /// <summary>Bounded identities only; binary content belongs exclusively to transient HTTP transport.</summary>
+    public IReadOnlyList<Guid> AttachmentIds { get; set; } = Array.Empty<Guid>();
+
+    /// <summary>The unique identifier of the ServiceRequest being analysed.</summary>
     public Guid ServiceRequestId { get; set; }
 
     /// <summary>
@@ -35,4 +41,17 @@ public class ProblemUnderstandingInput
     /// Optional GPS longitude coordinate.
     /// </summary>
     public decimal? Longitude { get; set; }
+
+    /// <summary>
+    /// Optional customer service category preference / initial belief.
+    /// Non-authoritative context for the agent.
+    /// </summary>
+    public string? CategoryHint { get; set; }
+
+    /// <summary>
+    /// Historical clarification rounds and answers provided by the customer.
+    /// Supplied as non-authoritative customer evidence.
+    /// </summary>
+    public IReadOnlyList<ClarificationHistoryItem> ClarificationHistory { get; set; }
+        = Array.Empty<ClarificationHistoryItem>();
 }

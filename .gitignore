@@ -72,3 +72,6 @@ temp/
 # ---------------- Local uploads ----------------
 uploads/
 storage/local/
+
+# Private normalized customer photos (never source controlled)
+**/private-attachments/

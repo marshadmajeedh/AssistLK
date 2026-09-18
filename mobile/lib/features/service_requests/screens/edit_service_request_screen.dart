@@ -1,21 +1,32 @@
+import '../providers/location_selection_controller.dart';
+import '../services/location_geocoding_service.dart';
+import '../widgets/location_selection.dart';
+
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
 import '../../../../shared/theme/app_colors.dart';
+import '../../../../shared/theme/app_radius.dart';
 import '../../../../shared/theme/app_spacing.dart';
 import '../../../../shared/theme/app_text_styles.dart';
 import '../../../../shared/widgets/app_button.dart';
 import '../../../../shared/widgets/app_text_field.dart';
+import '../models/canonical_service_category.dart';
 import '../models/service_request_model.dart';
 import '../models/update_service_request_dto.dart';
 import '../providers/service_request_provider.dart';
+import '../services/location_service.dart';
 
 class EditServiceRequestScreen extends StatefulWidget {
   final ServiceRequestModel request;
+  final LocationService? locationService;
+  final LocationGeocodingService? geocodingService;
 
   const EditServiceRequestScreen({
     super.key,
     required this.request,
+    this.locationService,
+    this.geocodingService,
   });
 
   @override
@@ -26,22 +37,124 @@ class EditServiceRequestScreen extends StatefulWidget {
 class _EditServiceRequestScreenState extends State<EditServiceRequestScreen> {
   final _formKey = GlobalKey<FormState>();
   late final TextEditingController _descriptionController;
-  late final TextEditingController _locationController;
+  late final LocationSelectionController _location;
+  String? _selectedPreference;
 
   @override
   void initState() {
     super.initState();
-    _descriptionController =
-        TextEditingController(text: widget.request.description);
-    _locationController =
-        TextEditingController(text: widget.request.locationText);
+    _descriptionController = TextEditingController(
+      text: widget.request.description,
+    );
+    _selectedPreference = widget.request.categoryHint;
+    _location = LocationSelectionController(
+      gps: widget.locationService ?? GeolocatorLocationService(),
+      geocoding:
+          widget.geocodingService ??
+          LocationGeocodingService(
+            apiClient: context
+                .read<ServiceRequestProvider>()
+                .serviceRequestService
+                .apiClient,
+          ),
+      initialText: widget.request.locationText,
+      latitude: widget.request.latitude,
+      longitude: widget.request.longitude,
+      source: widget.request.locationSource,
+    );
   }
 
   @override
   void dispose() {
     _descriptionController.dispose();
-    _locationController.dispose();
+    _location.dispose();
     super.dispose();
+  }
+
+  void _showChangePreferenceSheet() {
+    showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(
+          top: Radius.circular(AppRadius.large),
+        ),
+      ),
+      builder: (sheetCtx) {
+        return SafeArea(
+          child: Padding(
+            padding: const EdgeInsets.symmetric(
+              horizontal: AppSpacing.lg,
+              vertical: AppSpacing.md,
+            ),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    const Text(
+                      'Select Service Preference',
+                      style: AppTextStyles.sectionHeading,
+                    ),
+                    IconButton(
+                      icon: const Icon(Icons.close),
+                      onPressed: () => Navigator.of(sheetCtx).pop(),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: AppSpacing.sm),
+                for (final cat
+                    in CanonicalServiceCategory.canonicalShortcuts) ...[
+                  ListTile(
+                    leading: Icon(cat.icon, color: AppColors.primary),
+                    title: Text(
+                      cat.displayName,
+                      style: AppTextStyles.cardHeading,
+                    ),
+                    subtitle: Text(cat.description, style: AppTextStyles.small),
+                    trailing: _selectedPreference == cat.canonicalName
+                        ? const Icon(Icons.check, color: AppColors.primary)
+                        : null,
+                    onTap: () {
+                      setState(() {
+                        _selectedPreference = cat.canonicalName;
+                      });
+                      Navigator.of(sheetCtx).pop();
+                    },
+                  ),
+                  const Divider(height: 1, color: AppColors.border),
+                ],
+                ListTile(
+                  leading: const Icon(
+                    Icons.auto_awesome_rounded,
+                    color: AppColors.primary,
+                  ),
+                  title: const Text(
+                    'Let AssistLK AI identify',
+                    style: AppTextStyles.cardHeading,
+                  ),
+                  subtitle: const Text(
+                    'AssistLK AI will determine the service category',
+                    style: AppTextStyles.small,
+                  ),
+                  trailing: _selectedPreference == null
+                      ? const Icon(Icons.check, color: AppColors.primary)
+                      : null,
+                  onTap: () {
+                    setState(() {
+                      _selectedPreference = null;
+                    });
+                    Navigator.of(sheetCtx).pop();
+                  },
+                ),
+              ],
+            ),
+          ),
+        );
+      },
+    );
   }
 
   Future<void> _submit() async {
@@ -50,9 +163,16 @@ class _EditServiceRequestScreenState extends State<EditServiceRequestScreen> {
     }
 
     final provider = context.read<ServiceRequestProvider>();
+    final canonicalHint = CanonicalServiceCategory.toCanonicalCategoryHint(
+      _selectedPreference,
+    );
     final dto = UpdateServiceRequestDto(
       description: _descriptionController.text.trim(),
-      locationText: _locationController.text.trim(),
+      locationText: _location.text.text.trim(),
+      locationSource: _location.source,
+      latitude: _location.latitude,
+      longitude: _location.longitude,
+      categoryHint: canonicalHint,
     );
 
     final updated = await provider.updateRequest(
@@ -74,10 +194,7 @@ class _EditServiceRequestScreenState extends State<EditServiceRequestScreen> {
       final errorMessage =
           provider.error ?? 'Failed to update request. Please try again.';
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(errorMessage),
-          backgroundColor: AppColors.error,
-        ),
+        SnackBar(content: Text(errorMessage), backgroundColor: AppColors.error),
       );
     }
   }
@@ -85,11 +202,13 @@ class _EditServiceRequestScreenState extends State<EditServiceRequestScreen> {
   @override
   Widget build(BuildContext context) {
     final provider = context.watch<ServiceRequestProvider>();
+    final selectedCategory =
+        CanonicalServiceCategory.fromCanonicalOrDisplayName(
+          _selectedPreference,
+        );
 
     return Scaffold(
-      appBar: AppBar(
-        title: const Text('Edit Request Details'),
-      ),
+      appBar: AppBar(title: const Text('Edit Request Details')),
       body: SafeArea(
         child: SingleChildScrollView(
           padding: const EdgeInsets.all(AppSpacing.lg),
@@ -98,25 +217,80 @@ class _EditServiceRequestScreenState extends State<EditServiceRequestScreen> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
+                // Service Preference Banner Card
+                Container(
+                  width: double.infinity,
+                  padding: const EdgeInsets.all(AppSpacing.md),
+                  decoration: BoxDecoration(
+                    color: AppColors.surface,
+                    borderRadius: BorderRadius.circular(AppRadius.large),
+                    border: Border.all(color: AppColors.border),
+                  ),
+                  child: Row(
+                    children: [
+                      Container(
+                        padding: const EdgeInsets.all(AppSpacing.sm),
+                        decoration: BoxDecoration(
+                          color: AppColors.primary.withValues(alpha: 0.08),
+                          borderRadius: BorderRadius.circular(AppRadius.medium),
+                        ),
+                        child: Icon(
+                          selectedCategory?.icon ?? Icons.auto_awesome_rounded,
+                          color: AppColors.primary,
+                          size: 22,
+                        ),
+                      ),
+                      const SizedBox(width: AppSpacing.md),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            const Text(
+                              'Service preference',
+                              style: AppTextStyles.small,
+                            ),
+                            const SizedBox(height: 2),
+                            Text(
+                              selectedCategory?.displayName ??
+                                  'Let AssistLK AI identify',
+                              style: AppTextStyles.cardHeading,
+                            ),
+                          ],
+                        ),
+                      ),
+                      TextButton(
+                        onPressed: _showChangePreferenceSheet,
+                        child: Text(
+                          selectedCategory != null
+                              ? 'Change'
+                              : 'Choose preference',
+                          style: const TextStyle(fontWeight: FontWeight.w600),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(height: AppSpacing.md),
+
                 const Text(
                   'Update problem description',
                   style: AppTextStyles.sectionHeading,
                 ),
                 const SizedBox(height: AppSpacing.xs),
                 Text(
-                  'Provide more clarity or details to resolve follow-up questions from the AI diagnosis.',
+                  'Provide more clarity or details to resolve follow-up questions from AssistLK AI.',
                   style: AppTextStyles.body.copyWith(
                     color: AppColors.textSecondary,
                   ),
                 ),
-                const SizedBox(height: AppSpacing.lg),
+                const SizedBox(height: AppSpacing.md),
 
                 // Description Field
                 AppTextField(
                   controller: _descriptionController,
                   label: 'Problem Description',
                   hint: 'Describe the issue in detail...',
-                  maxLines: 5,
+                  maxLines: 4,
                   validator: (value) {
                     if (value == null || value.trim().isEmpty) {
                       return 'Please describe the problem.';
@@ -132,22 +306,8 @@ class _EditServiceRequestScreenState extends State<EditServiceRequestScreen> {
                 ),
                 const SizedBox(height: AppSpacing.md),
 
-                // Location Field
-                AppTextField(
-                  controller: _locationController,
-                  label: 'Location / Address',
-                  hint: 'e.g., Colombo 03, Havelock Road',
-                  validator: (value) {
-                    if (value == null || value.trim().isEmpty) {
-                      return 'Please provide the service location.';
-                    }
-                    if (value.trim().length > 255) {
-                      return 'Location cannot exceed 255 characters.';
-                    }
-                    return null;
-                  },
-                ),
-                const SizedBox(height: AppSpacing.xl),
+                LocationSelection(controller: _location, editing: true),
+                const SizedBox(height: AppSpacing.md),
 
                 // Submit Button
                 AppButton(

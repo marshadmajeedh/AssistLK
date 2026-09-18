@@ -1,8 +1,7 @@
-using AssistLK.Agents.Agents;
+using AssistLK.Agents.Adapters;
 using AssistLK.Agents.Core;
 using AssistLK.Agents.Models;
-using AssistLK.Agents.Services;
-using AssistLK.Agents.Tools;
+using AssistLK.IntegrationTests.TestDoubles;
 using AssistLK.Application.Interfaces;
 using AssistLK.Application.ServiceRequests.DTOs;
 using AssistLK.Application.Services;
@@ -70,7 +69,8 @@ public class Component1FailureTests
             safetyService,
             orchestrator,
             registry,
-            requestService);
+            requestService,
+            AssistLK.IntegrationTests.TestDoubles.TestAnalysisEvidence.Create(reqRepo));
 
         var serviceRequestId = Guid.NewGuid();
         requests.Add(new ServiceRequest
@@ -149,7 +149,8 @@ public class Component1FailureTests
             safetyService,
             orchestrator,
             registry,
-            requestService);
+            requestService,
+            AssistLK.IntegrationTests.TestDoubles.TestAnalysisEvidence.Create(reqRepo));
 
         var serviceRequestId = Guid.NewGuid();
         requests.Add(new ServiceRequest
@@ -176,13 +177,14 @@ public class Component1FailureTests
     }
 
     [Fact]
-    public async Task Workflow_FailsGracefullyWhenServiceRequestNotFound()
+    public async Task Workflow_NonExistentServiceRequestId_FailsGracefully()
     {
         var options = new DbContextOptionsBuilder<AssistLKDbContext>()
             .UseInMemoryDatabase(Guid.NewGuid().ToString())
             .Options;
 
-        await using var db = new AssistLKDbContext(options);
+        var db = new AssistLKDbContext(options);
+
         var workflowService = new AgentWorkflowService(db);
         var memoryService = new AgentMemoryService(db);
         var contextService = new AgentContextService(memoryService);
@@ -195,10 +197,10 @@ public class Component1FailureTests
         var anaRepo = new InMemoryProblemAnalysisRepository(analyses);
         var requestService = new ServiceRequestService(reqRepo, anaRepo);
 
-        var toolRegistry = new ToolRegistry();
-        var toolExecutor = new ToolExecutor(toolRegistry);
         var registry = new AgentRegistry();
-        registry.Register(new ProblemUnderstandingAgent(toolExecutor, new GeminiService(), NullLogger<ProblemUnderstandingAgent>.Instance));
+        registry.Register(new ExternalProblemUnderstandingAgentAdapter(
+            new FakeProblemUnderstandingClient(),
+            NullLogger<ExternalProblemUnderstandingAgentAdapter>.Instance));
         var orchestrator = new AgentOrchestrator(registry);
 
         var workflow = new ProblemUnderstandingWorkflowService(
@@ -209,7 +211,8 @@ public class Component1FailureTests
             safetyService,
             orchestrator,
             registry,
-            requestService);
+            requestService,
+            AssistLK.IntegrationTests.TestDoubles.TestAnalysisEvidence.Create(reqRepo));
 
         // Non-existent ID
         var nonExistentId = Guid.NewGuid();
@@ -223,50 +226,6 @@ public class Component1FailureTests
         Assert.False(result.Success);
         Assert.Equal("Failed", result.Outcome);
         Assert.Contains("not found", result.ErrorMessage?.ToLowerInvariant() ?? "");
-    }
-
-    [Fact]
-    public async Task Agent_ContinuesWithGeminiWhenClassificationToolMissing()
-    {
-        // Fixed pipeline: classification tool is NOT registered (returns TOOL_NOT_FOUND),
-        // but Gemini is now the primary engine and runs regardless of tool outcome.
-        var toolRegistry = new ToolRegistry();
-        // Register location and service knowledge, but intentionally omit ProblemClassificationTool
-        toolRegistry.Register(new LocationExtractionTool());
-        toolRegistry.Register(new ServiceKnowledgeTool());
-
-        var toolExecutor = new ToolExecutor(toolRegistry);
-        // GeminiService uses offline simulation (no API key in test env)
-        var agent = new ProblemUnderstandingAgent(
-            toolExecutor,
-            new GeminiService(),
-            NullLogger<ProblemUnderstandingAgent>.Instance);
-
-        var context = new AgentContext
-        {
-            WorkflowId = Guid.NewGuid(),
-            Input = "Water pipe has burst and is flooding the house",
-            Data =
-            {
-                [nameof(ProblemUnderstandingInput)] = new ProblemUnderstandingInput
-                {
-                    ServiceRequestId = Guid.NewGuid(),
-                    Description = "Water pipe has burst and is flooding the house",
-                    LocationText = "Colombo"
-                }
-            }
-        };
-
-        var result = await agent.ExecuteAsync(context);
-
-        Assert.True(result.Success);
-        var output = Assert.IsType<ProblemUnderstandingOutput>(result.Data);
-
-        // Gemini runs as primary engine: offline simulation identifies burst pipe as Plumbing.
-        // The classification tool being missing is non-fatal — Gemini output is authoritative.
-        Assert.Equal("Plumbing", output.Category);
-        Assert.Equal("Analysed", result.NextAction);
-        Assert.False(output.NeedsMoreInformation);
     }
 
     [Fact]
@@ -302,7 +261,8 @@ public class Component1FailureTests
             safetyService,
             orchestrator,
             registry,
-            requestService);
+            requestService,
+            AssistLK.IntegrationTests.TestDoubles.TestAnalysisEvidence.Create(reqRepo));
 
         var serviceRequestId = Guid.NewGuid();
         requests.Add(new ServiceRequest
@@ -370,7 +330,8 @@ public class Component1FailureTests
             safetyService,
             orchestrator,
             registry,
-            requestService);
+            requestService,
+            AssistLK.IntegrationTests.TestDoubles.TestAnalysisEvidence.Create(reqRepo));
 
         var serviceRequestId = Guid.NewGuid();
         requests.Add(new ServiceRequest
@@ -433,7 +394,8 @@ public class Component1FailureTests
             safetyService,
             orchestrator,
             registry,
-            requestService);
+            requestService,
+            AssistLK.IntegrationTests.TestDoubles.TestAnalysisEvidence.Create(reqRepo));
 
         var serviceRequestId = Guid.NewGuid();
         requests.Add(new ServiceRequest
@@ -514,7 +476,8 @@ public class Component1FailureTests
             safetyService,
             orchestrator,
             registry,
-            requestService);
+            requestService,
+            AssistLK.IntegrationTests.TestDoubles.TestAnalysisEvidence.Create(reqRepo));
 
         var serviceRequestId = Guid.NewGuid();
         requests.Add(new ServiceRequest
@@ -589,7 +552,8 @@ public class Component1FailureTests
             safetyService,
             orchestrator,
             registry,
-            requestService);
+            requestService,
+            AssistLK.IntegrationTests.TestDoubles.TestAnalysisEvidence.Create(reqRepo));
 
         var serviceRequestId = Guid.NewGuid();
         requests.Add(new ServiceRequest
@@ -657,7 +621,8 @@ public class Component1FailureTests
             safetyService,
             orchestrator,
             registry,
-            requestService);
+            requestService,
+            AssistLK.IntegrationTests.TestDoubles.TestAnalysisEvidence.Create(reqRepo));
 
         var serviceRequestId = Guid.NewGuid();
         requests.Add(new ServiceRequest
@@ -727,7 +692,8 @@ public class Component1FailureTests
             safetyService,
             orchestrator,
             registry,
-            requestService);
+            requestService,
+            AssistLK.IntegrationTests.TestDoubles.TestAnalysisEvidence.Create(reqRepo));
 
         var serviceRequestId = Guid.NewGuid();
         requests.Add(new ServiceRequest
@@ -810,7 +776,8 @@ public class Component1FailureTests
             safetyService,
             orchestrator,
             registry,
-            requestService);
+            requestService,
+            AssistLK.IntegrationTests.TestDoubles.TestAnalysisEvidence.Create(reqRepo));
 
         var serviceRequestId = Guid.NewGuid();
         requests.Add(new ServiceRequest
@@ -878,7 +845,8 @@ public class Component1FailureTests
             safetyService,
             orchestrator,
             registry,
-            requestService);
+            requestService,
+            AssistLK.IntegrationTests.TestDoubles.TestAnalysisEvidence.Create(reqRepo));
 
         var serviceRequestId = Guid.NewGuid();
         requests.Add(new ServiceRequest
@@ -1025,6 +993,19 @@ public class Component1FailureTests
 
         public Task<IReadOnlyList<ServiceRequest>> GetByStatusAsync(ServiceRequestStatus status, CancellationToken cancellationToken = default)
             => Task.FromResult<IReadOnlyList<ServiceRequest>>(_requests.Where(x => x.Status == status).ToArray());
+
+        public Task<IReadOnlyList<ServiceRequest>> GetAllForAdminAsync(
+            ServiceRequestStatus? status = null,
+            string? category = null,
+            ServiceRequestUrgency? urgency = null,
+            CancellationToken cancellationToken = default)
+        {
+            var query = _requests.AsEnumerable();
+            if (status.HasValue) query = query.Where(x => x.Status == status.Value);
+            if (!string.IsNullOrWhiteSpace(category)) query = query.Where(x => string.Equals(x.Category, category, StringComparison.OrdinalIgnoreCase));
+            if (urgency.HasValue) query = query.Where(x => x.Urgency == urgency.Value);
+            return Task.FromResult<IReadOnlyList<ServiceRequest>>(query.OrderByDescending(x => x.CreatedAt).ToArray());
+        }
 
         public Task AddAsync(ServiceRequest serviceRequest, CancellationToken cancellationToken = default)
         {

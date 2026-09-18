@@ -146,6 +146,22 @@ public class ServiceRequestsController : ControllerBase
         return Ok(response);
     }
 
+    [HttpPost("{id:guid}/clarifications/answers")]
+    public async Task<ActionResult<IReadOnlyList<ServiceRequestClarificationDto>>> SubmitClarificationAnswers(
+        Guid id,
+        [FromBody] SubmitClarificationAnswersRequest request,
+        CancellationToken cancellationToken)
+    {
+        var customerId = GetCurrentCustomerId();
+        var response = await _serviceRequestService.SubmitClarificationAnswersAsync(
+            customerId,
+            id,
+            request,
+            cancellationToken);
+
+        return Ok(response);
+    }
+
     private Guid GetCurrentCustomerId()
     {
         var idClaim = User.FindFirstValue(ClaimTypes.NameIdentifier);

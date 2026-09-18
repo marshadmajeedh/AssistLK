@@ -42,8 +42,9 @@ When customer problem understanding is complete and confirmed, the request trans
 
 #### HTTP API Endpoint [EXISTING]
 - **Method / Route:** `GET /api/service-requests/{id}`
-- **Authentication:** `Bearer JWT (Roles: Customer, Admin, Provider)`
+- **Authentication:** `Bearer JWT (Customer only, subject to customer ownership checks)`
 - **Response Type:** `ServiceRequestResponse`
+- This customer detail endpoint is not a Provider handoff endpoint. Admin monitoring uses separate read-only `/api/admin/service-requests` routes with Admin authorization. `GetReadyForMatchingAsync` below is an application-service contract, not a published Provider HTTP route.
 
 #### Application Service Method [EXISTING]
 - **Interface:** `IServiceRequestService.GetReadyForMatchingAsync(Guid serviceRequestId, CancellationToken cancellationToken)`

@@ -1,22 +1,58 @@
 import 'package:flutter/material.dart';
 
+import '../../../../shared/theme/app_assets.dart';
 import '../../../../shared/theme/app_colors.dart';
 import '../../../../shared/theme/app_radius.dart';
 import '../../../../shared/theme/app_spacing.dart';
 import '../../../../shared/theme/app_text_styles.dart';
+import '../../../../shared/widgets/app_image_asset.dart';
 import '../models/canonical_service_category.dart';
 
 class ServiceCategoryCard extends StatelessWidget {
   final CanonicalServiceCategory category;
   final VoidCallback onTap;
   final bool isSelected;
+  final double? titleHeight;
+  final double? descriptionHeight;
 
   const ServiceCategoryCard({
     super.key,
     required this.category,
     required this.onTap,
     this.isSelected = false,
+    this.titleHeight,
+    this.descriptionHeight,
   });
+
+  String _getAssetPath() {
+    switch (category.canonicalName) {
+      case 'Plumbing':
+        return AppAssets.plumbingService;
+      case 'Electrical':
+        return AppAssets.electricalService;
+      case 'Vehicle Repair':
+        return AppAssets.vehicleService;
+      case 'Appliance Repair':
+        return AppAssets.applianceService;
+      default:
+        return AppAssets.plumbingService;
+    }
+  }
+
+  Color _getCategoryTint() {
+    switch (category.canonicalName) {
+      case 'Plumbing':
+        return AppColors.plumbingTint;
+      case 'Electrical':
+        return AppColors.electricalTint;
+      case 'Vehicle Repair':
+        return AppColors.vehicleTint;
+      case 'Appliance Repair':
+        return AppColors.applianceTint;
+      default:
+        return AppColors.primarySurface;
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -42,34 +78,43 @@ class ServiceCategoryCard extends StatelessWidget {
             mainAxisSize: MainAxisSize.min,
             children: [
               Container(
-                padding: const EdgeInsets.all(AppSpacing.sm),
+                width: 48,
+                height: 48,
+                padding: const EdgeInsets.all(AppSpacing.xs),
                 decoration: BoxDecoration(
-                  color: AppColors.primary.withValues(alpha: 0.08),
+                  color: _getCategoryTint(),
                   borderRadius: BorderRadius.circular(AppRadius.medium),
                 ),
-                child: Icon(
-                  category.icon,
-                  color: AppColors.primary,
-                  size: 24,
+                child: Center(
+                  child: AppImageAsset(
+                    assetPath: _getAssetPath(),
+                    width: 38,
+                    height: 38,
+                    fit: BoxFit.contain,
+                    fallbackIcon: category.icon,
+                    semanticLabel: category.displayName,
+                  ),
                 ),
               ),
               const SizedBox(height: AppSpacing.sm),
-              Text(
-                category.displayName,
-                style: AppTextStyles.cardHeading.copyWith(
-                  fontWeight: FontWeight.w600,
+              SizedBox(
+                height: titleHeight,
+                child: Text(
+                  category.displayName,
+                  style: AppTextStyles.cardHeading.copyWith(
+                    fontWeight: FontWeight.w600,
+                  ),
                 ),
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
               ),
               const SizedBox(height: AppSpacing.xs),
-              Text(
-                category.description,
-                style: AppTextStyles.small.copyWith(
-                  color: AppColors.textSecondary,
+              SizedBox(
+                height: descriptionHeight,
+                child: Text(
+                  category.description,
+                  style: AppTextStyles.small.copyWith(
+                    color: AppColors.textSecondary,
+                  ),
                 ),
-                maxLines: 2,
-                overflow: TextOverflow.ellipsis,
               ),
             ],
           ),

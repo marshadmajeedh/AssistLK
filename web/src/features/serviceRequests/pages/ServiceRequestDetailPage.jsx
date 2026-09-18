@@ -192,7 +192,7 @@ function ServiceRequestDetailPage() {
   // Loading State
   if (loading) {
     return (
-      <div style={{ maxWidth: 760, margin: "0 auto", width: "100%" }}>
+      <div className="narrow-stack" style={{ width: "100%" }}>
         <LoadingSpinner message="Loading service request details..." />
       </div>
     );
@@ -201,8 +201,8 @@ function ServiceRequestDetailPage() {
   // Error / Not Found State
   if (error || !request) {
     return (
-      <div style={{ maxWidth: 760, margin: "0 auto", width: "100%" }}>
-        <AppCard>
+      <div className="feature-stack narrow-stack" style={{ width: "100%" }}>
+        <AppCard className="section-card">
           <h2
             style={{
               ...typography.sectionHeading,
@@ -255,9 +255,8 @@ function ServiceRequestDetailPage() {
 
   return (
     <div
+      className="feature-stack narrow-stack"
       style={{
-        maxWidth: 760,
-        margin: "0 auto",
         width: "100%",
         boxSizing: "border-box",
         display: "flex",
@@ -265,6 +264,22 @@ function ServiceRequestDetailPage() {
         gap: spacing.lg,
       }}
     >
+      <section className="page-hero">
+        <div className="page-hero-content">
+          <div>
+            <div className="page-kicker">Request Detail</div>
+            <h1 className="page-hero-title">Track the current state, analysis, and next safe action.</h1>
+            <p className="page-hero-copy">This view keeps the original request, AI analysis state, and customer actions together without changing the underlying workflow rules.</p>
+          </div>
+          <div className="page-hero-meta">
+            <div className="page-stat">
+              <strong>{currentStatus}</strong>
+              <span>Authoritative request status</span>
+            </div>
+          </div>
+        </div>
+      </section>
+
       {/* 1. Top Navigation & Back Action */}
       <div
         style={{
@@ -290,7 +305,7 @@ function ServiceRequestDetailPage() {
       </div>
 
       {/* 2. Details Page Header Card */}
-      <AppCard>
+      <AppCard className="section-card">
         <div
           style={{
             display: "flex",
@@ -357,7 +372,7 @@ function ServiceRequestDetailPage() {
       </AppCard>
 
       {/* 3. Request Information Card */}
-      <AppCard>
+      <AppCard className="section-card">
         <h2
           style={{
             ...typography.cardHeading,

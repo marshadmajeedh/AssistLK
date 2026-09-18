@@ -24,6 +24,37 @@ public class ServiceRequestService : IServiceRequestService
         ServiceRequestStatus.Analyzed
     ];
 
+    private static readonly Dictionary<string, ServiceRequestStatus> ValidStatuses =
+        new(StringComparer.OrdinalIgnoreCase)
+        {
+            ["Created"] = ServiceRequestStatus.Created,
+            ["Analyzing"] = ServiceRequestStatus.Analyzing,
+            ["AwaitingInformation"] = ServiceRequestStatus.AwaitingInformation,
+            ["Analyzed"] = ServiceRequestStatus.Analyzed,
+            ["ReadyForMatching"] = ServiceRequestStatus.ReadyForMatching,
+            ["Cancelled"] = ServiceRequestStatus.Cancelled
+        };
+
+    private static readonly Dictionary<string, string> ValidCategories =
+        new(StringComparer.OrdinalIgnoreCase)
+        {
+            ["Plumbing"] = "Plumbing",
+            ["Electrical"] = "Electrical",
+            ["Vehicle Repair"] = "Vehicle Repair",
+            ["Appliance Repair"] = "Appliance Repair",
+            ["Unclassified"] = "Unclassified"
+        };
+
+    private static readonly Dictionary<string, ServiceRequestUrgency> ValidUrgencies =
+        new(StringComparer.OrdinalIgnoreCase)
+        {
+            ["Unknown"] = ServiceRequestUrgency.Unknown,
+            ["Low"] = ServiceRequestUrgency.Low,
+            ["Medium"] = ServiceRequestUrgency.Medium,
+            ["High"] = ServiceRequestUrgency.High,
+            ["Critical"] = ServiceRequestUrgency.Critical
+        };
+
     private readonly IServiceRequestRepository _serviceRequestRepository;
     private readonly IProblemAnalysisRepository _problemAnalysisRepository;
 
@@ -55,6 +86,7 @@ public class ServiceRequestService : IServiceRequestService
             CategoryHint = normalizedCategoryHint,
             Description = request.Description.Trim(),
             LocationText = request.LocationText.Trim(),
+            LocationSource = request.LocationSource,
             Latitude = request.Latitude,
             Longitude = request.Longitude,
             Category = "Unclassified",
@@ -65,7 +97,7 @@ public class ServiceRequestService : IServiceRequestService
         await _serviceRequestRepository.AddAsync(serviceRequest, cancellationToken);
         await _serviceRequestRepository.SaveChangesAsync(cancellationToken);
 
-        return MapResponse(serviceRequest);
+        return MapResponse(serviceRequest, includeVisualEvidence: true);
     }
 
     public async Task<ServiceRequestResponse> GetByIdAsync(
@@ -76,9 +108,11 @@ public class ServiceRequestService : IServiceRequestService
         var serviceRequest = await GetOwnedRequestAsync(
             serviceRequestId,
             customerId,
+            includeProblemAnalyses: true,
+            includeClarifications: true,
             cancellationToken: cancellationToken);
 
-        return MapResponse(serviceRequest);
+        return MapResponse(serviceRequest, includeVisualEvidence: true);
     }
 
     public async Task<IReadOnlyList<ServiceRequestResponse>> GetCurrentCustomerRequestsAsync(
@@ -89,7 +123,7 @@ public class ServiceRequestService : IServiceRequestService
             customerId,
             cancellationToken);
 
-        return requests.Select(MapResponse).ToArray();
+        return requests.Select(r => MapResponse(r)).ToArray();
     }
 
     public async Task<ServiceRequestResponse> UpdateAsync(
@@ -103,6 +137,7 @@ public class ServiceRequestService : IServiceRequestService
         var serviceRequest = await GetOwnedRequestAsync(
             serviceRequestId,
             customerId,
+            includeClarifications: true,
             cancellationToken: cancellationToken);
 
         if (!EditableStatuses.Contains(serviceRequest.Status))
@@ -111,8 +146,38 @@ public class ServiceRequestService : IServiceRequestService
                 "Service request cannot be edited in its current status.");
         }
 
+        var descriptionChanged = !string.Equals(
+            serviceRequest.Description,
+            request.Description.Trim(),
+            StringComparison.Ordinal);
+
+        if (serviceRequest.Status == ServiceRequestStatus.AwaitingInformation && descriptionChanged)
+        {
+            if (serviceRequest.Clarifications != null && serviceRequest.Clarifications.Any())
+            {
+                var currentRound = serviceRequest.Clarifications.Max(c => c.ClarificationRound);
+                var unansweredInCurrentRound = serviceRequest.Clarifications
+                    .Where(c => c.ClarificationRound == currentRound &&
+                                string.IsNullOrWhiteSpace(c.Answer) &&
+                                c.SupersededAt == null);
+
+                var now = DateTime.UtcNow;
+                foreach (var q in unansweredInCurrentRound)
+                {
+                    q.SupersededAt = now;
+                }
+            }
+        }
+
+        CanonicalServiceCategories.IsValidHint(request.CategoryHint, out var revisionHint);
+        if (descriptionChanged || serviceRequest.CategoryHint != revisionHint ||
+            serviceRequest.LocationText != request.LocationText.Trim() ||
+            serviceRequest.Latitude != request.Latitude || serviceRequest.Longitude != request.Longitude)
+            serviceRequest.EvidenceRevision = checked(serviceRequest.EvidenceRevision + 1);
+
         serviceRequest.Description = request.Description.Trim();
         serviceRequest.LocationText = request.LocationText.Trim();
+        serviceRequest.LocationSource = request.LocationSource;
         serviceRequest.Latitude = request.Latitude;
         serviceRequest.Longitude = request.Longitude;
 
@@ -122,7 +187,7 @@ public class ServiceRequestService : IServiceRequestService
         _serviceRequestRepository.Update(serviceRequest);
         await _serviceRequestRepository.SaveChangesAsync(cancellationToken);
 
-        return MapResponse(serviceRequest);
+        return MapResponse(serviceRequest, includeVisualEvidence: true);
     }
 
     public async Task<ServiceRequestResponse> CancelAsync(
@@ -145,7 +210,7 @@ public class ServiceRequestService : IServiceRequestService
         _serviceRequestRepository.Update(serviceRequest);
         await _serviceRequestRepository.SaveChangesAsync(cancellationToken);
 
-        return MapResponse(serviceRequest);
+        return MapResponse(serviceRequest, includeVisualEvidence: true);
     }
 
     public async Task<ProblemAnalysisResponse> ApplyProblemAnalysisResultAsync(
@@ -156,6 +221,8 @@ public class ServiceRequestService : IServiceRequestService
 
         var serviceRequest = await _serviceRequestRepository.GetByIdAsync(
             result.ServiceRequestId,
+            includeProblemAnalyses: false,
+            includeClarifications: true,
             cancellationToken: cancellationToken);
 
         if (serviceRequest is null)
@@ -171,9 +238,16 @@ public class ServiceRequestService : IServiceRequestService
                 "Problem analysis cannot be applied in the current status.");
         }
 
+        if (result.EvidenceRevision.HasValue && result.EvidenceRevision.Value != serviceRequest.EvidenceRevision)
+            throw new ConflictException("Analysis was produced for outdated request evidence.");
+
+        var visualEvidence = result.VisualEvidence.ValidateFor(result.SuppliedAttachmentIds,
+            serviceRequest.Attachments.Select(a => a.Id));
         var analysis = new ProblemAnalysis
         {
+            VisualEvidence = visualEvidence,
             ServiceRequestId = serviceRequest.Id,
+            EvidenceRevision = result.EvidenceRevision ?? serviceRequest.EvidenceRevision,
             DetectedProblem = result.DetectedProblem.Trim(),
             Confidence = result.Confidence,
             AgentName = result.AgentName.Trim()
@@ -181,9 +255,57 @@ public class ServiceRequestService : IServiceRequestService
 
         serviceRequest.Category = result.Category.Trim();
         serviceRequest.Urgency = result.Urgency;
-        serviceRequest.Status = result.NeedsMoreInformation
-            ? ServiceRequestStatus.AwaitingInformation
-            : ServiceRequestStatus.Analyzed;
+
+        if (result.NeedsMoreInformation)
+        {
+            var existingClarifications = serviceRequest.Clarifications ?? new List<ServiceRequestClarification>();
+            var currentRound = existingClarifications.Any() ? existingClarifications.Max(c => c.ClarificationRound) : 0;
+
+            // Maximum 2 clarification rounds:
+            if (currentRound < 2 && result.FollowUpQuestions != null && result.FollowUpQuestions.Any())
+            {
+                serviceRequest.Clarifications ??= new List<ServiceRequestClarification>();
+                var newClarifications = new List<ServiceRequestClarification>();
+                int nextRound = currentRound + 1;
+                int seq = 1;
+                foreach (var q in result.FollowUpQuestions)
+                {
+                    if (!string.IsNullOrWhiteSpace(q))
+                    {
+                        var cleanQuestion = q.Trim();
+                        if (cleanQuestion.Length > 500)
+                        {
+                            cleanQuestion = cleanQuestion[..500];
+                        }
+
+                        var clarification = new ServiceRequestClarification
+                        {
+                            ServiceRequestId = serviceRequest.Id,
+                            ClarificationRound = nextRound,
+                            Sequence = seq++,
+                            Question = cleanQuestion,
+                            Answer = null,
+                            AnsweredAt = null,
+                            SupersededAt = null
+                        };
+
+                        newClarifications.Add(clarification);
+                        serviceRequest.Clarifications.Add(clarification);
+                    }
+                }
+
+                if (newClarifications.Any())
+                {
+                    await _serviceRequestRepository.AddClarificationsAsync(newClarifications, cancellationToken);
+                }
+            }
+
+            serviceRequest.Status = ServiceRequestStatus.AwaitingInformation;
+        }
+        else
+        {
+            serviceRequest.Status = ServiceRequestStatus.Analyzed;
+        }
 
         await _problemAnalysisRepository.AddAsync(analysis, cancellationToken);
         _serviceRequestRepository.Update(serviceRequest);
@@ -244,6 +366,7 @@ public class ServiceRequestService : IServiceRequestService
             Confidence = analysis.Confidence,
             Urgency = serviceRequest.Urgency,
             LocationText = serviceRequest.LocationText,
+            LocationSource = serviceRequest.LocationSource,
             Latitude = serviceRequest.Latitude,
             Longitude = serviceRequest.Longitude,
             Status = serviceRequest.Status,
@@ -276,7 +399,7 @@ public class ServiceRequestService : IServiceRequestService
         _serviceRequestRepository.Update(serviceRequest);
         await _serviceRequestRepository.SaveChangesAsync(cancellationToken);
 
-        return MapResponse(serviceRequest);
+        return MapResponse(serviceRequest, includeVisualEvidence: true);
     }
 
     public virtual async Task<ServiceRequestStatus> GetPreAnalysisStatusAsync(
@@ -314,7 +437,7 @@ public class ServiceRequestService : IServiceRequestService
                 $"Invalid recovery target status '{previousStatus}'. Analysis can only be recovered to Created or AwaitingInformation.");
         }
 
-        var serviceRequest = await _serviceRequestRepository.GetByIdAsync(
+        var serviceRequest = await _serviceRequestRepository.ReloadForRecoveryAsync(
             serviceRequestId,
             cancellationToken: cancellationToken);
 
@@ -333,7 +456,7 @@ public class ServiceRequestService : IServiceRequestService
         _serviceRequestRepository.Update(serviceRequest);
         await _serviceRequestRepository.SaveChangesAsync(cancellationToken);
 
-        return MapResponse(serviceRequest);
+        return MapResponse(serviceRequest, includeVisualEvidence: true);
     }
 
     public async Task<ServiceRequestResponse> MarkReadyForMatchingAsync(
@@ -372,6 +495,13 @@ public class ServiceRequestService : IServiceRequestService
                 "Service request must have location text to be marked ready for matching.");
         }
 
+        if (serviceRequest.Clarifications != null &&
+            serviceRequest.Clarifications.Any(c => string.IsNullOrWhiteSpace(c.Answer) && c.SupersededAt == null))
+        {
+            throw new ConflictException(
+                "Cannot mark service request ready for matching while clarification questions are unanswered.");
+        }
+
         ProblemAnalysis? latestAnalysis = null;
         if (serviceRequest.ProblemAnalyses != null && serviceRequest.ProblemAnalyses.Any())
         {
@@ -392,6 +522,9 @@ public class ServiceRequestService : IServiceRequestService
                 "Service request must have at least one problem analysis to be marked ready for matching.");
         }
 
+        if (latestAnalysis.EvidenceRevision != serviceRequest.EvidenceRevision)
+            throw new ConflictException("The latest analysis is outdated. Re-analysis is required.");
+
         if (latestAnalysis.Confidence <= 0m || latestAnalysis.Confidence > 1m)
         {
             throw new ConflictException(
@@ -402,6 +535,166 @@ public class ServiceRequestService : IServiceRequestService
         _serviceRequestRepository.Update(serviceRequest);
         await _serviceRequestRepository.SaveChangesAsync(cancellationToken);
 
+        return MapResponse(serviceRequest, includeVisualEvidence: true);
+    }
+
+    public async Task<IReadOnlyList<ServiceRequestClarificationDto>> SubmitClarificationAnswersAsync(
+        Guid customerId,
+        Guid serviceRequestId,
+        SubmitClarificationAnswersRequest request,
+        CancellationToken cancellationToken = default)
+    {
+        if (request == null)
+        {
+            throw new ArgumentNullException(nameof(request));
+        }
+
+        ValidateRequest(request);
+
+        var serviceRequest = await GetOwnedRequestAsync(
+            serviceRequestId,
+            customerId,
+            includeClarifications: true,
+            cancellationToken: cancellationToken);
+
+        if (serviceRequest.Status != ServiceRequestStatus.AwaitingInformation)
+        {
+            throw new ConflictException(
+                $"Clarification answers can only be submitted when the request is in AwaitingInformation status, but was '{serviceRequest.Status}'.");
+        }
+
+        var clarifications = serviceRequest.Clarifications ?? new List<ServiceRequestClarification>();
+        if (!clarifications.Any())
+        {
+            throw new ConflictException("No clarification questions exist for this service request.");
+        }
+
+        var currentRound = clarifications.Max(c => c.ClarificationRound);
+        if (request.ClarificationRound != currentRound)
+        {
+            throw new ConflictException(
+                $"Submitted answers do not match the current clarification round. Current round is {currentRound}, but submitted round was {request.ClarificationRound}.");
+        }
+
+        var actionableQuestions = clarifications
+            .Where(c => c.ClarificationRound == currentRound && c.SupersededAt == null)
+            .ToList();
+
+        if (!actionableQuestions.Any())
+        {
+            throw new ConflictException("No active questions remain to be answered for the current round.");
+        }
+
+        var submittedAnswers = new Dictionary<Guid, string>();
+        foreach (var ans in request.Answers)
+        {
+            if (string.IsNullOrWhiteSpace(ans.Answer))
+            {
+                throw new ArgumentException("All answers must be non-empty.");
+            }
+
+            var trimmed = ans.Answer.Trim();
+            if (trimmed.Length > 1000)
+            {
+                throw new ArgumentException("Answer exceeds maximum allowed length of 1000 characters.");
+            }
+
+            submittedAnswers[ans.ClarificationId] = trimmed;
+        }
+
+        foreach (var q in actionableQuestions)
+        {
+            if (!submittedAnswers.ContainsKey(q.Id))
+            {
+                throw new ArgumentException($"Missing required answer for clarification question '{q.Id}'.");
+            }
+        }
+
+        if (actionableQuestions.Any(q => q.Answer != submittedAnswers[q.Id]))
+            serviceRequest.EvidenceRevision = checked(serviceRequest.EvidenceRevision + 1);
+        var now = DateTime.UtcNow;
+        foreach (var q in actionableQuestions)
+        {
+            q.Answer = submittedAnswers[q.Id];
+            q.AnsweredAt = now;
+        }
+
+        _serviceRequestRepository.Update(serviceRequest);
+        await _serviceRequestRepository.SaveChangesAsync(cancellationToken);
+
+        return clarifications
+            .OrderBy(c => c.ClarificationRound)
+            .ThenBy(c => c.Sequence)
+            .Select(MapClarificationResponse)
+            .ToArray();
+    }
+
+    public async Task<IReadOnlyList<ServiceRequestResponse>> GetAllForAdminAsync(
+        string? status = null,
+        string? category = null,
+        string? urgency = null,
+        CancellationToken cancellationToken = default)
+    {
+        ServiceRequestStatus? parsedStatus = null;
+        if (!string.IsNullOrWhiteSpace(status))
+        {
+            var trimmed = status.Trim();
+            if (!ValidStatuses.TryGetValue(trimmed, out var s))
+            {
+                throw new ArgumentException(
+                    $"Status filter '{status}' is invalid. Allowed values are: Created, Analyzing, AwaitingInformation, Analyzed, ReadyForMatching, Cancelled.");
+            }
+            parsedStatus = s;
+        }
+
+        string? normalizedCategory = null;
+        if (!string.IsNullOrWhiteSpace(category))
+        {
+            var trimmed = category.Trim();
+            if (!ValidCategories.TryGetValue(trimmed, out var c))
+            {
+                throw new ArgumentException(
+                    $"Category filter '{category}' is invalid. Allowed values are: Plumbing, Electrical, Vehicle Repair, Appliance Repair, Unclassified.");
+            }
+            normalizedCategory = c;
+        }
+
+        ServiceRequestUrgency? parsedUrgency = null;
+        if (!string.IsNullOrWhiteSpace(urgency))
+        {
+            var trimmed = urgency.Trim();
+            if (!ValidUrgencies.TryGetValue(trimmed, out var u))
+            {
+                throw new ArgumentException(
+                    $"Urgency filter '{urgency}' is invalid. Allowed values are: Unknown, Low, Medium, High, Critical.");
+            }
+            parsedUrgency = u;
+        }
+
+        var requests = await _serviceRequestRepository.GetAllForAdminAsync(
+            parsedStatus,
+            normalizedCategory,
+            parsedUrgency,
+            cancellationToken);
+
+        return requests.Select(r => MapResponse(r)).ToArray();
+    }
+
+    public async Task<ServiceRequestResponse> GetByIdForAdminAsync(
+        Guid serviceRequestId,
+        CancellationToken cancellationToken = default)
+    {
+        var serviceRequest = await _serviceRequestRepository.GetByIdAsync(
+            serviceRequestId,
+            includeProblemAnalyses: true,
+            includeClarifications: true,
+            cancellationToken: cancellationToken);
+
+        if (serviceRequest is null)
+        {
+            throw new KeyNotFoundException("Service request was not found.");
+        }
+
         return MapResponse(serviceRequest);
     }
 
@@ -409,12 +702,14 @@ public class ServiceRequestService : IServiceRequestService
         Guid serviceRequestId,
         Guid customerId,
         bool includeProblemAnalyses = false,
+        bool includeClarifications = false,
         CancellationToken cancellationToken = default)
     {
         var serviceRequest = await _serviceRequestRepository.GetByIdAndCustomerIdAsync(
             serviceRequestId,
             customerId,
             includeProblemAnalyses: includeProblemAnalyses,
+            includeClarifications: includeClarifications,
             cancellationToken: cancellationToken);
 
         return serviceRequest is null
@@ -524,22 +819,70 @@ public class ServiceRequestService : IServiceRequestService
         }
     }
 
-    private static ServiceRequestResponse MapResponse(ServiceRequest serviceRequest)
+    private static ServiceRequestResponse MapResponse(ServiceRequest serviceRequest, bool includeVisualEvidence = false)
     {
+        ProblemAnalysisSummaryDto? latestAnalysis = null;
+        if (serviceRequest.ProblemAnalyses != null && serviceRequest.ProblemAnalyses.Any())
+        {
+            var latest = serviceRequest.ProblemAnalyses
+                .OrderByDescending(x => x.CreatedAt)
+                .First();
+
+            latestAnalysis = new ProblemAnalysisSummaryDto
+            {
+                Id = latest.Id,
+                VisualEvidence = includeVisualEvidence && latest.EvidenceRevision == serviceRequest.EvidenceRevision
+                    ? latest.VisualEvidence : null,
+                DetectedProblem = latest.DetectedProblem,
+                Confidence = latest.Confidence,
+                AgentName = latest.AgentName,
+                CreatedAt = latest.CreatedAt
+            };
+        }
+
+        var clarifications = serviceRequest.Clarifications != null
+            ? serviceRequest.Clarifications
+                .OrderBy(x => x.ClarificationRound)
+                .ThenBy(x => x.Sequence)
+                .Select(MapClarificationResponse)
+                .ToArray()
+            : Array.Empty<ServiceRequestClarificationDto>();
+
         return new ServiceRequestResponse
         {
             ServiceRequestId = serviceRequest.Id,
+            EvidenceRevision = serviceRequest.EvidenceRevision,
             CustomerId = serviceRequest.CustomerId,
             CategoryHint = serviceRequest.CategoryHint,
             Category = serviceRequest.Category,
             Description = serviceRequest.Description,
             LocationText = serviceRequest.LocationText,
+            LocationSource = serviceRequest.LocationSource,
             Latitude = serviceRequest.Latitude,
             Longitude = serviceRequest.Longitude,
             Urgency = serviceRequest.Urgency,
             Status = serviceRequest.Status,
             CreatedAt = serviceRequest.CreatedAt,
-            UpdatedAt = serviceRequest.UpdatedAt
+            UpdatedAt = serviceRequest.UpdatedAt,
+            LatestAnalysis = latestAnalysis,
+            Clarifications = clarifications
+        };
+    }
+
+    private static ServiceRequestClarificationDto MapClarificationResponse(ServiceRequestClarification clarification)
+    {
+        return new ServiceRequestClarificationDto
+        {
+            Id = clarification.Id,
+            ServiceRequestId = clarification.ServiceRequestId,
+            ClarificationRound = clarification.ClarificationRound,
+            Sequence = clarification.Sequence,
+            Question = clarification.Question,
+            Answer = clarification.Answer,
+            AnsweredAt = clarification.AnsweredAt,
+            SupersededAt = clarification.SupersededAt,
+            CreatedAt = clarification.CreatedAt,
+            UpdatedAt = clarification.UpdatedAt
         };
     }
 

@@ -1,13 +1,12 @@
-using AssistLK.Agents.Agents;
+using AssistLK.Agents.Adapters;
 using AssistLK.Agents.Core;
-using AssistLK.Agents.Services;
-using AssistLK.Agents.Tools;
 using AssistLK.Application.Interfaces;
 using AssistLK.Application.Services;
 using AssistLK.Domain.Entities;
 using AssistLK.Domain.Enums;
 using AssistLK.Infrastructure.Data;
 using AssistLK.Infrastructure.Repositories;
+using AssistLK.IntegrationTests.TestDoubles;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging.Abstractions;
 
@@ -20,7 +19,7 @@ public class Component1EndToEndPostgreSqlTests : PostgreSqlIntegrationTestBase
     {
     }
 
-    private ProblemUnderstandingWorkflowService CreateWorkflowService(AssistLKDbContext context)
+    private ProblemUnderstandingWorkflowService CreateWorkflowService(AssistLKDbContext context, AssistLK.Tests.Shared.FakeAttachmentStorage? storage = null)
     {
         var workflowService = new AgentWorkflowService(context);
         var memoryService = new AgentMemoryService(context);
@@ -28,19 +27,13 @@ public class Component1EndToEndPostgreSqlTests : PostgreSqlIntegrationTestBase
         var monitoringService = new AgentMonitoringService(context);
         var safetyService = new AgentSafetyService(new AgentSafetyPolicyEngine(), context);
 
-        var toolRegistry = new ToolRegistry();
-        toolRegistry.Register(new ProblemClassificationTool());
-        toolRegistry.Register(new LocationExtractionTool());
-        toolRegistry.Register(new ServiceKnowledgeTool());
-
-        var toolExecutor = new ToolExecutor(toolRegistry);
-        var agent = new ProblemUnderstandingAgent(
-            toolExecutor,
-            new GeminiService(),
-            NullLogger<ProblemUnderstandingAgent>.Instance);
+        var fakeClient = new FakeProblemUnderstandingClient();
+        var adapter = new ExternalProblemUnderstandingAgentAdapter(
+            fakeClient,
+            NullLogger<ExternalProblemUnderstandingAgentAdapter>.Instance);
 
         var registry = new AgentRegistry();
-        registry.Register(agent);
+        registry.Register(adapter);
 
         var orchestrator = new AgentOrchestrator(registry);
 
@@ -56,7 +49,10 @@ public class Component1EndToEndPostgreSqlTests : PostgreSqlIntegrationTestBase
             safetyService,
             orchestrator,
             registry,
-            requestService);
+            requestService,
+            new AssistLK.Application.Attachments.ProblemVisualEvidenceService(
+                new AssistLK.Infrastructure.Repositories.AnalysisEvidenceRepository(context),
+                storage ?? new AssistLK.Tests.Shared.FakeAttachmentStorage()));
     }
 
     [Fact]
@@ -64,6 +60,8 @@ public class Component1EndToEndPostgreSqlTests : PostgreSqlIntegrationTestBase
     {
         var customer = await CreateUserAsync(email: "pipe_customer@assistlk.com");
         var requestId = Guid.NewGuid();
+
+        var storage = new AssistLK.Tests.Shared.FakeAttachmentStorage();
 
         // 1. Customer submits request to PostgreSQL
         await using (var context = CreateDbContext())
@@ -80,12 +78,21 @@ public class Component1EndToEndPostgreSqlTests : PostgreSqlIntegrationTestBase
             };
             await context.ServiceRequests.AddAsync(req);
             await context.SaveChangesAsync();
+            // Upload evidence before the workflow; audit input must persist
+            // its revision without leaking the normalized binary or storage metadata into audit input.
+            var attachments = new AssistLK.Application.Attachments.ServiceRequestAttachmentService(
+                new ServiceRequestAttachmentRepository(context), storage,
+                new AssistLK.Infrastructure.Attachments.AttachmentImageNormalizer(),
+                NullLogger<AssistLK.Application.Attachments.ServiceRequestAttachmentService>.Instance);
+            using var photo = new ImageMagick.MagickImage(ImageMagick.MagickColors.Blue, 10, 10);
+            await attachments.UploadAsync(req.Id, customer.Id,
+                new MemoryStream(photo.ToByteArray(ImageMagick.MagickFormat.Jpeg)), "photo.jpg", "image/jpeg");
         }
 
         // 2. Execute full Component 1 Workflow backed by real PostgreSQL
         await using (var workflowContext = CreateDbContext())
         {
-            var workflowService = CreateWorkflowService(workflowContext);
+            var workflowService = CreateWorkflowService(workflowContext, storage);
             var result = await workflowService.AnalyzeAsync(requestId, customer.Id);
 
             Assert.True(result.Success, $"Workflow execution failed: {result.ErrorMessage}");
@@ -110,6 +117,8 @@ public class Component1EndToEndPostgreSqlTests : PostgreSqlIntegrationTestBase
 
             Assert.Single(savedRequest.ProblemAnalyses);
             var savedAnalysis = savedRequest.ProblemAnalyses.First();
+            Assert.Equal(2, savedRequest.EvidenceRevision);
+            Assert.Equal(savedRequest.EvidenceRevision, savedAnalysis.EvidenceRevision);
             Assert.NotEmpty(savedAnalysis.DetectedProblem);
             Assert.True(savedAnalysis.Confidence >= 0.80m);
             Assert.Equal("ProblemUnderstandingAgent", savedAnalysis.AgentName);
@@ -138,6 +147,18 @@ public class Component1EndToEndPostgreSqlTests : PostgreSqlIntegrationTestBase
             Assert.NotNull(workflowRecord);
             Assert.Equal("Completed", workflowRecord.Status);
             Assert.NotEmpty(workflowRecord.Executions);
+            foreach (var execution in workflowRecord.Executions)
+            {
+                using var input = System.Text.Json.JsonDocument.Parse(execution.Input!);
+                Assert.Equal(2, input.RootElement.GetProperty("EvidenceRevision").GetInt64());
+                var ids = input.RootElement.GetProperty("AttachmentIds").EnumerateArray().Select(x => x.GetGuid()).ToArray();
+                Assert.Equal(await verifyContext.ServiceRequestAttachments.Where(a => a.ServiceRequestId == requestId)
+                    .OrderBy(a => a.Slot).Select(a => a.Id).ToArrayAsync(), ids);
+                Assert.True(execution.Input!.Length < 2000);
+                Assert.DoesNotContain("dataBase64", execution.Input, StringComparison.OrdinalIgnoreCase);
+                var allowed = new[] { "EvidenceRevision", "AttachmentIds", "ServiceRequestId", "Description", "LocationText", "Latitude", "Longitude", "CategoryHint", "ClarificationHistory" };
+                Assert.All(input.RootElement.EnumerateObject(), property => Assert.Contains(property.Name, allowed));
+            }
             Assert.NotEmpty(workflowRecord.AuditLogs);
 
             // Verify AgentMemory keys recorded in PostgreSQL
@@ -201,10 +222,24 @@ public class Component1EndToEndPostgreSqlTests : PostgreSqlIntegrationTestBase
         // 3. Customer provides clarification: "The refrigerator is warm and not cooling food"
         await using (var updateContext = CreateDbContext())
         {
-            var req = await updateContext.ServiceRequests.FindAsync(requestId);
-            Assert.NotNull(req);
-            req.Description = "The refrigerator is warm and not cooling food";
-            await updateContext.SaveChangesAsync();
+            var requestRepo = new ServiceRequestRepository(updateContext);
+            var analysisRepo = new ProblemAnalysisRepository(updateContext);
+            var requestService = new ServiceRequestService(requestRepo, analysisRepo);
+            await requestService.UpdateAsync(customer.Id, requestId, new AssistLK.Application.ServiceRequests.DTOs.UpdateServiceRequestRequest
+            {
+                Description = "The refrigerator is warm and not cooling food",
+                LocationText = "Galle"
+            });
+        }
+
+        // Verify that Round 1 clarifications were superseded (preserved for audit, not deleted)
+        await using (var verifyContext = CreateDbContext())
+        {
+            var superseded = await verifyContext.ServiceRequestClarifications
+                .Where(c => c.ServiceRequestId == requestId && c.ClarificationRound == 1)
+                .ToListAsync();
+            Assert.NotEmpty(superseded);
+            Assert.All(superseded, q => Assert.NotNull(q.SupersededAt));
         }
 
         // 4. Second analysis runs with clarification

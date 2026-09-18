@@ -1,3 +1,12 @@
+import '../models/analysis_visual_evidence.dart';
+import '../../auth/providers/auth_provider.dart';
+import '../providers/problem_photos_controller.dart';
+import '../services/problem_image_picker.dart';
+import '../widgets/problem_photos.dart';
+import '../widgets/request_summary_artwork.dart';
+import '../models/location_source.dart';
+import '../widgets/location_attribution.dart';
+
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
@@ -7,6 +16,7 @@ import '../../../../shared/theme/app_spacing.dart';
 import '../../../../shared/theme/app_text_styles.dart';
 import '../../../../shared/widgets/app_button.dart';
 import '../../../../shared/widgets/app_card.dart';
+import '../models/canonical_service_category.dart';
 import '../models/problem_understanding_result_model.dart';
 import '../models/service_request_model.dart';
 import '../models/service_request_status.dart';
@@ -20,10 +30,12 @@ import 'edit_service_request_screen.dart';
 
 class ServiceRequestDetailScreen extends StatefulWidget {
   final String requestId;
+  final ProblemImagePicker? imagePicker;
 
   const ServiceRequestDetailScreen({
     super.key,
     required this.requestId,
+    this.imagePicker,
   });
 
   @override
@@ -33,15 +45,76 @@ class ServiceRequestDetailScreen extends StatefulWidget {
 
 class _ServiceRequestDetailScreenState
     extends State<ServiceRequestDetailScreen> {
+  late final ProblemPhotosController _photos;
+
   @override
   void initState() {
     super.initState();
+    _photos = ProblemPhotosController(
+      requestId: widget.requestId,
+      service: context.read<ServiceRequestProvider>().serviceRequestService,
+      picker:
+          widget.imagePicker ??
+          context.read<ProblemImagePicker?>() ??
+          NativeProblemImagePicker(),
+      auth: context.read<AuthProvider?>(),
+    );
+    _photos.addListener(_photoChanged);
     WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
       context.read<ServiceRequestProvider>().loadRequestById(widget.requestId);
+      _loadPhotos();
     });
   }
 
+  Future<void> _loadPhotos() async {
+    await _photos.load();
+    if (_photos.active) await _photos.recover();
+  }
+
+  void _photoChanged() {
+    if (mounted) setState(() {});
+  }
+
+  @override
+  void dispose() {
+    _photos.removeListener(_photoChanged);
+    _photos.dispose();
+    super.dispose();
+  }
+
+  String _getAiClassificationText(ServiceRequestModel request) {
+    switch (request.status) {
+      case ServiceRequestStatus.created:
+        return 'Not analyzed yet';
+      case ServiceRequestStatus.analyzing:
+        return 'Analysis in progress';
+      case ServiceRequestStatus.awaitingInformation:
+        return 'Needs more information';
+      case ServiceRequestStatus.analyzed:
+      case ServiceRequestStatus.readyForMatching:
+        return CanonicalServiceCategory.fromCanonicalOrDisplayName(
+              request.category,
+            )?.displayName ??
+            (request.category.isEmpty ? 'Unclassified' : request.category);
+      case ServiceRequestStatus.cancelled:
+        if (request.category.isNotEmpty && request.category != 'Unclassified') {
+          return CanonicalServiceCategory.fromCanonicalOrDisplayName(
+                request.category,
+              )?.displayName ??
+              request.category;
+        }
+        return 'Not classified';
+    }
+  }
+
   Future<void> _triggerAnalysis(String id) async {
+    if (!_photos.active ||
+        _photos.busy ||
+        _photos.picking ||
+        _photos.hasPending) {
+      return;
+    }
     final provider = context.read<ServiceRequestProvider>();
     final result = await provider.analyzeRequest(id);
 
@@ -54,6 +127,49 @@ class _ServiceRequestDetailScreenState
             result.needsMoreInformation
                 ? 'Analysis complete: Additional clarification is needed.'
                 : 'Problem analyzed successfully!',
+          ),
+          backgroundColor: result.needsMoreInformation
+              ? AppColors.warning
+              : AppColors.success,
+        ),
+      );
+    } else if (provider.error != null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(provider.error!),
+          backgroundColor: AppColors.error,
+        ),
+      );
+    }
+  }
+
+  Future<void> _submitClarificationAnswers(
+    String id,
+    int round,
+    Map<String, String> answers,
+  ) async {
+    if (!_photos.active ||
+        _photos.busy ||
+        _photos.picking ||
+        _photos.hasPending) {
+      return;
+    }
+    final provider = context.read<ServiceRequestProvider>();
+    final result = await provider.submitClarificationAnswersAndReanalyze(
+      id,
+      round,
+      answers,
+    );
+
+    if (!mounted) return;
+
+    if (result != null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            result.needsMoreInformation
+                ? 'Answers submitted. Additional clarification is needed.'
+                : 'Answers submitted and problem analyzed successfully!',
           ),
           backgroundColor: result.needsMoreInformation
               ? AppColors.warning
@@ -84,13 +200,9 @@ class _ServiceRequestDetailScreenState
         ),
       );
     } else {
-      final error =
-          provider.error ?? 'Failed to mark ready for matching.';
+      final error = provider.error ?? 'Failed to mark ready for matching.';
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(error),
-          backgroundColor: AppColors.error,
-        ),
+        SnackBar(content: Text(error), backgroundColor: AppColors.error),
       );
     }
   }
@@ -134,10 +246,7 @@ class _ServiceRequestDetailScreenState
     } else {
       final error = provider.error ?? 'Failed to cancel request.';
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(error),
-          backgroundColor: AppColors.error,
-        ),
+        SnackBar(content: Text(error), backgroundColor: AppColors.error),
       );
     }
   }
@@ -152,6 +261,13 @@ class _ServiceRequestDetailScreenState
 
   @override
   Widget build(BuildContext context) {
+    if (_photos.sessionEnded) {
+      return const Scaffold(
+        body: Center(
+          child: Text('Your session has ended. Please sign in again.'),
+        ),
+      );
+    }
     final provider = context.watch<ServiceRequestProvider>();
     final request = provider.currentRequest;
     final analysis = provider.currentAnalysis;
@@ -212,51 +328,114 @@ class _ServiceRequestDetailScreenState
         ],
       ),
       body: RefreshIndicator(
-        onRefresh: () => provider.loadRequestById(widget.requestId),
+        onRefresh: () async {
+          await provider.loadRequestById(widget.requestId);
+          await _photos.load();
+        },
         child: SingleChildScrollView(
           physics: const AlwaysScrollableScrollPhysics(),
           padding: const EdgeInsets.all(AppSpacing.lg),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              // Header Card: Category, Urgency, Status
+              // Header Card: Category, Urgency, Status, Service preference
               AppCard(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Expanded(
-                          child: Text(
+                child: RequestSummaryArtwork(
+                  category: request.category,
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Wrap(
+                        alignment: WrapAlignment.spaceBetween,
+                        crossAxisAlignment: WrapCrossAlignment.center,
+                        spacing: AppSpacing.sm,
+                        runSpacing: AppSpacing.sm,
+                        children: [
+                          Text(
                             request.category.isEmpty
                                 ? 'Unclassified Request'
-                                : request.category,
+                                : (CanonicalServiceCategory.fromCanonicalOrDisplayName(
+                                        request.category,
+                                      )?.displayName ??
+                                      request.category),
                             style: AppTextStyles.sectionHeading,
                           ),
+                          StatusBadge(status: request.status),
+                        ],
+                      ),
+                      if (request.status != ServiceRequestStatus.analyzed &&
+                          request.status !=
+                              ServiceRequestStatus.readyForMatching) ...[
+                        const SizedBox(height: AppSpacing.xs + 2),
+                        Wrap(
+                          crossAxisAlignment: WrapCrossAlignment.center,
+                          children: [
+                            const Text(
+                              'Service preference: ',
+                              style: TextStyle(
+                                fontSize: 12,
+                                color: AppColors.textSecondary,
+                                fontWeight: FontWeight.w500,
+                              ),
+                            ),
+                            Text(
+                              CanonicalServiceCategory.fromCanonicalOrDisplayName(
+                                    request.categoryHint,
+                                  )?.displayName ??
+                                  (request.categoryHint == null
+                                      ? 'Let AssistLK AI identify'
+                                      : request.categoryHint!),
+                              style: const TextStyle(
+                                fontSize: 12,
+                                fontWeight: FontWeight.w600,
+                                color: AppColors.textPrimary,
+                              ),
+                            ),
+                          ],
                         ),
-                        const SizedBox(width: AppSpacing.sm),
-                        StatusBadge(status: request.status),
+                        const SizedBox(height: AppSpacing.xs),
+                        Wrap(
+                          crossAxisAlignment: WrapCrossAlignment.center,
+                          children: [
+                            const Text(
+                              'AssistLK AI classification: ',
+                              style: TextStyle(
+                                fontSize: 12,
+                                color: AppColors.textSecondary,
+                                fontWeight: FontWeight.w500,
+                              ),
+                            ),
+                            Text(
+                              _getAiClassificationText(request),
+                              style: const TextStyle(
+                                fontSize: 12,
+                                fontWeight: FontWeight.w600,
+                                color: AppColors.textPrimary,
+                              ),
+                            ),
+                          ],
+                        ),
                       ],
-                    ),
-                    const SizedBox(height: AppSpacing.md),
-                    Row(
-                      children: [
-                        const Text(
-                          'Urgency Level: ',
-                          style: TextStyle(
-                            fontSize: 13,
-                            color: AppColors.textSecondary,
+                      const SizedBox(height: AppSpacing.xs + 2),
+                      Wrap(
+                        crossAxisAlignment: WrapCrossAlignment.center,
+                        spacing: AppSpacing.xs,
+                        children: [
+                          const Text(
+                            'Urgency Level: ',
+                            style: TextStyle(
+                              fontSize: 12,
+                              color: AppColors.textSecondary,
+                            ),
                           ),
-                        ),
-                        UrgencyChip(urgency: request.urgency),
-                      ],
-                    ),
-                  ],
+                          UrgencyChip(urgency: request.urgency),
+                        ],
+                      ),
+                    ],
+                  ),
                 ),
               ),
-              const SizedBox(height: AppSpacing.md),
+              const SizedBox(height: AppSpacing.sm),
 
               // Description Card
               AppCard(
@@ -267,14 +446,11 @@ class _ServiceRequestDetailScreenState
                       'Problem Description',
                       style: AppTextStyles.cardHeading,
                     ),
+                    const SizedBox(height: AppSpacing.xs),
+                    Text(request.description, style: AppTextStyles.body),
                     const SizedBox(height: AppSpacing.sm),
-                    Text(
-                      request.description,
-                      style: AppTextStyles.body,
-                    ),
-                    const SizedBox(height: AppSpacing.md),
                     const Divider(color: AppColors.border, height: 1),
-                    const SizedBox(height: AppSpacing.md),
+                    const SizedBox(height: AppSpacing.sm),
 
                     // Location
                     Row(
@@ -287,13 +463,43 @@ class _ServiceRequestDetailScreenState
                         ),
                         const SizedBox(width: AppSpacing.xs),
                         Expanded(
-                          child: Text(
-                            request.locationText.isEmpty
-                                ? 'No location specified'
-                                : request.locationText,
-                            style: AppTextStyles.body.copyWith(
-                              fontWeight: FontWeight.w500,
-                            ),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                request.locationText.isEmpty
+                                    ? 'No location specified'
+                                    : request.locationText,
+                                style: AppTextStyles.body.copyWith(
+                                  fontWeight: FontWeight.w500,
+                                ),
+                              ),
+                              if (request.locationSource ==
+                                  LocationSource.openStreetMap)
+                                const LocationAttribution(),
+                              if (request.latitude != null &&
+                                  request.longitude != null) ...[
+                                const SizedBox(height: 2),
+                                Row(
+                                  children: [
+                                    const Icon(
+                                      Icons.my_location_rounded,
+                                      size: 13,
+                                      color: AppColors.success,
+                                    ),
+                                    const SizedBox(width: 4),
+                                    Text(
+                                      'GPS location captured',
+                                      style: AppTextStyles.small.copyWith(
+                                        color: AppColors.success,
+                                        fontSize: 12,
+                                        fontWeight: FontWeight.w500,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ],
+                            ],
                           ),
                         ),
                       ],
@@ -301,14 +507,70 @@ class _ServiceRequestDetailScreenState
                   ],
                 ),
               ),
-              const SizedBox(height: AppSpacing.lg),
+              const SizedBox(height: AppSpacing.md),
 
+              RequestProblemPhotos(
+                controller: _photos,
+                editable:
+                    (request.status == ServiceRequestStatus.created ||
+                        request.status ==
+                            ServiceRequestStatus.awaitingInformation) &&
+                    !provider.isAnalyzing &&
+                    !provider.isLoading,
+                onMutation: () async {
+                  await provider.loadRequestById(widget.requestId);
+                },
+              ),
+              const SizedBox(height: AppSpacing.md),
               // Dynamic Workflow Section based on status
-              _buildStatusWorkflowSection(context, request, analysis, provider),
+              if (_photos.busy || _photos.picking || _photos.hasPending)
+                const Text(
+                  'Upload or discard selected photos before continuing with analysis.',
+                )
+              else ...[
+                if ((request.status ==
+                            ServiceRequestStatus.awaitingInformation ||
+                        request.status == ServiceRequestStatus.cancelled) &&
+                    request.latestAnalysis != null &&
+                    request.latestAnalysis!.visualEvidence.status !=
+                        AnalysisVisionStatus.notRequested) ...[
+                  _persistedPhotoAnalysis(request),
+                  const SizedBox(height: AppSpacing.md),
+                ],
+                _buildStatusWorkflowSection(
+                  context,
+                  request,
+                  analysis,
+                  provider,
+                ),
+              ],
             ],
           ),
         ),
       ),
+    );
+  }
+
+  Widget _persistedPhotoAnalysis(ServiceRequestModel request) {
+    final latest = request.latestAnalysis!;
+    return AnalysisResultCard(
+      analysis: ProblemUnderstandingResultModel(
+        workflowId: '',
+        executionId: '',
+        serviceRequestId: request.serviceRequestId,
+        status: request.status,
+        category: request.category,
+        problemSummary: latest.detectedProblem,
+        urgency: request.urgency,
+        confidence: latest.confidence,
+        needsMoreInformation:
+            request.status == ServiceRequestStatus.awaitingInformation,
+        followUpQuestions: const [],
+      ),
+      visualEvidence: latest.visualEvidence,
+      hasPhotos: _photos.attachments.isNotEmpty,
+      categoryHint: request.categoryHint,
+      status: request.status,
     );
   }
 
@@ -350,15 +612,15 @@ class _ServiceRequestDetailScreenState
             AppButton(
               text: 'Refresh Status',
               isLoading: provider.isLoading,
-              onPressed: () => provider.loadRequestById(request.serviceRequestId),
+              onPressed: () =>
+                  provider.loadRequestById(request.serviceRequestId),
             ),
           ],
         ),
       );
     }
 
-    if (provider.isAnalyzing ||
-        request.status == ServiceRequestStatus.analyzing) {
+    if (provider.isAnalyzing) {
       return const AppCard(
         child: Row(
           mainAxisAlignment: MainAxisAlignment.center,
@@ -369,9 +631,51 @@ class _ServiceRequestDetailScreenState
               child: CircularProgressIndicator(strokeWidth: 2),
             ),
             SizedBox(width: AppSpacing.md),
+            Flexible(
+              child: Text(
+                'AssistLK AI analysis in progress',
+                style: AppTextStyles.body,
+              ),
+            ),
+          ],
+        ),
+      );
+    }
+
+    if (request.status == ServiceRequestStatus.analyzing) {
+      return AppCard(
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Row(
+              children: [
+                SizedBox(
+                  width: 20,
+                  height: 20,
+                  child: CircularProgressIndicator(strokeWidth: 2),
+                ),
+                SizedBox(width: AppSpacing.md),
+                Expanded(
+                  child: Text(
+                    'AssistLK AI analysis in progress',
+                    style: AppTextStyles.cardHeading,
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: AppSpacing.xs),
             Text(
-              'AI analysis in progress',
-              style: AppTextStyles.body,
+              'Analysis is taking longer than expected. Your request is still being processed.',
+              style: AppTextStyles.body.copyWith(
+                color: AppColors.textSecondary,
+              ),
+            ),
+            const SizedBox(height: AppSpacing.md),
+            AppButton(
+              text: 'Refresh Status',
+              isLoading: provider.isLoading,
+              onPressed: () =>
+                  provider.loadRequestById(request.serviceRequestId),
             ),
           ],
         ),
@@ -384,19 +688,19 @@ class _ServiceRequestDetailScreenState
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             const Text(
-              'Next Step: AI Understanding',
+              'Next Step: AssistLK AI Analysis',
               style: AppTextStyles.cardHeading,
             ),
             const SizedBox(height: AppSpacing.xs),
             Text(
-              'Trigger Gemini AI to categorize the issue, determine urgency, and verify if further information is required.',
+              'Use AssistLK AI to identify the service category, estimate urgency, and check whether more information is needed.',
               style: AppTextStyles.body.copyWith(
                 color: AppColors.textSecondary,
               ),
             ),
             const SizedBox(height: AppSpacing.md),
             AppButton(
-              text: 'Analyze with Gemini AI',
+              text: 'Analyze with AssistLK AI',
               isLoading: provider.isAnalyzing,
               onPressed: () => _triggerAnalysis(request.serviceRequestId),
             ),
@@ -414,48 +718,72 @@ class _ServiceRequestDetailScreenState
                 child: CircularProgressIndicator(strokeWidth: 2),
               ),
               SizedBox(width: AppSpacing.md),
-              Text(
-                'AI analysis in progress',
-                style: AppTextStyles.body,
+              Flexible(
+                child: Text(
+                  'AssistLK AI analysis in progress',
+                  style: AppTextStyles.body,
+                ),
               ),
             ],
           ),
         );
 
       case ServiceRequestStatus.awaitingInformation:
-        // Backend currently does not persist followUpQuestions in the database.
-        // Stored temporarily in memory until customer completes clarification.
-        final questions = analysis != null && analysis.followUpQuestions.isNotEmpty
-            ? analysis.followUpQuestions
-            : <String>[
-                'Please provide further details regarding the issue.',
-              ];
-
         return ClarificationSection(
-          followUpQuestions: questions,
+          followUpQuestions: analysis?.followUpQuestions ?? const [],
+          clarifications: request.clarifications,
+          hasReachedMaxRounds: request.hasCompletedFinalClarificationAnalysis,
           isReanalyzing: provider.isAnalyzing,
+          isSubmitting: provider.isLoading,
           onEditDetails: () => _navigateToEdit(request),
           onReanalyze: () => _triggerAnalysis(request.serviceRequestId),
+          onSubmitAnswers: (round, answers) => _submitClarificationAnswers(
+            request.serviceRequestId,
+            round,
+            answers,
+          ),
         );
 
       case ServiceRequestStatus.analyzed:
-        final displayAnalysis = analysis ??
-            ProblemUnderstandingResultModel(
-              workflowId: '',
-              executionId: '',
-              serviceRequestId: request.serviceRequestId,
-              status: request.status,
-              category: request.category,
-              problemSummary: request.description,
-              urgency: request.urgency,
-              confidence: 0.90,
-              needsMoreInformation: false,
-              followUpQuestions: const [],
-            );
+        final displayAnalysis =
+            analysis ??
+            (request.latestAnalysis != null
+                ? ProblemUnderstandingResultModel(
+                    workflowId: '',
+                    executionId: '',
+                    serviceRequestId: request.serviceRequestId,
+                    status: request.status,
+                    category: request.category,
+                    problemSummary: request.latestAnalysis!.detectedProblem,
+                    urgency: request.urgency,
+                    confidence: request.latestAnalysis!.confidence,
+                    needsMoreInformation: false,
+                    followUpQuestions: const [],
+                  )
+                : ProblemUnderstandingResultModel(
+                    workflowId: '',
+                    executionId: '',
+                    serviceRequestId: request.serviceRequestId,
+                    status: request.status,
+                    category: request.category,
+                    problemSummary: request.description,
+                    urgency: request.urgency,
+                    confidence: 0.0,
+                    needsMoreInformation: false,
+                    followUpQuestions: const [],
+                  ));
 
         return Column(
           children: [
-            AnalysisResultCard(analysis: displayAnalysis),
+            AnalysisResultCard(
+              analysis: displayAnalysis,
+              visualEvidence:
+                  request.latestAnalysis?.visualEvidence ??
+                  const AnalysisVisualEvidence(),
+              hasPhotos: _photos.attachments.isNotEmpty,
+              categoryHint: request.categoryHint,
+              status: request.status,
+            ),
             const SizedBox(height: AppSpacing.md),
             AppButton(
               text: 'Mark Ready for Matching',
@@ -466,7 +794,49 @@ class _ServiceRequestDetailScreenState
         );
 
       case ServiceRequestStatus.readyForMatching:
-        return const ReadyForMatchingSection();
+        final displayAnalysis =
+            analysis ??
+            (request.latestAnalysis != null
+                ? ProblemUnderstandingResultModel(
+                    workflowId: '',
+                    executionId: '',
+                    serviceRequestId: request.serviceRequestId,
+                    status: request.status,
+                    category: request.category,
+                    problemSummary: request.latestAnalysis!.detectedProblem,
+                    urgency: request.urgency,
+                    confidence: request.latestAnalysis!.confidence,
+                    needsMoreInformation: false,
+                    followUpQuestions: const [],
+                  )
+                : ProblemUnderstandingResultModel(
+                    workflowId: '',
+                    executionId: '',
+                    serviceRequestId: request.serviceRequestId,
+                    status: request.status,
+                    category: request.category,
+                    problemSummary: request.description,
+                    urgency: request.urgency,
+                    confidence: 0.0,
+                    needsMoreInformation: false,
+                    followUpQuestions: const [],
+                  ));
+
+        return Column(
+          children: [
+            AnalysisResultCard(
+              analysis: displayAnalysis,
+              visualEvidence:
+                  request.latestAnalysis?.visualEvidence ??
+                  const AnalysisVisualEvidence(),
+              hasPhotos: _photos.attachments.isNotEmpty,
+              categoryHint: request.categoryHint,
+              status: request.status,
+            ),
+            const SizedBox(height: AppSpacing.md),
+            const ReadyForMatchingSection(),
+          ],
+        );
 
       case ServiceRequestStatus.cancelled:
         return Container(

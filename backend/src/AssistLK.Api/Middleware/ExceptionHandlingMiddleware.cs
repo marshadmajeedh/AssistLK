@@ -48,6 +48,8 @@ public class ExceptionHandlingMiddleware
                     StatusCodes.Status401Unauthorized,
                 KeyNotFoundException =>
                     StatusCodes.Status404NotFound,
+                Microsoft.EntityFrameworkCore.DbUpdateConcurrencyException =>
+                    StatusCodes.Status409Conflict,
                 ConflictException =>
                     StatusCodes.Status409Conflict,
                 _ =>
@@ -61,7 +63,8 @@ public class ExceptionHandlingMiddleware
                 context.Response.StatusCode ==
                 StatusCodes.Status500InternalServerError
                     ? "An unexpected error occurred."
-                    : exception.Message,
+                    : exception is Microsoft.EntityFrameworkCore.DbUpdateConcurrencyException
+                        ? "Request evidence or status changed. Refresh and retry." : exception.Message,
             Details = null
         };
 

@@ -1,3 +1,6 @@
+import '../models/analysis_visual_evidence.dart';
+import 'photo_insights.dart';
+
 import 'package:flutter/material.dart';
 
 import '../../../../shared/theme/app_colors.dart';
@@ -5,15 +8,25 @@ import '../../../../shared/theme/app_radius.dart';
 import '../../../../shared/theme/app_spacing.dart';
 import '../../../../shared/theme/app_text_styles.dart';
 import '../../../../shared/widgets/app_card.dart';
+import '../models/canonical_service_category.dart';
 import '../models/problem_understanding_result_model.dart';
+import '../models/service_request_status.dart';
 import 'urgency_chip.dart';
 
 class AnalysisResultCard extends StatelessWidget {
   final ProblemUnderstandingResultModel analysis;
+  final AnalysisVisualEvidence visualEvidence;
+  final bool hasPhotos;
+  final String? categoryHint;
+  final ServiceRequestStatus? status;
 
   const AnalysisResultCard({
     super.key,
     required this.analysis,
+    this.visualEvidence = const AnalysisVisualEvidence(),
+    this.hasPhotos = false,
+    this.categoryHint,
+    this.status,
   });
 
   @override
@@ -22,70 +35,106 @@ class AnalysisResultCard extends StatelessWidget {
         ? analysis.confidence.toStringAsFixed(0)
         : (analysis.confidence * 100).toStringAsFixed(0);
 
+    final effectiveStatus = status ?? analysis.status;
+    final isAllowedStatus =
+        effectiveStatus == ServiceRequestStatus.analyzed ||
+        effectiveStatus == ServiceRequestStatus.readyForMatching;
+
+    final hasHint = categoryHint != null && categoryHint!.trim().isNotEmpty;
+    final hasAuthoritativeCategory =
+        analysis.category.isNotEmpty && analysis.category != 'Unclassified';
+
+    final canonicalHint = hasHint
+        ? CanonicalServiceCategory.fromCanonicalOrDisplayName(categoryHint)
+                  ?.canonicalName ??
+              categoryHint!.trim()
+        : null;
+    final canonicalCategory = hasAuthoritativeCategory
+        ? CanonicalServiceCategory.fromCanonicalOrDisplayName(analysis.category)
+                  ?.canonicalName ??
+              analysis.category.trim()
+        : null;
+
+    final isMismatch =
+        isAllowedStatus &&
+        hasHint &&
+        hasAuthoritativeCategory &&
+        canonicalHint != canonicalCategory;
+
+    final friendlyHint =
+        CanonicalServiceCategory.fromCanonicalOrDisplayName(categoryHint)
+            ?.displayName ??
+        (categoryHint == null ? 'Let AssistLK AI identify' : categoryHint!);
+
     return AppCard(
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           // Header: AI Analysis Label and Confidence
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          Wrap(
+            spacing: AppSpacing.sm,
+            runSpacing: AppSpacing.xs,
+            crossAxisAlignment: WrapCrossAlignment.center,
             children: [
-              Row(
-                children: [
-                  Container(
-                    padding: const EdgeInsets.all(AppSpacing.xs + 2),
-                    decoration: BoxDecoration(
-                      color: AppColors.secondary.withValues(alpha: 0.12),
-                      borderRadius: BorderRadius.circular(AppRadius.small),
-                    ),
-                    child: const Icon(
-                      Icons.auto_awesome_rounded,
-                      size: 16,
-                      color: AppColors.secondary,
-                    ),
-                  ),
-                  const SizedBox(width: AppSpacing.sm),
-                  const Text(
-                    'AI Analysis Result',
-                    style: AppTextStyles.cardHeading,
-                  ),
-                ],
+              const ExcludeSemantics(
+                child: Icon(
+                  Icons.auto_awesome_rounded,
+                  color: AppColors.secondary,
+                  size: 20,
+                ),
               ),
-              Container(
-                padding: const EdgeInsets.symmetric(
-                  horizontal: AppSpacing.sm,
-                  vertical: AppSpacing.xs,
-                ),
-                decoration: BoxDecoration(
-                  color: AppColors.secondary.withValues(alpha: 0.08),
-                  borderRadius: BorderRadius.circular(AppRadius.pill),
-                ),
-                child: Text(
-                  '$confidencePct% Confidence',
-                  style: const TextStyle(
-                    fontSize: 12,
-                    fontWeight: FontWeight.w600,
-                    color: AppColors.secondary,
-                  ),
-                ),
+              const Text(
+                'AssistLK AI Analysis',
+                style: AppTextStyles.cardHeading,
+              ),
+              Text(
+                '$confidencePct% Confidence',
+                style: AppTextStyles.small.copyWith(color: AppColors.secondary),
               ),
             ],
           ),
           const SizedBox(height: AppSpacing.md),
 
-          // Category
-          Row(
-            crossAxisAlignment: CrossAxisAlignment.center,
+          // Customer Preference
+          Wrap(
+            crossAxisAlignment: WrapCrossAlignment.center,
+            spacing: AppSpacing.sm,
+            runSpacing: AppSpacing.xs,
             children: [
               const Text(
-                'Category:',
+                'Your preference:',
                 style: TextStyle(
                   fontSize: 13,
                   fontWeight: FontWeight.w500,
                   color: AppColors.textSecondary,
                 ),
               ),
-              const SizedBox(width: AppSpacing.sm),
+              Text(
+                friendlyHint,
+                style: const TextStyle(
+                  fontSize: 14,
+                  fontWeight: FontWeight.w600,
+                  color: AppColors.textPrimary,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: AppSpacing.sm),
+
+          // AI Classification
+          Wrap(
+            crossAxisAlignment: WrapCrossAlignment.center,
+            spacing: AppSpacing.sm,
+            runSpacing: AppSpacing.xs,
+            children: [
+              const Text(
+                'AssistLK AI classification:',
+                style: TextStyle(
+                  fontSize: 13,
+                  fontWeight: FontWeight.w500,
+                  color: AppColors.textSecondary,
+                ),
+              ),
               Text(
                 analysis.category.isEmpty ? 'Unclassified' : analysis.category,
                 style: const TextStyle(
@@ -99,8 +148,10 @@ class AnalysisResultCard extends StatelessWidget {
           const SizedBox(height: AppSpacing.sm),
 
           // Urgency
-          Row(
-            crossAxisAlignment: CrossAxisAlignment.center,
+          Wrap(
+            crossAxisAlignment: WrapCrossAlignment.center,
+            spacing: AppSpacing.sm,
+            runSpacing: AppSpacing.xs,
             children: [
               const Text(
                 'Urgency:',
@@ -110,11 +161,46 @@ class AnalysisResultCard extends StatelessWidget {
                   color: AppColors.textSecondary,
                 ),
               ),
-              const SizedBox(width: AppSpacing.sm),
               UrgencyChip(urgency: analysis.urgency),
             ],
           ),
           const SizedBox(height: AppSpacing.md),
+
+          // Neutral Mismatch Banner
+          if (isMismatch) ...[
+            Container(
+              width: double.infinity,
+              padding: const EdgeInsets.all(AppSpacing.md),
+              decoration: BoxDecoration(
+                color: AppColors.primary.withValues(alpha: 0.06),
+                borderRadius: BorderRadius.circular(AppRadius.medium),
+                border: Border.all(
+                  color: AppColors.primary.withValues(alpha: 0.25),
+                ),
+              ),
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Icon(
+                    Icons.info_outline_rounded,
+                    color: AppColors.primary,
+                    size: 20,
+                  ),
+                  const SizedBox(width: AppSpacing.sm),
+                  Expanded(
+                    child: Text(
+                      'AssistLK AI identified a different service category based on your problem description.',
+                      style: AppTextStyles.body.copyWith(
+                        color: AppColors.textPrimary,
+                        fontSize: 13,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(height: AppSpacing.md),
+          ],
 
           // Problem Summary
           const Text(
@@ -141,6 +227,7 @@ class AnalysisResultCard extends StatelessWidget {
               style: AppTextStyles.body,
             ),
           ),
+          PhotoInsights(evidence: visualEvidence, hasPhotos: hasPhotos),
         ],
       ),
     );

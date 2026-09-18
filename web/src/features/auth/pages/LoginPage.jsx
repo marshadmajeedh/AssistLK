@@ -1,3 +1,4 @@
+
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useAuthStore } from "../../../shared/auth/authStore";
@@ -33,8 +34,6 @@ function LoginPage() {
 
       if (user.role === "Admin") {
         navigate("/dashboard");
-      } else if (user.role === "Customer") {
-        navigate("/service-requests");
       } else {
         useAuthStore.getState().logout();
         setError(
@@ -47,18 +46,33 @@ function LoginPage() {
   };
 
   return (
-    <div
-      style={{
-        minHeight: "100vh",
-        display: "flex",
-        alignItems: "center",
-        justifyContent: "center",
-        backgroundColor: colors.background,
-        padding: spacing.md,
-        fontFamily: typography.fontFamily,
-      }}
-    >
+    <div className="login-page" style={{ minHeight: "100vh", padding: spacing.md, fontFamily: typography.fontFamily }}>
+      <div className="login-backdrop" />
+      <div className="login-grid app-shell">
+        <section className="login-showcase">
+          <div className="page-kicker">AssistLK Portal</div>
+          <h1 className="login-title">Bring every service decision into one trusted workspace.</h1>
+          <p className="login-copy">
+            Track service requests, AI analysis, provider readiness, and audit-friendly operations from a single, role-protected portal.
+          </p>
+          <div className="login-showcase-grid">
+            <div className="login-showcase-card">
+              <strong>4 workstreams</strong>
+              <span>Problem understanding, matching, booking, and tracking</span>
+            </div>
+            <div className="login-showcase-card">
+              <strong>Shared API rules</strong>
+              <span>Web and mobile follow one identity and approval model</span>
+            </div>
+            <div className="login-showcase-card">
+              <strong>Live oversight</strong>
+              <span>Surface AI workflow metrics and customer request status instantly</span>
+            </div>
+          </div>
+        </section>
+
       <AppCard
+        className="login-card"
         style={{
           width: "100%",
           maxWidth: "420px",
@@ -66,10 +80,11 @@ function LoginPage() {
         }}
       >
         <form onSubmit={handleSubmit}>
+          <div className="pill-note">Staff Workspace</div>
           <h1
             style={{
               ...typography.pageTitle,
-              marginTop: 0,
+              marginTop: spacing.md,
               color: colors.textPrimary,
             }}
           >
@@ -82,13 +97,15 @@ function LoginPage() {
               color: colors.textSecondary,
             }}
           >
-            Sign in to continue.
+            Sign in to continue into the authorized web portal.
           </p>
 
           <div style={{ marginTop: spacing.lg }}>
             <AppInput
               label="Email"
+              name="email"
               type="email"
+              autoComplete="username"
               value={email}
               onChange={(event) =>
                 setEmail(event.target.value)
@@ -104,7 +121,9 @@ function LoginPage() {
           >
             <AppInput
               label="Password"
+              name="password"
               type="password"
+              autoComplete="current-password"
               value={password}
               onChange={(event) =>
                 setPassword(event.target.value)
@@ -127,6 +146,7 @@ function LoginPage() {
           </AppButton>
         </form>
       </AppCard>
+      </div>
     </div>
   );
 }

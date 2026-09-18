@@ -1,3 +1,4 @@
+import 'package:mobile/features/service_requests/models/service_request_attachment.dart';
 import 'dart:async';
 
 import 'package:dio/dio.dart';
@@ -5,9 +6,11 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:mobile/core/api/api_client.dart';
 import 'package:mobile/features/service_requests/models/create_service_request_dto.dart';
 import 'package:mobile/features/service_requests/models/problem_understanding_result_model.dart';
+import 'package:mobile/features/service_requests/models/service_request_clarification_model.dart';
 import 'package:mobile/features/service_requests/models/service_request_model.dart';
 import 'package:mobile/features/service_requests/models/service_request_status.dart';
 import 'package:mobile/features/service_requests/models/service_request_urgency.dart';
+import 'package:mobile/features/service_requests/models/submit_clarification_answers_dto.dart';
 import 'package:mobile/features/service_requests/models/update_service_request_dto.dart';
 import 'package:mobile/features/service_requests/providers/service_request_provider.dart';
 import 'package:mobile/features/service_requests/services/service_request_service.dart';
@@ -24,6 +27,10 @@ class FakeServiceRequestService extends ServiceRequestService {
   int getByIdCallCount = 0;
   int analyzeCallCount = 0;
   Completer<ProblemUnderstandingResultModel>? analyzeCompleter;
+  List<ServiceRequestModel>? getByIdResponses;
+
+  @override
+  Future<List<ServiceRequestAttachment>> listAttachments(String id, {CancelToken? cancelToken}) async => [];
 
   @override
   Future<List<ServiceRequestModel>> getMyRequests() async {
@@ -36,6 +43,9 @@ class FakeServiceRequestService extends ServiceRequestService {
     getByIdCallCount++;
     if (shouldGetByIdThrow) throw Exception('Failed to refresh');
     if (shouldThrow && !shouldAnalyzeThrow) throw Exception('Request not found');
+    if (getByIdResponses != null && getByIdResponses!.isNotEmpty) {
+      return getByIdResponses!.removeAt(0);
+    }
     return fakeRequests.firstWhere((r) => r.serviceRequestId == id);
   }
 
@@ -91,7 +101,7 @@ class FakeServiceRequestService extends ServiceRequestService {
     }
     if (analyzeException != null) throw analyzeException!;
     if (shouldThrow || shouldAnalyzeThrow) throw Exception('Analysis failed');
-    return fakeAnalysis ??
+    final result = fakeAnalysis ??
         ProblemUnderstandingResultModel(
           workflowId: 'wf-1',
           executionId: 'ex-1',
@@ -104,6 +114,13 @@ class FakeServiceRequestService extends ServiceRequestService {
           needsMoreInformation: false,
           followUpQuestions: const [],
         );
+    final index = fakeRequests.indexWhere((request) => request.serviceRequestId == id);
+    if (index >= 0) {
+      fakeRequests[index] = fakeRequests[index].copyWith(
+        status: result.status, category: result.category, urgency: result.urgency,
+      );
+    }
+    return result;
   }
 
   @override
@@ -115,6 +132,37 @@ class FakeServiceRequestService extends ServiceRequestService {
     );
     fakeRequests[index] = updated;
     return updated;
+  }
+
+  bool shouldSubmitClarificationThrow = false;
+  int submitClarificationCallCount = 0;
+  SubmitClarificationAnswersDto? lastSubmittedAnswersDto;
+
+  @override
+  Future<List<ServiceRequestClarificationModel>> submitClarificationAnswers(
+    String id,
+    SubmitClarificationAnswersDto dto,
+  ) async {
+    submitClarificationCallCount++;
+    lastSubmittedAnswersDto = dto;
+    if (shouldThrow || shouldSubmitClarificationThrow) {
+      throw Exception('Submit clarification answers failed');
+    }
+    final index = fakeRequests.indexWhere((r) => r.serviceRequestId == id);
+    if (index < 0) throw Exception('Request not found');
+    final req = fakeRequests[index];
+    final updatedList = req.clarifications.map((c) {
+      final item = dto.answers.cast<ClarificationAnswerSubmissionItemDto?>().firstWhere(
+        (a) => a?.clarificationId == c.id,
+        orElse: () => null,
+      );
+      if (item != null) {
+        return c.copyWith(answer: item.answer, answeredAt: DateTime.now());
+      }
+      return c;
+    }).toList();
+    fakeRequests[index] = req.copyWith(clarifications: updatedList);
+    return updatedList;
   }
 
   @override
@@ -142,7 +190,11 @@ void main() {
   setUp(() {
     fakeService = FakeServiceRequestService();
     fakeService.fakeRequests = [sampleRequest];
-    provider = ServiceRequestProvider(serviceRequestService: fakeService);
+    provider = ServiceRequestProvider(
+      serviceRequestService: fakeService,
+      reconciliationPollInterval: Duration.zero,
+      maxReconciliationPolls: 3,
+    );
   });
 
   test('loadMyRequests updates requests list', () async {
@@ -284,7 +336,8 @@ void main() {
 
     expect(result, isNull);
     expect(fakeService.getByIdCallCount, greaterThan(initialGetCount));
-    expect(provider.error, 'Analysis is taking longer than expected. The request status has been refreshed.');
+    expect(provider.error, isNull);
+    expect(provider.currentRequest?.status, ServiceRequestStatus.created);
     expect(provider.isAnalyzing, false);
   });
 
@@ -322,6 +375,7 @@ void main() {
     expect(provider.currentRequest?.status, ServiceRequestStatus.analyzing);
     expect(provider.requests.first.status, ServiceRequestStatus.analyzing);
     expect(provider.isAnalyzing, false);
+    expect(provider.error, isNull);
   });
 
   test('isAnalyzing always resets safely after success, timeout, 409, and failed synchronization', () async {
@@ -448,5 +502,319 @@ void main() {
     expect(refreshed, isNotNull);
     expect(provider.analysisStateNeedsRefresh, false);
     expect(provider.currentRequest?.status, ServiceRequestStatus.analyzing);
+  });
+
+  test('Analyze timeout + immediate GET returns Analyzed synchronizes final state without fake analysis', () async {
+    await provider.loadRequestById('req-1');
+    fakeService.fakeRequests = [
+      sampleRequest.copyWith(
+        status: ServiceRequestStatus.analyzed,
+        category: 'Plumbing',
+        urgency: ServiceRequestUrgency.high,
+        categoryHint: 'Electrical',
+      ),
+    ];
+    fakeService.analyzeException = DioException(
+      requestOptions: RequestOptions(path: '/service-requests/req-1/analyze'),
+      type: DioExceptionType.receiveTimeout,
+    );
+
+    final result = await provider.analyzeRequest('req-1');
+
+    expect(result, isNull);
+    expect(provider.currentRequest?.status, ServiceRequestStatus.analyzed);
+    expect(provider.currentRequest?.category, 'Plumbing');
+    expect(provider.currentRequest?.urgency, ServiceRequestUrgency.high);
+    expect(provider.currentRequest?.categoryHint, 'Electrical');
+    expect(provider.currentAnalysis, isNull); // No fake/synthesized analysis fabricated
+    expect(provider.error, isNull);
+    expect(provider.analysisStateNeedsRefresh, false);
+    expect(fakeService.analyzeCallCount, 1);
+  });
+
+  test('Analyze timeout + immediate GET returns AwaitingInformation synchronizes final state', () async {
+    await provider.loadRequestById('req-1');
+    fakeService.fakeRequests = [
+      sampleRequest.copyWith(
+        status: ServiceRequestStatus.awaitingInformation,
+      ),
+    ];
+    fakeService.analyzeException = DioException(
+      requestOptions: RequestOptions(path: '/service-requests/req-1/analyze'),
+      type: DioExceptionType.receiveTimeout,
+    );
+
+    final result = await provider.analyzeRequest('req-1');
+
+    expect(result, isNull);
+    expect(provider.currentRequest?.status, ServiceRequestStatus.awaitingInformation);
+    expect(provider.currentAnalysis, isNull);
+    expect(provider.error, isNull);
+    expect(provider.analysisStateNeedsRefresh, false);
+  });
+
+  test('Analyze timeout + first GET Analyzing + 2nd poll Analyzed succeeds with GET only', () async {
+    await provider.loadRequestById('req-1');
+    fakeService.analyzeException = DioException(
+      requestOptions: RequestOptions(path: '/service-requests/req-1/analyze'),
+      type: DioExceptionType.receiveTimeout,
+    );
+    fakeService.getByIdResponses = [
+      sampleRequest.copyWith(status: ServiceRequestStatus.analyzing),
+      sampleRequest.copyWith(status: ServiceRequestStatus.analyzed, category: 'Plumbing'),
+    ];
+
+    final result = await provider.analyzeRequest('req-1');
+
+    expect(result, isNull);
+    expect(provider.currentRequest?.status, ServiceRequestStatus.analyzed);
+    expect(provider.currentRequest?.category, 'Plumbing');
+    expect(provider.currentAnalysis, isNull);
+    expect(provider.error, isNull);
+    expect(provider.isAnalyzing, false);
+    expect(fakeService.analyzeCallCount, 1); // GET only, no duplicate POST
+  });
+
+  test('Analyze timeout + first GET Analyzing + 2nd poll AwaitingInformation succeeds', () async {
+    await provider.loadRequestById('req-1');
+    fakeService.analyzeException = DioException(
+      requestOptions: RequestOptions(path: '/service-requests/req-1/analyze'),
+      type: DioExceptionType.receiveTimeout,
+    );
+    fakeService.getByIdResponses = [
+      sampleRequest.copyWith(status: ServiceRequestStatus.analyzing),
+      sampleRequest.copyWith(status: ServiceRequestStatus.awaitingInformation),
+    ];
+
+    await provider.analyzeRequest('req-1');
+
+    expect(provider.currentRequest?.status, ServiceRequestStatus.awaitingInformation);
+    expect(provider.error, isNull);
+    expect(provider.isAnalyzing, false);
+    expect(fakeService.analyzeCallCount, 1);
+  });
+
+  test('Analyze timeout + first GET Analyzing + 2nd poll Created (backend recovery) succeeds', () async {
+    await provider.loadRequestById('req-1');
+    fakeService.analyzeException = DioException(
+      requestOptions: RequestOptions(path: '/service-requests/req-1/analyze'),
+      type: DioExceptionType.receiveTimeout,
+    );
+    fakeService.getByIdResponses = [
+      sampleRequest.copyWith(status: ServiceRequestStatus.analyzing),
+      sampleRequest.copyWith(status: ServiceRequestStatus.created),
+    ];
+
+    await provider.analyzeRequest('req-1');
+
+    expect(provider.currentRequest?.status, ServiceRequestStatus.created);
+    expect(provider.error, isNull);
+    expect(provider.isAnalyzing, false);
+    expect(fakeService.analyzeCallCount, 1);
+  });
+
+  test('Polling stops immediately when status != Analyzing without exhausting limit', () async {
+    await provider.loadRequestById('req-1');
+    fakeService.analyzeException = DioException(
+      requestOptions: RequestOptions(path: '/service-requests/req-1/analyze'),
+      type: DioExceptionType.receiveTimeout,
+    );
+    final initialGetCount = fakeService.getByIdCallCount;
+    fakeService.getByIdResponses = [
+      sampleRequest.copyWith(status: ServiceRequestStatus.analyzing), // initial GET
+      sampleRequest.copyWith(status: ServiceRequestStatus.analyzed), // poll 1
+    ];
+
+    await provider.analyzeRequest('req-1', maxPolls: 10);
+
+    // initial GET (1) + poll 1 (1) = 2 GET calls, stopped immediately before poll 2..10
+    expect(fakeService.getByIdCallCount - initialGetCount, 2);
+    expect(provider.currentRequest?.status, ServiceRequestStatus.analyzed);
+  });
+
+  test('Polling is bounded and cannot run forever (grace-period expiry)', () async {
+    await provider.loadRequestById('req-1');
+    fakeService.fakeRequests = [
+      sampleRequest.copyWith(status: ServiceRequestStatus.analyzing),
+    ];
+    fakeService.analyzeException = DioException(
+      requestOptions: RequestOptions(path: '/service-requests/req-1/analyze'),
+      type: DioExceptionType.receiveTimeout,
+    );
+    final initialGetCount = fakeService.getByIdCallCount;
+
+    await provider.analyzeRequest('req-1', maxPolls: 4);
+
+    // Initial GET (1) + 4 bounded polls = exactly 5 calls
+    expect(fakeService.getByIdCallCount - initialGetCount, 5);
+    expect(provider.currentRequest?.status, ServiceRequestStatus.analyzing);
+    expect(provider.isAnalyzing, false);
+    expect(provider.analysisStateNeedsRefresh, false);
+    expect(provider.error, isNull); // Informational state handled by UI, not provider.error
+  });
+
+  test('Reconciliation GET network failure during polling sets analysisStateNeedsRefresh', () async {
+    await provider.loadRequestById('req-1');
+    fakeService.analyzeException = DioException(
+      requestOptions: RequestOptions(path: '/service-requests/req-1/analyze'),
+      type: DioExceptionType.receiveTimeout,
+    );
+    fakeService.getByIdResponses = [
+      sampleRequest.copyWith(status: ServiceRequestStatus.analyzing), // initial GET
+    ];
+
+    // After initial GET, getById will throw
+    final future = provider.analyzeRequest('req-1', maxPolls: 3);
+    fakeService.shouldGetByIdThrow = true;
+    await future;
+
+    expect(provider.analysisStateNeedsRefresh, true);
+    expect(provider.error, isNotNull);
+    expect(provider.isAnalyzing, false);
+  });
+
+  test('CategoryHint survives reconciliation and refreshes intact', () async {
+    final hintedRequest = sampleRequest.copyWith(
+      categoryHint: 'Vehicle Repair',
+      status: ServiceRequestStatus.created,
+    );
+    fakeService.fakeRequests = [hintedRequest];
+    await provider.loadRequestById('req-1');
+
+    fakeService.analyzeException = DioException(
+      requestOptions: RequestOptions(path: '/service-requests/req-1/analyze'),
+      type: DioExceptionType.receiveTimeout,
+    );
+    fakeService.getByIdResponses = [
+      hintedRequest.copyWith(status: ServiceRequestStatus.analyzing),
+      hintedRequest.copyWith(status: ServiceRequestStatus.analyzed, category: 'Plumbing'),
+    ];
+
+    await provider.analyzeRequest('req-1');
+
+    expect(provider.currentRequest?.categoryHint, 'Vehicle Repair');
+    expect(provider.currentRequest?.category, 'Plumbing');
+  });
+
+  test('Deterministic HTTP 400 does not enter reconciliation polling', () async {
+    await provider.loadRequestById('req-1');
+    fakeService.analyzeException = DioException(
+      requestOptions: RequestOptions(path: '/service-requests/req-1/analyze'),
+      response: Response(
+        requestOptions: RequestOptions(path: '/service-requests/req-1/analyze'),
+        statusCode: 400,
+      ),
+    );
+    final initialGetCount = fakeService.getByIdCallCount;
+
+    await provider.analyzeRequest('req-1', maxPolls: 5);
+
+    // Exactly 1 synchronization GET, no polling
+    expect(fakeService.getByIdCallCount - initialGetCount, 1);
+    expect(provider.error, isNotNull);
+    expect(provider.isAnalyzing, false);
+  });
+
+  test('successful analysis with failed detail GET never repeats the analysis POST', () async {
+    fakeService.fakeRequests = [sampleRequest];
+    await provider.loadRequestById('req-1');
+    fakeService.shouldGetByIdThrow = true;
+    final result = await provider.analyzeRequest('req-1');
+    expect(result, isNotNull);
+    expect(fakeService.analyzeCallCount, 1);
+    expect(provider.analysisStateNeedsRefresh, isTrue);
+    expect(provider.isAnalyzing, isFalse);
+    await provider.analyzeRequest('req-1');
+    expect(fakeService.analyzeCallCount, 1);
+  });
+
+  group('Clarification Answers Submission', () {
+    test('submitClarificationAnswers updates currentRequest clarifications and returns true', () async {
+      const clarification = ServiceRequestClarificationModel(
+        id: 'c-1',
+        clarificationRound: 1,
+        sequence: 1,
+        question: 'Which room?',
+      );
+      final reqWithClarification = sampleRequest.copyWith(
+        status: ServiceRequestStatus.awaitingInformation,
+        clarifications: [clarification],
+      );
+      fakeService.fakeRequests = [reqWithClarification];
+      await provider.loadRequestById('req-1');
+
+      final result = await provider.submitClarificationAnswers(
+        'req-1',
+        1,
+        {'c-1': 'Master bedroom'},
+      );
+
+      expect(result, true);
+      expect(provider.error, isNull);
+      expect(fakeService.submitClarificationCallCount, 1);
+      expect(fakeService.lastSubmittedAnswersDto?.clarificationRound, 1);
+      expect(fakeService.lastSubmittedAnswersDto?.answers.first.answer, 'Master bedroom');
+      expect(provider.currentRequest?.clarifications.first.answer, 'Master bedroom');
+      expect(provider.currentRequest?.currentRoundIsFullyAnswered, true);
+    });
+
+    test('submitClarificationAnswers sets error and returns false when service throws', () async {
+      fakeService.shouldSubmitClarificationThrow = true;
+      fakeService.fakeRequests = [sampleRequest];
+      await provider.loadRequestById('req-1');
+
+      final result = await provider.submitClarificationAnswers(
+        'req-1',
+        1,
+        {'c-1': 'Master bedroom'},
+      );
+
+      expect(result, false);
+      expect(provider.error, isNotNull);
+    });
+
+    test('submitClarificationAnswersAndReanalyze submits answers and triggers re-analysis', () async {
+      const clarification = ServiceRequestClarificationModel(
+        id: 'c-1',
+        clarificationRound: 1,
+        sequence: 1,
+        question: 'Which room?',
+      );
+      final reqWithClarification = sampleRequest.copyWith(
+        status: ServiceRequestStatus.awaitingInformation,
+        clarifications: [clarification],
+      );
+      fakeService.fakeRequests = [reqWithClarification];
+      await provider.loadRequestById('req-1');
+
+      final analysis = await provider.submitClarificationAnswersAndReanalyze(
+        'req-1',
+        1,
+        {'c-1': 'Master bedroom'},
+      );
+
+      expect(fakeService.submitClarificationCallCount, 1);
+      expect(fakeService.analyzeCallCount, 1);
+      expect(analysis, isNotNull);
+      expect(provider.currentRequest?.clarifications.first.answer, 'Master bedroom');
+      expect(provider.currentRequest?.status, ServiceRequestStatus.analyzed);
+    });
+
+    test('submitClarificationAnswersAndReanalyze aborts and does not call analyze if answer submission fails', () async {
+      fakeService.shouldSubmitClarificationThrow = true;
+      fakeService.fakeRequests = [sampleRequest];
+      await provider.loadRequestById('req-1');
+
+      final analysis = await provider.submitClarificationAnswersAndReanalyze(
+        'req-1',
+        1,
+        {'c-1': 'Master bedroom'},
+      );
+
+      expect(analysis, isNull);
+      expect(fakeService.submitClarificationCallCount, 1);
+      expect(fakeService.analyzeCallCount, 0);
+      expect(provider.error, isNotNull);
+    });
   });
 }

@@ -3,7 +3,7 @@
 **Agentic AI-Assisted Emergency & Skilled Service Coordination Platform**
 
 > **Course:** SE3090 – Software Engineering Frameworks  
-> **Architecture:** Clean Architecture (.NET 8) + React (Vite) + Flutter + PostgreSQL + Google Gemini  
+> **Architecture:** Clean Architecture (.NET 8) + React (Vite) + Flutter + PostgreSQL + Python FastAPI/LangGraph (Gemini, OpenAI, Offline)
 > **Components:** 4 Business Slices owned by 4 Team Members  
 
 ---
@@ -20,11 +20,11 @@ Follow these 12 core sections to get started:
  3. How to Run Backend           → ASP.NET Core (.NET 8) Web API setup & launch
  4. How to Run React             → React 18 + Vite web portal setup & launch
  5. How to Run Flutter           → Flutter mobile client setup & launch
- 6. How Agent Architecture Works → In-process .NET agents & external Python services
- 7. How to Build a .NET Agent    → 10-step guide for C# native agents
- 8. How to Build a Python Agent  → Out-of-process FastAPI/LangChain agents & contract
+ 6. How Agent Architecture Works → ASP.NET orchestration & Python-only C1 reasoning
+ 7. ASP.NET Agent Integration   → Shared orchestration and external adapter
+ 8. Run the C1 Python Service   → FastAPI/LangGraph service guide
  9. Component Boundaries         → Responsibilities & data ownership across 4 members
-10. Testing Strategy             → Real Postgres test DBs, Gemini fakes, Vitest, Flutter
+10. Testing Strategy             → Real Postgres test DBs, agent-client fakes, Vitest, Flutter
 11. Git Workflow                 → Trunk-based branching from develop, commit format, PRs
 12. Where API Contracts Live     → Component handoff contracts (Existing vs Planned)
 ```
@@ -50,7 +50,7 @@ AssistLK/
 │   │   ├── AssistLK.Application     # Business workflows, Interfaces, DTOs
 │   │   ├── AssistLK.Domain          # Pure entities, Enums, Value Objects
 │   │   ├── AssistLK.Infrastructure  # PostgreSQL DbContext, Migrations, Repositories
-│   │   └── AssistLK.Agents          # Native agents, GeminiService, Tools, Safety
+│   │   └── AssistLK.Agents          # Agent adapters, HTTP clients, Tools, Safety
 │   └── tests/
 │       ├── AssistLK.Api.Tests       # API endpoint & security tests
 │       └── AssistLK.IntegrationTests # Service, workflow, and PostgreSQL tests
@@ -63,7 +63,7 @@ AssistLK/
 │       ├── core/             # ApiClient, TokenStorage, AppConfig
 │       ├── shared/           # Design system tokens and shared widgets
 │       └── features/         # Vertical feature screens and providers
-├── agent-services/           # Canonical root for optional Python agent microservices
+├── agent-services/           # Canonical root for Python agent microservices
 └── docs/                     # Authoritative system documentation and guides
 ```
 
@@ -121,41 +121,29 @@ AssistLK/
 
 ### 6. How Agent Architecture Works
 
-AssistLK supports a hybrid agent architecture:
-1. **Native .NET Agents (In-Process):** Fast, type-safe C# agents in `AssistLK.Agents` using `IGeminiService` (Google Gemini 2.5 Flash), `ToolExecutor`, and shared agent safety policies.
-2. **External Python Agents (Out-of-Process):** Optional microservices in `agent-services/<agent-name>` using FastAPI, LangChain, or LangGraph.
+Component 1 problem understanding is Python-only. ASP.NET owns authorization, persistence, lifecycle, deterministic validation, monitoring, and failure recovery. Python owns request-scoped LangGraph state, deterministic tools, provider abstraction, reasoning, and output guardrails.
 
-> **CRITICAL ARCHITECTURAL RULE:** Agents **never** directly access `AssistLKDbContext`, repositories, or mutate database entities. All persistence and lifecycle states are managed by Application workflow services.
-
-- 📖 **Agent Foundation:** [docs/architecture/agent-foundation.md](docs/architecture/agent-foundation.md)
+See [Agentic AI architecture](agent-services/README.md). Frontends call ASP.NET, never Python or PostgreSQL directly.
 
 ---
 
-### 7. How to Build a .NET Agent
+### 7. ASP.NET Agent Integration
 
-Follow the 10-step developer guide:
-1. Define single responsibility
-2. Define structured input/output DTOs
-3. Implement `IAgent`
-4. Inject `IGeminiService`
-5. Add deterministic tools via `ToolExecutor`
-6. Apply safety sanitization
-7. Use memory strictly for explicit useful facts
-8. Integrate through Application workflow service
-9. Register in DI and `AgentRegistry`
-10. Add automated tests with mocked LLM (`FakeGeminiService`)
+`ProblemUnderstandingWorkflowService` dispatches through `AgentOrchestrator` and `AgentRegistry` to `ExternalProblemUnderstandingAgentAdapter`, registered as `ProblemUnderstandingAgent`. `ProblemUnderstandingHttpClient` calls the internal Python service. There is no native C# fallback.
 
-- 📖 **.NET Agent Developer Guide:** [docs/development/how-to-create-dotnet-agent.md](docs/development/how-to-create-dotnet-agent.md)
+See [ASP.NET integration and wire contract](agent-services/problem-understanding-agent/README.md#aspnet-integration).
 
 ---
 
-### 8. How to Build & Connect a Python Agent
+### 8. Run the C1 Python Service
 
-Python agents reside in `agent-services/<name>/`. They operate strictly as out-of-process inference workers and communicate with .NET via provider-neutral JSON:
-- .NET handles Authentication, Authorization, Domain Rules, and PostgreSQL persistence.
-- Python handles ML reasoning, LangGraph state machines, and structured outputs.
-- 📖 **Python Agent Architecture:** [docs/architecture/external-python-agent-service.md](docs/architecture/external-python-agent-service.md)
-- 📖 **External Agent Contract & JSON Schema:** [docs/architecture/external-agent-contract.md](docs/architecture/external-agent-contract.md)
+Follow the [service setup guide](agent-services/problem-understanding-agent/README.md#local-setup-and-running) first. Provider configuration and model keys belong to the Python environment. From the repository root, the existing launcher starts Python and ASP.NET:
+
+```powershell
+.\scripts\start-c1-dev.ps1
+```
+
+The service guide describes health checks, process reuse, shutdown, and manual execution.
 
 ---
 
@@ -180,7 +168,7 @@ Components communicate via public Application service contracts or documented HT
 ### 10. Testing Strategy & Quality Gates
 
 Automated tests run on every commit:
-- **Backend (.NET):** Uses real PostgreSQL test databases (`assistlk_test_integration` and `assistlk_test_api`) with destructive safety guards protecting `assistlk_db`. Offline Gemini simulation ensures tests never require live API keys.
+- **Backend (.NET):** Uses real PostgreSQL test databases (`assistlk_test_integration` and `assistlk_test_api`) with destructive safety guards protecting `assistlk_db`. Fake Python clients isolate agent execution; normal .NET tests require neither Python running nor live model keys.
   ```bash
   dotnet test backend/AssistLK.sln
   ```
@@ -190,8 +178,10 @@ Automated tests run on every commit:
   ```
 - **Mobile (Flutter):**
   ```bash
-  cd mobile && flutter test
+  cd mobile && flutter analyze && flutter test
   ```
+
+- **Python:** From `agent-services/problem-understanding-agent` with its venv active, run `python -m pytest`.
 
 - 📖 **Testing & QA Guide:** [docs/development/testing-guide.md](docs/development/testing-guide.md)
 
@@ -211,7 +201,7 @@ Automated tests run on every commit:
 ### 12. Where API Contracts Live
 
 Major component handoffs are documented and versioned:
-1. **Component 1 → Component 2:** `ReadyForMatching` snapshot (`GET /api/service-requests/{id}`) `[EXISTING]`
+1. **Component 1 → Component 2:** `ReadyForMatching` application-service snapshot (`GetReadyForMatchingAsync`) `[EXISTING]`; customer HTTP detail is not a Provider handoff endpoint
 2. **Component 2 → Component 3:** Provider match notification `[PLANNED]`
 3. **Component 3 → Component 4:** Booking confirmed handoff `[PLANNED]`
 
@@ -226,4 +216,4 @@ Never commit secrets to this repository:
 - ❌ Do not commit `GOOGLE_API_KEY` or Gemini credentials.
 - ❌ Do not commit database passwords or production connection strings.
 - ❌ Do not commit `.env` files (use `.env.example`).
-- ❌ Use .NET User Secrets in development.
+- Use .NET User Secrets for backend credentials; Python owns model-provider secrets. Never place model keys in Flutter or React.

@@ -1,5 +1,7 @@
 # Component 4: Service Tracking
 
+> **Scope:** This overview describes planned component responsibilities and completion criteria, not verified implementation status.
+
 ## Responsibility
 
 Owns assigned and progress states, provider location or status updates, completion evidence, validation, feedback, and service history.
@@ -13,7 +15,7 @@ The Validation and Safety Agent checks completion evidence, policy signals, and 
 - Backend tracking, completion, and feedback use cases
 - React admin monitoring
 - Flutter provider and customer tracking workflows
-- Agent service `agents/validation_safety/`
+- Agent integration location is not established by this overview; follow the shared internal-service boundary.
 
 ## Completion criteria
 

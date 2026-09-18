@@ -7,9 +7,11 @@ using AssistLK.Domain.Entities;
 using AssistLK.Domain.Enums;
 
 using System.Text.Json.Serialization;
+using Xunit;
 
 namespace AssistLK.Api.Tests;
 
+[Collection("EnvironmentTests")]
 public class ServiceRequestsControllerSecurityTests : IClassFixture<AssistLKApiTestFactory>
 {
     private readonly AssistLKApiTestFactory _factory;

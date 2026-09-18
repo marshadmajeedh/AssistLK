@@ -1,13 +1,13 @@
-using AssistLK.Agents.Agents;
+using AssistLK.Agents.Adapters;
+using AssistLK.Agents.Clients;
 using AssistLK.Agents.Core;
 using AssistLK.Agents.Models;
-using AssistLK.Agents.Services;
-using AssistLK.Agents.Tools;
 using AssistLK.Application.Interfaces;
 using AssistLK.Application.Services;
 using AssistLK.Domain.Entities;
 using AssistLK.Domain.Enums;
 using AssistLK.Infrastructure.Data;
+using AssistLK.IntegrationTests.TestDoubles;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging.Abstractions;
 
@@ -25,9 +25,8 @@ public class Component1WorkflowTests
         public AgentSafetyService SafetyService { get; }
         public AgentOrchestrator Orchestrator { get; }
         public AgentRegistry Registry { get; }
-        public ToolRegistry ToolReg { get; }
-        public ToolExecutor ToolExec { get; }
-        public ProblemUnderstandingAgent Agent { get; }
+        public FakeProblemUnderstandingClient FakeClient { get; }
+        public ExternalProblemUnderstandingAgentAdapter Adapter { get; }
         public ServiceRequestService RequestService { get; }
         public List<ServiceRequest> Requests { get; } = new();
         public List<ProblemAnalysis> Analyses { get; } = new();
@@ -47,16 +46,13 @@ public class Component1WorkflowTests
             MonitoringService = new AgentMonitoringService(Db);
             SafetyService = new AgentSafetyService(new AgentSafetyPolicyEngine(), Db);
 
-            ToolReg = new ToolRegistry();
-            ToolReg.Register(new ProblemClassificationTool());
-            ToolReg.Register(new LocationExtractionTool());
-            ToolReg.Register(new ServiceKnowledgeTool());
-
-            ToolExec = new ToolExecutor(ToolReg);
-            Agent = new ProblemUnderstandingAgent(ToolExec, new GeminiService(), NullLogger<ProblemUnderstandingAgent>.Instance);
+            FakeClient = new FakeProblemUnderstandingClient();
+            Adapter = new ExternalProblemUnderstandingAgentAdapter(
+                FakeClient,
+                NullLogger<ExternalProblemUnderstandingAgentAdapter>.Instance);
 
             Registry = new AgentRegistry();
-            Registry.Register(Agent);
+            Registry.Register(Adapter);
 
             Orchestrator = new AgentOrchestrator(Registry);
 
@@ -72,7 +68,8 @@ public class Component1WorkflowTests
                 SafetyService,
                 Orchestrator,
                 Registry,
-                RequestService);
+                RequestService,
+                AssistLK.IntegrationTests.TestDoubles.TestAnalysisEvidence.Create(reqRepo));
         }
     }
 
@@ -175,10 +172,10 @@ public class Component1WorkflowTests
     [Fact]
     public void Agent_DoesNotInjectDatabaseOrRepositoryDependencies()
     {
-        var ctors = typeof(ProblemUnderstandingAgent).GetConstructors();
+        var ctors = typeof(ExternalProblemUnderstandingAgentAdapter).GetConstructors();
         Assert.Single(ctors);
         var pTypes = ctors[0].GetParameters().Select(p => p.ParameterType.Name).ToArray();
-        Assert.Contains("ToolExecutor", pTypes);
+        Assert.Contains("IProblemUnderstandingClient", pTypes);
         Assert.DoesNotContain(pTypes, name => name.Contains("DbContext"));
         Assert.DoesNotContain(pTypes, name => name.Contains("Repository"));
     }
@@ -279,6 +276,19 @@ public class Component1WorkflowTests
         public Task<IReadOnlyList<ServiceRequest>> GetByStatusAsync(ServiceRequestStatus status, CancellationToken cancellationToken = default)
             => Task.FromResult<IReadOnlyList<ServiceRequest>>(_requests.Where(x => x.Status == status).ToArray());
 
+        public Task<IReadOnlyList<ServiceRequest>> GetAllForAdminAsync(
+            ServiceRequestStatus? status = null,
+            string? category = null,
+            ServiceRequestUrgency? urgency = null,
+            CancellationToken cancellationToken = default)
+        {
+            var query = _requests.AsEnumerable();
+            if (status.HasValue) query = query.Where(x => x.Status == status.Value);
+            if (!string.IsNullOrWhiteSpace(category)) query = query.Where(x => string.Equals(x.Category, category, StringComparison.OrdinalIgnoreCase));
+            if (urgency.HasValue) query = query.Where(x => x.Urgency == urgency.Value);
+            return Task.FromResult<IReadOnlyList<ServiceRequest>>(query.OrderByDescending(x => x.CreatedAt).ToArray());
+        }
+
         public Task AddAsync(ServiceRequest serviceRequest, CancellationToken cancellationToken = default)
         {
             _requests.Add(serviceRequest);
@@ -312,5 +322,145 @@ public class Component1WorkflowTests
         }
 
         public Task SaveChangesAsync(CancellationToken cancellationToken = default) => Task.CompletedTask;
+    }
+
+    // ---------------------------------------------------------------------------------
+    // Phase 3: CategoryHint Workflow Propagation & Domain Authority Tests
+    // ---------------------------------------------------------------------------------
+
+    [Theory]
+    [InlineData("Plumbing", "Plumbing")]
+    [InlineData("Electrical", "Electrical")]
+    [InlineData("Vehicle Repair", "Vehicle Repair")]
+    [InlineData("Appliance Repair", "Appliance Repair")]
+    public async Task Workflow_AnalyzeAsync_PropagatesPersistedCanonicalCategoryHints(string hint, string expectedCategory)
+    {
+        var fixture = new WorkflowTestFixture();
+        var requestId = Guid.NewGuid();
+        var customerId = Guid.NewGuid();
+
+        string description = hint switch
+        {
+            "Plumbing" => "Water pipe has burst and is flooding the entire kitchen floor badly",
+            "Electrical" => "Sparks are coming from the main switch circuit breaker",
+            "Vehicle Repair" => "My car engine has broken down and stopped completely on the road",
+            "Appliance Repair" => "The domestic refrigerator compressor is not cooling food",
+            _ => "Generic problem"
+        };
+
+        var request = new ServiceRequest
+        {
+            Id = requestId,
+            CustomerId = customerId,
+            Description = description,
+            LocationText = "Colombo",
+            Status = ServiceRequestStatus.Created,
+            Category = "Unclassified",
+            CategoryHint = hint
+        };
+        fixture.Requests.Add(request);
+
+        // Before analysis: Category remains Unclassified regardless of CategoryHint
+        Assert.Equal("Unclassified", request.Category);
+        Assert.Equal(hint, request.CategoryHint);
+
+        var result = await fixture.Workflow.AnalyzeAsync(requestId, customerId);
+
+        Assert.True(result.Success);
+        Assert.Equal(expectedCategory, result.Category);
+
+        // After analysis: Category comes from agent analysis, CategoryHint remains preserved
+        Assert.Equal(expectedCategory, request.Category);
+        Assert.Equal(hint, request.CategoryHint);
+    }
+
+    [Fact]
+    public async Task Workflow_AnalyzeAsync_PropagatesNullCategoryHint_Correctly()
+    {
+        var fixture = new WorkflowTestFixture();
+        var requestId = Guid.NewGuid();
+        var customerId = Guid.NewGuid();
+
+        var request = new ServiceRequest
+        {
+            Id = requestId,
+            CustomerId = customerId,
+            Description = "Water pipe has burst and is flooding the entire kitchen floor badly",
+            LocationText = "Colombo",
+            Status = ServiceRequestStatus.Created,
+            Category = "Unclassified",
+            CategoryHint = null
+        };
+        fixture.Requests.Add(request);
+
+        var result = await fixture.Workflow.AnalyzeAsync(requestId, customerId);
+
+        Assert.True(result.Success);
+        Assert.Equal("Plumbing", result.Category);
+        Assert.Null(request.CategoryHint);
+    }
+
+    [Fact]
+    public async Task Workflow_DomainAuthority_AgentCanDisagreeWithHint_CategoryComesOnlyFromAgent()
+    {
+        var fixture = new WorkflowTestFixture();
+        var requestId = Guid.NewGuid();
+        var customerId = Guid.NewGuid();
+
+        // Customer selected "Electrical" hint, but problem is distinctly Plumbing
+        var request = new ServiceRequest
+        {
+            Id = requestId,
+            CustomerId = customerId,
+            Description = "Water pipe has burst and is flooding the entire kitchen floor badly",
+            LocationText = "Colombo",
+            Status = ServiceRequestStatus.Created,
+            Category = "Unclassified",
+            CategoryHint = "Electrical"
+        };
+        fixture.Requests.Add(request);
+
+        // 1. Invariant before analysis: Category remains Unclassified
+        Assert.Equal("Unclassified", request.Category);
+        Assert.Equal("Electrical", request.CategoryHint);
+
+        var result = await fixture.Workflow.AnalyzeAsync(requestId, customerId);
+
+        // 2. Invariant after analysis: Agent classified Plumbing based on description
+        Assert.True(result.Success);
+        Assert.Equal("Plumbing", result.Category);
+        Assert.Equal("Plumbing", request.Category);
+        // CategoryHint remains the customer's unverified preference
+        Assert.Equal("Electrical", request.CategoryHint);
+    }
+
+    [Fact]
+    public async Task Workflow_DomainAuthority_CategoryHintNeverDirectlyUpdatesCategory_EvenWithAmbiguousDescription()
+    {
+        var fixture = new WorkflowTestFixture();
+        var requestId = Guid.NewGuid();
+        var customerId = Guid.NewGuid();
+
+        // Customer selected "Vehicle Repair" hint, but description is completely ambiguous
+        var request = new ServiceRequest
+        {
+            Id = requestId,
+            CustomerId = customerId,
+            Description = "Something is broken please fix it",
+            LocationText = "Colombo",
+            Status = ServiceRequestStatus.Created,
+            Category = "Unclassified",
+            CategoryHint = "Vehicle Repair"
+        };
+        fixture.Requests.Add(request);
+
+        var result = await fixture.Workflow.AnalyzeAsync(requestId, customerId);
+
+        Assert.True(result.Success);
+        // Must remain Unclassified, CategoryHint MUST NEVER directly populate Category
+        Assert.Equal("Unclassified", result.Category);
+        Assert.Equal("Unclassified", request.Category);
+        Assert.Equal(ServiceRequestStatus.AwaitingInformation, request.Status);
+        Assert.Equal("Vehicle Repair", request.CategoryHint);
     }
 }

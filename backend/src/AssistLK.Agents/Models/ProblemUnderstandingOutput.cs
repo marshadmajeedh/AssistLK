@@ -9,6 +9,9 @@ namespace AssistLK.Agents.Models;
 /// </summary>
 public class ProblemUnderstandingOutput
 {
+    /// <summary>Persisted in execution audit only; ProblemAnalysis visual persistence is deferred.</summary>
+    public VisualUnderstandingResult VisualResult { get; set; } = new();
+
     /// <summary>
     /// The service category inferred from the customer's description.
     /// Uses stable semantic values such as "Plumbing", "Electrical",

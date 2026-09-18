@@ -1,5 +1,10 @@
 # AssistLK Development Environment Setup Guide
 
+## C1 Python service configuration
+
+Follow the [canonical Python setup and configuration](../../agent-services/problem-understanding-agent/README.md#configuration). Provider keys belong to the Python service environment or its gitignored local `.env`; backend/root configuration is not the active C1 model-secret source. ASP.NET uses `AgentServices__ProblemUnderstandingUrl`, `AgentServices__InternalApiKey`, and `AgentServices__TimeoutSeconds`. Keep model keys out of React and Flutter.
+
+
 > **Developer Onboarding Guide**  
 > *Follow this guide before starting Component Development to get the entire AssistLK ecosystem up and running locally.*
 
@@ -301,7 +306,6 @@ The backend supports three complementary configuration methods for local develop
      ```env
      ConnectionStrings__DefaultConnection=<YOUR_SUPABASE_CONNECTION_STRING>
      Jwt__Key=<YOUR_LOCAL_JWT_KEY>
-     GOOGLE_API_KEY=<YOUR_GEMINI_API_KEY>
      ASPNETCORE_ENVIRONMENT=Development
      ```
    - **Optional:** Having a `.env` file is completely optional. If absent, the backend boots normally without throwing errors.

@@ -153,36 +153,23 @@ function CreateServiceRequestPage() {
 
   return (
     <div
+      className="feature-stack narrow-stack"
       style={{
-        maxWidth: 680,
-        margin: "0 auto",
         width: "100%",
         boxSizing: "border-box",
       }}
     >
-      {/* Page Header */}
-      <div style={{ marginBottom: spacing.lg }}>
-        <h1
-          style={{
-            ...typography.pageTitle,
-            margin: 0,
-            color: colors.textPrimary,
-          }}
-        >
-          Create Service Request
-        </h1>
-        <p
-          style={{
-            ...typography.body,
-            margin: `${spacing.xs}px 0 0 0`,
-            color: colors.textSecondary,
-          }}
-        >
-          Describe the problem you need help with and provide your location.
-        </p>
-      </div>
+      <section className="page-hero">
+        <div className="page-hero-content">
+          <div>
+            <div className="page-kicker">New Request</div>
+            <h1 className="page-hero-title">Describe the issue once. Let the workflow carry it forward.</h1>
+            <p className="page-hero-copy">Capture the service problem, location, and optional GPS details so downstream analysis and matching stay grounded in one request.</p>
+          </div>
+        </div>
+      </section>
 
-      <AppCard>
+      <AppCard className="section-card">
         <form onSubmit={handleSubmit} noValidate>
           {/* Problem Description Field */}
           <div>

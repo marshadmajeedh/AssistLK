@@ -16,6 +16,9 @@ import { useAuthStore } from "../../shared/auth/authStore";
 import AdminLayout from "../../shared/layouts/AdminLayout";
 import CustomerLayout from "../../shared/layouts/CustomerLayout";
 import PlaceholderPage from "../../shared/components/PlaceholderPage";
+import AdminDashboardPage from "../../features/admin/pages/AdminDashboardPage";
+import AdminServiceRequestListPage from "../../features/admin/pages/AdminServiceRequestListPage";
+import AiWorkflowsPage from "../../features/aiWorkflows/pages/AiWorkflowsPage";
 
 function RootRedirect() {
 	const user = useAuthStore((state) => state.user);
@@ -25,15 +28,11 @@ function RootRedirect() {
 		return <Navigate to="/login" replace />;
 	}
 
-	if (user.role === "Customer") {
-		return <Navigate to="/service-requests" replace />;
-	}
-
 	if (user.role === "Admin") {
 		return <Navigate to="/dashboard" replace />;
 	}
 
-	return <Navigate to="/login" replace />;
+	return <Navigate to="/unauthorized" replace />;
 }
 
 function AppRouter() {
@@ -57,14 +56,14 @@ function AppRouter() {
 						<Route
 							path="/dashboard"
 							element={
-								<PlaceholderPage title="Dashboard" />
+								<AdminDashboardPage />
 							}
 						/>
 
 						<Route
 							path="/admin/service-requests"
 							element={
-								<PlaceholderPage title="Admin Service Requests" />
+								<AdminServiceRequestListPage />
 							}
 						/>
 
@@ -92,7 +91,7 @@ function AppRouter() {
 						<Route
 							path="/ai-workflows"
 							element={
-								<PlaceholderPage title="AI Workflows" />
+								<AiWorkflowsPage />
 							}
 						/>
 					</Route>

@@ -1,5 +1,7 @@
 # AssistLK Documentation Cleanup Report
 
+> **Historical / Superseded:** This document records an earlier implementation state. Its original conclusions and verification results are retained as historical evidence, not current instructions. Component 1 is now Python-only. See [current Agentic AI architecture](../agent-services/README.md). References repaired during documentation consolidation point to replacement explanations, not the original historical implementation.
+
 **Date:** September 2026  
 **Repository:** `AssistLK` (`SE3090_A1`)  
 **Scope:** Realignment of project documentation to establish a single source of truth following Clean Architecture and the native .NET 8 Agent Foundation.  
@@ -44,7 +46,7 @@ This documentation cleanup phase resolved documentation fragmentation, conflicti
 
 ### 2.4 Agent Documentation Realignment (.NET 8 & Gemini)
 - **Files:**
-  - [docs/architecture/agent-foundation.md](file:///g:/SE3090_A1/AssistLK/docs/architecture/agent-foundation.md)
+  - [docs/architecture/agent-foundation.md](../agent-services/README.md)
   - [docs/components/component-4-service-tracking/requirements.md](file:///g:/SE3090_A1/AssistLK/docs/components/component-4-service-tracking/requirements.md)
 - **Updates:**
   - Removed all hypothetical references to Python `agent-service` or LangGraph runtimes.

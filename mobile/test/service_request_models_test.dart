@@ -1,6 +1,9 @@
 import 'package:flutter_test/flutter_test.dart';
+import 'package:mobile/features/service_requests/models/canonical_service_category.dart';
 import 'package:mobile/features/service_requests/models/create_service_request_dto.dart';
+import 'package:mobile/features/service_requests/models/problem_analysis_summary_model.dart';
 import 'package:mobile/features/service_requests/models/problem_understanding_result_model.dart';
+import 'package:mobile/features/service_requests/models/service_request_clarification_model.dart';
 import 'package:mobile/features/service_requests/models/service_request_model.dart';
 import 'package:mobile/features/service_requests/models/service_request_status.dart';
 import 'package:mobile/features/service_requests/models/service_request_urgency.dart';
@@ -72,14 +75,106 @@ void main() {
       expect(model.urgency, ServiceRequestUrgency.high);
       expect(model.status, ServiceRequestStatus.analyzed);
       expect(model.createdAt, DateTime.parse('2026-09-09T10:00:00.000Z'));
+      expect(model.categoryHint, isNull);
     });
 
-    test('serializes to json', () {
-      final model = ServiceRequestModel(
+    test('parses categoryHint from backend JSON', () {
+      final json = {
+        'serviceRequestId': 'req-123',
+        'customerId': 'cust-456',
+        'categoryHint': 'Plumbing',
+        'category': 'Unclassified',
+        'description': 'Water leaking from kitchen sink pipe',
+        'locationText': 'Kandy',
+        'urgency': 'Medium',
+        'status': 'Created',
+        'createdAt': '2026-09-09T10:00:00.000Z',
+        'updatedAt': '2026-09-09T10:00:00.000Z',
+      };
+
+      final model = ServiceRequestModel.fromJson(json);
+      expect(model.categoryHint, 'Plumbing');
+      expect(model.category, 'Unclassified');
+    });
+
+    test('parses missing categoryHint as null (backward compatibility)', () {
+      final json = {
+        'serviceRequestId': 'req-123',
+        'customerId': 'cust-456',
+        'category': 'Plumbing',
+        'description': 'Water leaking from kitchen sink pipe',
+        'locationText': 'Kandy',
+        'urgency': 'Medium',
+        'status': 'Created',
+        'createdAt': '2026-09-09T10:00:00.000Z',
+        'updatedAt': '2026-09-09T10:00:00.000Z',
+      };
+
+      final model = ServiceRequestModel.fromJson(json);
+      expect(model.categoryHint, isNull);
+    });
+
+    test('parses explicit null categoryHint safely', () {
+      final json = {
+        'serviceRequestId': 'req-123',
+        'customerId': 'cust-456',
+        'categoryHint': null,
+        'category': 'Unclassified',
+        'description': 'Some issue',
+        'locationText': 'Colombo',
+        'urgency': 'Low',
+        'status': 'Created',
+        'createdAt': '2026-09-09T10:00:00.000Z',
+        'updatedAt': '2026-09-09T10:00:00.000Z',
+      };
+
+      final model = ServiceRequestModel.fromJson(json);
+      expect(model.categoryHint, isNull);
+    });
+
+    test('serializes to json including categoryHint', () {
+      final modelWithHint = ServiceRequestModel(
         serviceRequestId: 'req-1',
         customerId: 'cust-1',
-        category: 'Plumbing',
-        description: 'Leaking pipe under kitchen sink',
+        categoryHint: 'Vehicle Repair',
+        category: 'Unclassified',
+        description: 'Car engine won’t start',
+        locationText: 'Galle',
+        urgency: ServiceRequestUrgency.high,
+        status: ServiceRequestStatus.created,
+        createdAt: DateTime.parse('2026-09-09T12:00:00.000Z'),
+        updatedAt: DateTime.parse('2026-09-09T12:00:00.000Z'),
+      );
+
+      final jsonWithHint = modelWithHint.toJson();
+      expect(jsonWithHint['serviceRequestId'], 'req-1');
+      expect(jsonWithHint['categoryHint'], 'Vehicle Repair');
+      expect(jsonWithHint['category'], 'Unclassified');
+
+      final modelWithoutHint = ServiceRequestModel(
+        serviceRequestId: 'req-2',
+        customerId: 'cust-2',
+        category: 'Electrical',
+        description: 'Sparking outlet',
+        locationText: 'Colombo',
+        urgency: ServiceRequestUrgency.critical,
+        status: ServiceRequestStatus.created,
+        createdAt: DateTime.parse('2026-09-09T12:00:00.000Z'),
+        updatedAt: DateTime.parse('2026-09-09T12:00:00.000Z'),
+      );
+
+      final jsonWithoutHint = modelWithoutHint.toJson();
+      expect(jsonWithoutHint.containsKey('categoryHint'), isTrue);
+      expect(jsonWithoutHint['categoryHint'], isNull);
+    });
+
+    test('copyWith preserves categoryHint when omitted', () {
+      final original = ServiceRequestModel(
+        serviceRequestId: 'req-1',
+        customerId: 'cust-1',
+        categoryHint: 'Plumbing',
+        category: 'Unclassified',
+        description: 'Leaking pipe',
         locationText: 'Kandy',
         urgency: ServiceRequestUrgency.medium,
         status: ServiceRequestStatus.created,
@@ -87,10 +182,45 @@ void main() {
         updatedAt: DateTime.parse('2026-09-09T12:00:00.000Z'),
       );
 
-      final json = model.toJson();
-      expect(json['serviceRequestId'], 'req-1');
-      expect(json['urgency'], 'Medium');
-      expect(json['status'], 'Created');
+      final copy = original.copyWith(status: ServiceRequestStatus.analyzing);
+      expect(copy.categoryHint, 'Plumbing');
+      expect(copy.status, ServiceRequestStatus.analyzing);
+    });
+
+    test('copyWith can replace categoryHint with a new value', () {
+      final original = ServiceRequestModel(
+        serviceRequestId: 'req-1',
+        customerId: 'cust-1',
+        categoryHint: 'Plumbing',
+        category: 'Unclassified',
+        description: 'Leaking pipe',
+        locationText: 'Kandy',
+        urgency: ServiceRequestUrgency.medium,
+        status: ServiceRequestStatus.created,
+        createdAt: DateTime.parse('2026-09-09T12:00:00.000Z'),
+        updatedAt: DateTime.parse('2026-09-09T12:00:00.000Z'),
+      );
+
+      final copy = original.copyWith(categoryHint: 'Electrical');
+      expect(copy.categoryHint, 'Electrical');
+    });
+
+    test('copyWith can replace categoryHint with null', () {
+      final original = ServiceRequestModel(
+        serviceRequestId: 'req-1',
+        customerId: 'cust-1',
+        categoryHint: 'Plumbing',
+        category: 'Unclassified',
+        description: 'Leaking pipe',
+        locationText: 'Kandy',
+        urgency: ServiceRequestUrgency.medium,
+        status: ServiceRequestStatus.created,
+        createdAt: DateTime.parse('2026-09-09T12:00:00.000Z'),
+        updatedAt: DateTime.parse('2026-09-09T12:00:00.000Z'),
+      );
+
+      final copy = original.copyWith(categoryHint: null);
+      expect(copy.categoryHint, isNull);
     });
   });
 
@@ -126,7 +256,7 @@ void main() {
     });
   });
 
-  group('DTO Validation', () {
+  group('DTO Validation and Serialization', () {
     test('CreateServiceRequestDto validates required fields', () {
       const invalid = CreateServiceRequestDto(description: '', locationText: '');
       expect(invalid.validate(), isNotNull);
@@ -138,6 +268,65 @@ void main() {
       expect(valid.validate(), isNull);
     });
 
+    test('CreateServiceRequestDto accepts null categoryHint', () {
+      const dto = CreateServiceRequestDto(
+        description: 'Fix electrical socket',
+        locationText: 'Colombo',
+        categoryHint: null,
+      );
+      expect(dto.categoryHint, isNull);
+      expect(dto.validate(), isNull);
+    });
+
+    test('CreateServiceRequestDto serializes Plumbing', () {
+      const dto = CreateServiceRequestDto(
+        description: 'Fix leaky tap',
+        locationText: 'Colombo',
+        categoryHint: 'Plumbing',
+      );
+      final json = dto.toJson();
+      expect(json['categoryHint'], 'Plumbing');
+    });
+
+    test('CreateServiceRequestDto serializes Electrical', () {
+      const dto = CreateServiceRequestDto(
+        description: 'Tripping circuit breaker',
+        locationText: 'Colombo',
+        categoryHint: 'Electrical',
+      );
+      final json = dto.toJson();
+      expect(json['categoryHint'], 'Electrical');
+    });
+
+    test('CreateServiceRequestDto serializes Vehicle Repair', () {
+      const dto = CreateServiceRequestDto(
+        description: 'Flat tyre replacement',
+        locationText: 'Colombo',
+        categoryHint: 'Vehicle Repair',
+      );
+      final json = dto.toJson();
+      expect(json['categoryHint'], 'Vehicle Repair');
+    });
+
+    test('CreateServiceRequestDto serializes Appliance Repair', () {
+      const dto = CreateServiceRequestDto(
+        description: 'Fridge compressor not running',
+        locationText: 'Colombo',
+        categoryHint: 'Appliance Repair',
+      );
+      final json = dto.toJson();
+      expect(json['categoryHint'], 'Appliance Repair');
+    });
+
+    test('CreateServiceRequestDto handles null categoryHint correctly (omitted in toJson)', () {
+      const dto = CreateServiceRequestDto(
+        description: 'General problem description',
+        locationText: 'Colombo',
+      );
+      final json = dto.toJson();
+      expect(json.containsKey('categoryHint'), isFalse);
+    });
+
     test('UpdateServiceRequestDto validates fields', () {
       const invalid = UpdateServiceRequestDto(description: '', locationText: '');
       expect(invalid.validate(), isNotNull);
@@ -147,6 +336,318 @@ void main() {
         locationText: 'Updated Location',
       );
       expect(valid.validate(), isNull);
+    });
+
+    test('UpdateServiceRequestDto serializes a valid hint', () {
+      const dto = UpdateServiceRequestDto(
+        description: 'Updated description',
+        locationText: 'Updated Location',
+        categoryHint: 'Plumbing',
+      );
+      final json = dto.toJson();
+      expect(json['categoryHint'], 'Plumbing');
+    });
+
+    test('UpdateServiceRequestDto explicitly transmits null to clear an existing hint', () {
+      const dto = UpdateServiceRequestDto(
+        description: 'Updated description',
+        locationText: 'Updated Location',
+        categoryHint: null,
+      );
+      final json = dto.toJson();
+      expect(json.containsKey('categoryHint'), isTrue);
+      expect(json['categoryHint'], isNull);
+    });
+
+    test('CreateServiceRequestDto validates and serializes coordinate pair', () {
+      const withCoords = CreateServiceRequestDto(
+        description: 'Leaking pipe under sink',
+        locationText: 'Colombo 03',
+        latitude: 6.9271,
+        longitude: 79.8612,
+      );
+      expect(withCoords.validate(), isNull);
+      final json = withCoords.toJson();
+      expect(json['latitude'], 6.9271);
+      expect(json['longitude'], 79.8612);
+
+      const noCoords = CreateServiceRequestDto(
+        description: 'Leaking pipe under sink',
+        locationText: 'Colombo 03',
+      );
+      expect(noCoords.validate(), isNull);
+      final noJson = noCoords.toJson();
+      expect(noJson.containsKey('latitude'), isFalse);
+      expect(noJson.containsKey('longitude'), isFalse);
+
+      const onlyLat = CreateServiceRequestDto(
+        description: 'Leaking pipe under sink',
+        locationText: 'Colombo 03',
+        latitude: 6.9271,
+      );
+      expect(onlyLat.validate(), 'Both latitude and longitude must be provided together.');
+
+      const onlyLng = CreateServiceRequestDto(
+        description: 'Leaking pipe under sink',
+        locationText: 'Colombo 03',
+        longitude: 79.8612,
+      );
+      expect(onlyLng.validate(), 'Both latitude and longitude must be provided together.');
+
+      const invalidLat = CreateServiceRequestDto(
+        description: 'Leaking pipe under sink',
+        locationText: 'Colombo 03',
+        latitude: 95.0,
+        longitude: 79.8612,
+      );
+      expect(invalidLat.validate(), 'Latitude must be between -90 and 90.');
+
+      const invalidLng = CreateServiceRequestDto(
+        description: 'Leaking pipe under sink',
+        locationText: 'Colombo 03',
+        latitude: 6.9271,
+        longitude: 195.0,
+      );
+      expect(invalidLng.validate(), 'Longitude must be between -180 and 180.');
+    });
+
+    test('UpdateServiceRequestDto validates and serializes coordinates', () {
+      const withCoords = UpdateServiceRequestDto(
+        description: 'Updated pipe leak',
+        locationText: 'Colombo 03',
+        latitude: 6.9271,
+        longitude: 79.8612,
+      );
+      expect(withCoords.validate(), isNull);
+      final json = withCoords.toJson();
+      expect(json['latitude'], 6.9271);
+      expect(json['longitude'], 79.8612);
+
+      const clearCoords = UpdateServiceRequestDto(
+        description: 'Updated pipe leak',
+        locationText: 'Colombo 03',
+        latitude: null,
+        longitude: null,
+      );
+      expect(clearCoords.validate(), isNull);
+      final clearJson = clearCoords.toJson();
+      expect(clearJson['latitude'], isNull);
+      expect(clearJson['longitude'], isNull);
+
+      const onlyLat = UpdateServiceRequestDto(
+        description: 'Updated pipe leak',
+        locationText: 'Colombo 03',
+        latitude: 6.9271,
+      );
+      expect(onlyLat.validate(), 'Both latitude and longitude must be provided together.');
+    });
+  });
+
+  group('CanonicalServiceCategory Mapping Safety', () {
+    test('"Let AI identify" maps to null', () {
+      expect(CanonicalServiceCategory.toCanonicalCategoryHint('Let AI identify'), isNull);
+      expect(CanonicalServiceCategory.toCanonicalCategoryHint('let ai identify'), isNull);
+      expect(CanonicalServiceCategory.toCanonicalCategoryHint('LET AI IDENTIFY'), isNull);
+    });
+
+    test('null and empty/whitespace map to null', () {
+      expect(CanonicalServiceCategory.toCanonicalCategoryHint(null), isNull);
+      expect(CanonicalServiceCategory.toCanonicalCategoryHint(''), isNull);
+      expect(CanonicalServiceCategory.toCanonicalCategoryHint('   '), isNull);
+    });
+
+    test('Vehicle Assistance maps to Vehicle Repair', () {
+      expect(
+        CanonicalServiceCategory.toCanonicalCategoryHint('Vehicle Assistance'),
+        'Vehicle Repair',
+      );
+      expect(
+        CanonicalServiceCategory.toCanonicalCategoryHint('vehicle assistance'),
+        'Vehicle Repair',
+      );
+    });
+
+    test('canonical categories map to themselves', () {
+      expect(CanonicalServiceCategory.toCanonicalCategoryHint('Plumbing'), 'Plumbing');
+      expect(CanonicalServiceCategory.toCanonicalCategoryHint('Electrical'), 'Electrical');
+      expect(CanonicalServiceCategory.toCanonicalCategoryHint('Vehicle Repair'), 'Vehicle Repair');
+      expect(CanonicalServiceCategory.toCanonicalCategoryHint('Appliance Repair'), 'Appliance Repair');
+    });
+
+    test('Unclassified is rejected and throws ArgumentError', () {
+      expect(
+        () => CanonicalServiceCategory.toCanonicalCategoryHint('Unclassified'),
+        throwsArgumentError,
+      );
+    });
+
+    test('Cleaning is rejected and throws ArgumentError', () {
+      expect(
+        () => CanonicalServiceCategory.toCanonicalCategoryHint('Cleaning'),
+        throwsArgumentError,
+      );
+    });
+
+    test('arbitrary values are rejected and throw ArgumentError', () {
+      expect(
+        () => CanonicalServiceCategory.toCanonicalCategoryHint('AC Service'),
+        throwsArgumentError,
+      );
+      expect(
+        () => CanonicalServiceCategory.toCanonicalCategoryHint('Vehicle'),
+        throwsArgumentError,
+      );
+      expect(
+        () => CanonicalServiceCategory.toCanonicalCategoryHint('Emergency'),
+        throwsArgumentError,
+      );
+      expect(
+        () => CanonicalServiceCategory.toCanonicalCategoryHint('random string'),
+        throwsArgumentError,
+      );
+    });
+  });
+
+  group('Structured Clarification Models and Lifecycle', () {
+    test('ServiceRequestClarificationModel parses from json and serializes to json', () {
+      final json = {
+        'id': 'c-1',
+        'clarificationRound': 1,
+        'sequence': 2,
+        'question': 'Is there water leaking?',
+        'answer': 'Yes, from underneath.',
+        'answeredAt': '2026-09-10T12:00:00.000Z',
+        'supersededAt': null,
+      };
+
+      final model = ServiceRequestClarificationModel.fromJson(json);
+      expect(model.id, 'c-1');
+      expect(model.clarificationRound, 1);
+      expect(model.sequence, 2);
+      expect(model.question, 'Is there water leaking?');
+      expect(model.answer, 'Yes, from underneath.');
+      expect(model.isAnswered, isTrue);
+      expect(model.isSuperseded, isFalse);
+      expect(model.isActionable, isFalse); // Answered, so not actionable
+
+      final serialized = model.toJson();
+      expect(serialized['id'], 'c-1');
+      expect(serialized['answer'], 'Yes, from underneath.');
+    });
+
+    test('ServiceRequestClarificationModel actionable state', () {
+      final pending = const ServiceRequestClarificationModel(
+        id: 'c-pending',
+        clarificationRound: 1,
+        sequence: 1,
+        question: 'Any error code?',
+      );
+      expect(pending.isAnswered, isFalse);
+      expect(pending.isSuperseded, isFalse);
+      expect(pending.isActionable, isTrue);
+
+      final superseded = ServiceRequestClarificationModel(
+        id: 'c-superseded',
+        clarificationRound: 1,
+        sequence: 1,
+        question: 'Any error code?',
+        supersededAt: DateTime.now(),
+      );
+      expect(superseded.isAnswered, isFalse);
+      expect(superseded.isSuperseded, isTrue);
+      expect(superseded.isActionable, isFalse);
+    });
+
+    test('ProblemAnalysisSummaryModel parses and serializes authoritative fields', () {
+      final json = {
+        'id': 'pa-1',
+        'detectedProblem': 'Compressor failed',
+        'confidence': 0.85,
+        'agentName': 'ProblemUnderstandingAgent',
+        'createdAt': '2026-09-10T12:00:00.000Z',
+      };
+
+      final model = ProblemAnalysisSummaryModel.fromJson(json);
+      expect(model.id, 'pa-1');
+      expect(model.detectedProblem, 'Compressor failed');
+      expect(model.confidence, 0.85);
+      expect(model.agentName, 'ProblemUnderstandingAgent');
+
+      final serialized = model.toJson();
+      expect(serialized['confidence'], 0.85);
+    });
+
+    test('ServiceRequestModel lifecycle: current round is MAX(ClarificationRound) even when answered', () {
+      final model = ServiceRequestModel(
+        serviceRequestId: 'req-1',
+        customerId: 'cust-1',
+        category: 'Appliance Repair',
+        description: 'Fridge issue',
+        locationText: 'Colombo',
+        urgency: ServiceRequestUrgency.medium,
+        status: ServiceRequestStatus.awaitingInformation,
+        createdAt: DateTime.now(),
+        updatedAt: DateTime.now(),
+        clarifications: [
+          const ServiceRequestClarificationModel(
+            id: 'c-1',
+            clarificationRound: 1,
+            sequence: 1,
+            question: 'Freezer cold?',
+            answer: 'Yes, freezing cold',
+          ),
+          const ServiceRequestClarificationModel(
+            id: 'c-2',
+            clarificationRound: 1,
+            sequence: 2,
+            question: 'Any noise?',
+            answer: 'Buzzing noise',
+          ),
+        ],
+      );
+
+      // Section 1: current round != unanswered round!
+      // Must be 1 even though answered!
+      expect(model.currentClarificationRound, 1);
+      expect(model.currentRoundIsFullyAnswered, isTrue);
+      expect(model.pendingQuestions, isEmpty);
+      expect(model.hasReachedMaxRounds, isFalse);
+    });
+
+    test('ServiceRequestModel lifecycle: max rounds detection and pending separation', () {
+      final model = ServiceRequestModel(
+        serviceRequestId: 'req-2',
+        customerId: 'cust-1',
+        category: 'Appliance Repair',
+        description: 'Fridge issue',
+        locationText: 'Colombo',
+        urgency: ServiceRequestUrgency.medium,
+        status: ServiceRequestStatus.awaitingInformation,
+        createdAt: DateTime.now(),
+        updatedAt: DateTime.now(),
+        clarifications: [
+          const ServiceRequestClarificationModel(
+            id: 'c-r1-1',
+            clarificationRound: 1,
+            sequence: 1,
+            question: 'Round 1 Q',
+            answer: 'Round 1 A',
+          ),
+          const ServiceRequestClarificationModel(
+            id: 'c-r2-1',
+            clarificationRound: 2,
+            sequence: 1,
+            question: 'Round 2 Q',
+            answer: null,
+          ),
+        ],
+      );
+
+      expect(model.currentClarificationRound, 2);
+      expect(model.currentRoundIsFullyAnswered, isFalse);
+      expect(model.pendingQuestions.length, 1);
+      expect(model.pendingQuestions.first.id, 'c-r2-1');
+      expect(model.hasReachedMaxRounds, isTrue);
     });
   });
 }

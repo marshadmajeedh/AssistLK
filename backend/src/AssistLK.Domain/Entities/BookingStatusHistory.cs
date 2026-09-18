@@ -1,5 +1,6 @@
 namespace AssistLK.Domain.Entities;
 
+
 public class BookingStatusHistory
 {
     public int Id { get; set; }

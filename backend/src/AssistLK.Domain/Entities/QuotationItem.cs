@@ -1,5 +1,6 @@
 namespace AssistLK.Domain.Entities;
 
+
 public class QuotationItem
 {
     public int Id { get; set; }

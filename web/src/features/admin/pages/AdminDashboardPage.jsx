@@ -25,7 +25,6 @@ const boundaries = [
   ["Component 4", "Service Tracking, Completion & Safety"],
 ];
 
-// Independent state and retries keep either API failure from blocking the other.
 function useDashboardCollection(load, label) {
   const [result, setResult] = useState({ loading: true, data: [], error: "" });
   const [attempt, setAttempt] = useState(0);
@@ -64,10 +63,24 @@ export default function AdminDashboardPage() {
   const navigate = useNavigate();
   const requests = useDashboardCollection(adminServiceRequestService.getAll, "service requests");
   const executions = useDashboardCollection(agentMonitoringService.getMetrics, "AI execution metrics");
+  
+  // Component 4: Service Tracking & AI Safety Collection
+  const trackingSummary = useDashboardCollection(
+    () => fetch('/api/reports/service-summary').then(res => res.ok ? res.json() : []),
+    "service tracking & safety logs"
+  );
+
   const requestCards = [["Total Service Requests", requests.data.length], ...lifecycle.map(([status, label]) => [label, requests.data.filter((request) => request.status === status).length])];
   const summary = summarizeMetrics(executions.data);
   const agentCards = [["Total Agent Executions", summary.total], ["Completed Executions", summary.completed],
     ["Failed Executions", summary.failed], ["Average Execution Duration", formatDuration(summary.averageDuration)], ["Total Tool Calls", summary.toolCalls]];
+
+  const flaggedCount = trackingSummary.data.filter(j => j.isFlagged).length;
+  const safetyCards = [
+    ["Active Tracked Jobs", trackingSummary.data.length],
+    ["AI Suspicious Flags", flaggedCount],
+    ["Completed Jobs", trackingSummary.data.filter(j => j.status === 'Completed').length]
+  ];
 
   return <div className="admin-dashboard" style={{ ...typography.body, color: colors.textPrimary,
     "--dashboard-gap": `${spacing.md}px`, "--dashboard-muted": colors.textSecondary,
@@ -77,7 +90,7 @@ export default function AdminDashboardPage() {
         <div>
           <div className="page-kicker">Admin Dashboard</div>
           <h1 className="page-hero-title">See service demand and AI workflow health in one pass.</h1>
-          <p className="page-hero-copy">This dashboard keeps Component 1 lifecycle monitoring and AssistLK AI execution metrics visible without changing the backend aggregation rules.</p>
+          <p className="page-hero-copy">This dashboard keeps Component 1 lifecycle monitoring, Component 4 Service Safety, and AssistLK AI execution metrics visible without changing backend aggregation rules.</p>
         </div>
         <div className="page-hero-meta">
           <div className="page-stat">
@@ -91,6 +104,7 @@ export default function AdminDashboardPage() {
         </div>
       </div>
     </section>
+
     <section aria-labelledby="dashboard-requests-heading">
       <div className="dashboard-section-header"><h2 id="dashboard-requests-heading" style={typography.sectionHeading}>Service Request Overview</h2>
         <AppButton variant="outline" onClick={() => navigate("/admin/service-requests")}>View All Requests</AppButton>
@@ -113,6 +127,49 @@ export default function AdminDashboardPage() {
         </AppCard>
       </CollectionState>
     </section>
+
+    {/* Component 4: Service Tracking & AI Safety Operations Section */}
+    <section aria-labelledby="dashboard-tracking-heading">
+      <div className="dashboard-section-header">
+        <h2 id="dashboard-tracking-heading" style={typography.sectionHeading}>Component 4: Service Tracking & Safety Operations</h2>
+      </div>
+      <CollectionState result={trackingSummary} loadingMessage="Loading safety & tracking metrics..." retryLabel="Retry Safety Metrics">
+        <Metrics cards={safetyCards} />
+        <AppCard className="table-shell">
+          <h3 style={typography.cardHeading}>Live Job Safety Monitoring</h3>
+          {trackingSummary.data.length === 0 ? <p>No tracked service jobs available.</p> : <table className="dashboard-table">
+            <caption>Live Service Jobs and Guardrail Status</caption>
+            <thead>
+              <tr>
+                {["Job ID", "Status", "AI Safety Status", "Review Sentiment", "Action"].map((label) => <th scope="col" key={label}>{label}</th>)}
+              </tr>
+            </thead>
+            <tbody>
+              {trackingSummary.data.slice(0, 5).map((job) => (
+                <tr key={job.id} style={job.isFlagged ? { backgroundColor: '#ffe6e6' } : {}}>
+                  <td data-label="Job ID">#{job.id}</td>
+                  <td data-label="Status"><StatusBadge status={job.status} /></td>
+                  <td data-label="AI Safety Status">
+                    {job.isFlagged ? (
+                      <span style={{ color: colors.error, fontWeight: "bold" }}>⚠️ SUSPICIOUS TRANSITION</span>
+                    ) : (
+                      <span style={{ color: colors.success, fontWeight: "bold" }}>VALID</span>
+                    )}
+                  </td>
+                  <td data-label="Review Sentiment">{job.sentiment || "N/A"}</td>
+                  <td data-label="Action">
+                    <AppButton variant="outline" onClick={() => alert(`Reviewing Job #${job.id}`)}>
+                      Review Log
+                    </AppButton>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>}
+        </AppCard>
+      </CollectionState>
+    </section>
+
     <section aria-labelledby="dashboard-ai-heading">
       <div className="dashboard-section-header"><h2 id="dashboard-ai-heading" style={typography.sectionHeading}>AssistLK AI Monitoring</h2>
         <AppButton variant="outline" onClick={() => navigate("/ai-workflows")}>View AI Workflows</AppButton>
@@ -138,6 +195,7 @@ export default function AdminDashboardPage() {
         <p className="dashboard-muted">Tool Calls count deterministic tools. Duration is the backend-measured end-to-end execution time.</p>
       </CollectionState>
     </section>
+
     <AppCard className="section-card"><details>
       <summary>Component Boundaries — architecture reference</summary>
       <p className="dashboard-muted">Project responsibilities are listed for reference. This section does not report operational status.</p>

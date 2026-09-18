@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.Net.Http;
 using System.Net.Http.Json;
 using System.Threading.Tasks;
@@ -7,10 +8,46 @@ using Microsoft.Extensions.Logging;
 
 namespace AssistLK.Application.Services.Providers
 {
+    public class ProviderCandidateDto
+    {
+        [JsonPropertyName("provider_id")]
+        public string ProviderId { get; set; } = string.Empty;
+
+        [JsonPropertyName("name")]
+        public string Name { get; set; } = string.Empty;
+
+        [JsonPropertyName("rating")]
+        public double Rating { get; set; }
+
+        [JsonPropertyName("latitude")]
+        public double Latitude { get; set; }
+
+        [JsonPropertyName("longitude")]
+        public double Longitude { get; set; }
+
+        [JsonPropertyName("verified")]
+        public bool Verified { get; set; }
+
+        [JsonPropertyName("skills")]
+        public List<string> Skills { get; set; } = new();
+    }
+
     public class MatchStartRequest
     {
         [JsonPropertyName("objective")]
         public string Objective { get; set; } = string.Empty;
+
+        [JsonPropertyName("urgency")]
+        public int Urgency { get; set; }
+
+        [JsonPropertyName("customer_latitude")]
+        public double CustomerLatitude { get; set; }
+
+        [JsonPropertyName("customer_longitude")]
+        public double CustomerLongitude { get; set; }
+
+        [JsonPropertyName("eligible_providers")]
+        public List<ProviderCandidateDto> EligibleProviders { get; set; } = new();
     }
 
     public class MatchResumeRequest
@@ -19,7 +56,7 @@ namespace AssistLK.Application.Services.Providers
         public string ThreadId { get; set; } = string.Empty;
 
         [JsonPropertyName("action")]
-        public string Action { get; set; } = string.Empty; // "Approve" or "Reject"
+        public string Action { get; set; } = string.Empty;
 
         [JsonPropertyName("admin_id")]
         public string AdminId { get; set; } = string.Empty;
@@ -27,7 +64,7 @@ namespace AssistLK.Application.Services.Providers
 
     public class RecommendedProvider
     {
-        [JsonPropertyName("id")]
+        [JsonPropertyName("provider_id")]
         public string Id { get; set; } = string.Empty;
 
         [JsonPropertyName("name")]
@@ -69,7 +106,7 @@ namespace AssistLK.Application.Services.Providers
 
     public interface IProviderMatchingService
     {
-        Task<MatchResponse> StartMatchingAsync(string objective);
+        Task<MatchResponse> StartMatchingAsync(MatchStartRequest request);
         Task<MatchResponse> ResumeMatchingAsync(string threadId, string action, string adminId);
     }
 
@@ -84,32 +121,30 @@ namespace AssistLK.Application.Services.Providers
             _logger = logger;
         }
 
-        public async Task<MatchResponse> StartMatchingAsync(string objective)
+        public async Task<MatchResponse> StartMatchingAsync(MatchStartRequest request)
         {
             try
             {
-                var request = new MatchStartRequest { Objective = objective };
                 var response = await _httpClient.PostAsJsonAsync("/match/start", request);
-
                 response.EnsureSuccessStatusCode();
-                var result = await response.Content.ReadFromJsonAsync<MatchResponse>();
 
+                var result = await response.Content.ReadFromJsonAsync<MatchResponse>();
                 return result ?? throw new InvalidOperationException("Empty response received from matching service.");
             }
             catch (HttpRequestException ex)
             {
-                _logger.LogError(ex, "HTTP Request error while starting matching process in Python microservice.");
+                _logger.LogError(ex, "HTTP error while starting match in Python microservice.");
                 throw new ApplicationException("AI Matching Engine is currently unavailable.", ex);
             }
             catch (TaskCanceledException ex)
             {
-                _logger.LogError(ex, "Timeout while starting matching process in Python microservice.");
-                throw new ApplicationException("AI Matching Engine is currently unavailable (timeout).", ex);
+                _logger.LogError(ex, "Timeout connecting to Python microservice.");
+                throw new ApplicationException("AI Matching Engine timed out.", ex);
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "Failed to start matching process in Python microservice.");
-                throw new ApplicationException("AI Matching Engine is currently unavailable.", ex);
+                _logger.LogError(ex, "Failed to start match in Python microservice.");
+                throw new ApplicationException("AI Matching Engine is unavailable.", ex);
             }
         }
 
@@ -125,25 +160,24 @@ namespace AssistLK.Application.Services.Providers
                 };
 
                 var response = await _httpClient.PostAsJsonAsync("/match/resume", request);
-
                 response.EnsureSuccessStatusCode();
-                var result = await response.Content.ReadFromJsonAsync<MatchResponse>();
 
+                var result = await response.Content.ReadFromJsonAsync<MatchResponse>();
                 return result ?? throw new InvalidOperationException("Empty response received from matching service.");
             }
             catch (HttpRequestException ex)
             {
-                _logger.LogError(ex, "HTTP Request error while resuming match thread {ThreadId} in Python microservice.", threadId);
+                _logger.LogError(ex, "HTTP error resuming thread {ThreadId}.", threadId);
                 throw new ApplicationException("Could not process Admin match decision (service unavailable).", ex);
             }
             catch (TaskCanceledException ex)
             {
-                _logger.LogError(ex, "Timeout while resuming match thread {ThreadId} in Python microservice.", threadId);
-                throw new ApplicationException("Could not process Admin match decision (timeout).", ex);
+                _logger.LogError(ex, "Timeout resuming thread {ThreadId}.", threadId);
+                throw new ApplicationException("Admin decision timed out.", ex);
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "Failed to resume match thread {ThreadId} in Python microservice.", threadId);
+                _logger.LogError(ex, "Failed to resume thread {ThreadId}.", threadId);
                 throw new ApplicationException("Could not process Admin match decision.", ex);
             }
         }

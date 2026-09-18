@@ -1,16 +1,28 @@
 from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel
-from typing import Optional, Dict, Any
+from typing import Optional, List, Dict, Any
 import uuid
 
-# Import the compiled graph from your agent.py
 from .agent import graph
 from langgraph.types import Command
 
 app = FastAPI(title="Provider Matching Agent API")
 
+class ProviderCandidateDTO(BaseModel):
+    provider_id: str
+    name: str
+    rating: float
+    latitude: float
+    longitude: float
+    verified: bool
+    skills: List[str]
+
 class MatchRequest(BaseModel):
     objective: str
+    urgency: Optional[int] = 2
+    customer_latitude: Optional[float] = 6.9270
+    customer_longitude: Optional[float] = 79.8610
+    eligible_providers: Optional[List[ProviderCandidateDTO]] = None
 
 class ResumeRequest(BaseModel):
     thread_id: str
@@ -22,30 +34,35 @@ async def start_match(req: MatchRequest):
     thread_id = str(uuid.uuid4())
     config = {"configurable": {"thread_id": thread_id}}
     
+    # Pack dynamic DB providers and coordinates into LangGraph state
     initial_state = {
         "WorkflowId": thread_id,
         "Objective": req.objective,
         "Plan": ["Score Candidates", "Await Admin Approval", "Finalize"],
+        "CurrentStep": "Initialized",
         "CompletedSteps": [],
+        "ToolResults": [],
+        "ValidationResults": [],
         "Errors": [],
         "Retries": 0,
         "ApprovalStatus": "Running",
         "FinalOutcome": None,
         "StartedAt": "",
         "UpdatedAt": "",
-        "CompletedAt": None
+        "CompletedAt": None,
+        "customer_latitude": req.customer_latitude,
+        "customer_longitude": req.customer_longitude,
+        "urgency_level": req.urgency,
+        "eligible_providers": [p.model_dump() for p in req.eligible_providers] if req.eligible_providers else None
     }
     
     try:
-        # Run the graph until it hits the interrupt()
+        # Run the graph until the human approval gate interrupt()
         result = graph.invoke(initial_state, config=config)
         
-        # Safely extract token usage per Lab 5 rules
         token_usage = result.get("usage_metadata", {"total_tokens": 0})
-        
-        # Safely extract FinalOutcome without throwing NoneType errors
         final_outcome = result.get("FinalOutcome") or {}
-        recommended = final_outcome.get("recommended_provider") or final_outcome.get("recommended_candidate")
+        recommended = final_outcome.get("recommended_candidate") or final_outcome.get("recommended_provider")
         
         return {
             "thread_id": thread_id,
@@ -61,12 +78,10 @@ async def resume_match(req: ResumeRequest):
     config = {"configurable": {"thread_id": req.thread_id}}
     
     try:
-        # Verify state exists and is paused
         current_state = graph.get_state(config)
         if not current_state or not current_state.next:
             raise HTTPException(status_code=400, detail="No pending approval found for this thread.")
             
-        # Resume the graph using the Lab 6 Command pattern
         result = graph.invoke(
             Command(resume={"action": req.action, "admin_id": req.admin_id}), 
             config=config

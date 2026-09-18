@@ -10,6 +10,8 @@ using Microsoft.Extensions.Logging;
 
 namespace AssistLK.Api.Features.Providers;
 
+public record ResumeMatchRequest(string Action);
+
 [ApiController]
 [Route("api/providers/match")]
 [Authorize(Roles = "Admin")]
@@ -41,10 +43,25 @@ public class ProviderMatchingController : ControllerBase
             return NotFound("Service Request not found or not ready for matching.");
         }
 
-        // Map Unknown (0) safely to Medium (2), otherwise preserve numeric enum value
         int urgencyScore = sr.Urgency == ServiceRequestUrgency.Unknown ? 2 : (int)sr.Urgency;
-
         var objective = $"Category: {sr.Category}, Urgency: {urgencyScore}, Problem: {sr.ProblemSummary}, Location: {sr.LocationText}";
+
+        // 1. Fetch live active, verified providers directly from PostgreSQL
+        var eligibleProviders = await _dbContext.ProviderProfiles
+            .Include(p => p.Locations)
+            .Include(p => p.Skills)
+            .Where(p => p.IsOnline && p.VerificationStatus == ProviderVerificationStatus.Verified)
+            .Select(p => new ProviderCandidateDto
+            {
+                ProviderId = p.Id.ToString(),
+                Name = p.BusinessName,
+                Rating = (double)p.Rating,
+                Latitude = (double)(p.Locations.Select(l => l.Latitude).FirstOrDefault()),
+                Longitude = (double)(p.Locations.Select(l => l.Longitude).FirstOrDefault()),
+                Verified = true,
+                Skills = p.Skills.Select(s => s.SkillName.ToLower()).ToList()
+            })
+            .ToListAsync(cancellationToken);
 
         var execution = new MatchingExecution
         {
@@ -58,7 +75,17 @@ public class ProviderMatchingController : ControllerBase
 
         try
         {
-            var matchResponse = await _matchingService.StartMatchingAsync(objective);
+            // 2. Dispatch real DB records and customer coordinates to Python
+            var matchRequest = new MatchStartRequest
+               {
+                   Objective = objective,
+                   Urgency = urgencyScore,
+                   CustomerLatitude = (double)(sr.Latitude ?? 6.9270m),
+                   CustomerLongitude = (double)(sr.Longitude ?? 79.8610m),
+                   EligibleProviders = eligibleProviders
+                };
+
+            var matchResponse = await _matchingService.StartMatchingAsync(matchRequest);
 
             execution.ThreadId = matchResponse.ThreadId;
             execution.Status = MatchingExecutionStatus.PendingApproval;
@@ -67,14 +94,11 @@ public class ProviderMatchingController : ControllerBase
             {
                 var rp = matchResponse.RecommendedProvider;
 
-                // Safely parse GUID or look up an existing provider profile to avoid FormatException
                 if (!Guid.TryParse(rp.Id, out var providerGuid))
                 {
-                    var fallbackId = await _dbContext.ProviderProfiles
-                        .Select(p => p.Id)
-                        .FirstOrDefaultAsync(cancellationToken);
-
-                    providerGuid = fallbackId != Guid.Empty ? fallbackId : Guid.NewGuid();
+                    providerGuid = eligibleProviders.Count > 0 
+                        ? Guid.Parse(eligibleProviders[0].ProviderId) 
+                        : Guid.NewGuid();
                 }
 
                 var candidate = new MatchedCandidate
@@ -97,8 +121,6 @@ public class ProviderMatchingController : ControllerBase
         catch (ApplicationException ex)
         {
             _logger.LogError(ex, "Matching engine unavailable.");
-
-            // Mark failed in DB
             execution.Status = MatchingExecutionStatus.Failed;
             execution.CompletedAt = DateTime.UtcNow;
             await _dbContext.SaveChangesAsync(cancellationToken);
@@ -108,7 +130,6 @@ public class ProviderMatchingController : ControllerBase
         catch (Exception ex)
         {
             _logger.LogError(ex, "Unexpected error during match start.");
-
             execution.Status = MatchingExecutionStatus.Failed;
             execution.CompletedAt = DateTime.UtcNow;
             await _dbContext.SaveChangesAsync(cancellationToken);
@@ -156,9 +177,4 @@ public class ProviderMatchingController : ControllerBase
             return StatusCode(500, "An internal error occurred.");
         }
     }
-}
-
-public class ResumeMatchRequest
-{
-    public string Action { get; set; } = string.Empty;
 }

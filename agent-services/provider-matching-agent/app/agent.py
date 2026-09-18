@@ -34,13 +34,16 @@ class MatchingState(TypedDict):
     UpdatedAt: str
     CompletedAt: Optional[str]
     usage_metadata: Optional[Dict[str, Any]]
+    # Dynamic fields passed from ASP.NET Core
+    customer_latitude: Optional[float]
+    customer_longitude: Optional[float]
+    urgency_level: Optional[int]
+    eligible_providers: Optional[List[Dict[str, Any]]]
 
 # Initialize Gemini model
 llm = ChatGoogleGenerativeAI(
-    model="gemini-3.6-flash",
-    google_api_key=os.getenv("GOOGLE_API_KEY"),
-    request_timeout=10.0,
-    temperature=0.2
+    model="gemini-2.5-flash",
+    google_api_key=os.getenv("GOOGLE_API_KEY")
 )
 
 def match_and_score_providers(state: MatchingState) -> Dict[str, Any]:
@@ -48,33 +51,36 @@ def match_and_score_providers(state: MatchingState) -> Dict[str, Any]:
     state["CurrentStep"] = "Scoring_Candidates"
     
     try:
-        # 1. Parse urgency level from objective string (defaults to 2)
-        urgency = 2
+        # 1. Parse urgency level (use dynamic field if passed from C#, else parse string)
+        urgency = state.get("urgency_level") or 2
         if "urgency:" in state.get("Objective", "").lower():
             try:
                 urgency = int(state["Objective"].lower().split("urgency:")[1].strip()[0])
             except (ValueError, IndexError):
-                urgency = 2
+                pass
 
-        # Customer coordinates (Colombo center baseline)
-        cust_lat, cust_lon = 6.9270, 79.8610
+        # 2. Get customer coordinates dynamically from C# (fallback to Colombo baseline)
+        cust_lat = state.get("customer_latitude") or 6.9270
+        cust_lon = state.get("customer_longitude") or 79.8610
 
-        # 2. Invoke SearchEligibleProviders matching its exact parameter schema
-        try:
-            search_res = SearchEligibleProviders.invoke({
-                "urgency": urgency,
-                "requirements": ["plumbing"]
-            })
-        except Exception:
-            # Fallback signature in case tools.py expects category/required_skills
-            search_res = SearchEligibleProviders.invoke({
-                "category": "plumbing",
-                "required_skills": ["plumbing"]
-            })
+        # 3. Check for dynamic database providers sent from ASP.NET Core
+        providers = state.get("eligible_providers")
 
-        providers = search_res.get("providers", []) if isinstance(search_res, dict) else []
+        # Fallback to tools.py only if no live candidates were passed
+        if not providers:
+            try:
+                search_res = SearchEligibleProviders.invoke({
+                    "urgency": urgency,
+                    "requirements": ["plumbing"]
+                })
+            except Exception:
+                search_res = SearchEligibleProviders.invoke({
+                    "category": "plumbing",
+                    "required_skills": ["plumbing"]
+                })
+            providers = search_res.get("providers", []) if isinstance(search_res, dict) else []
 
-        # 3. Spatial Distance Calculation & Urgency-Adaptive Scoring
+        # 4. Spatial Distance Calculation & Urgency-Adaptive Scoring
         scored_candidates = []
         for p in providers:
             p_lat = p.get("latitude", 6.9271)
@@ -88,8 +94,8 @@ def match_and_score_providers(state: MatchingState) -> Dict[str, Any]:
             })
             distance = dist_res.get("distance_km", 999.0) if isinstance(dist_res, dict) else 999.0
 
-            rating = p.get("rating", 4.0)
-            verified = p.get("verified", False)
+            rating = float(p.get("rating", 4.0))
+            verified = bool(p.get("verified", False))
 
             norm_rating = rating / 5.0
             norm_proximity = 1.0 / (1.0 + (distance / 5.0))
@@ -104,7 +110,7 @@ def match_and_score_providers(state: MatchingState) -> Dict[str, Any]:
                 score = round((effective_quality * 0.7) + (norm_proximity * 0.3), 3)
 
             scored_candidates.append({
-                "provider_id": p.get("id") or p.get("provider_id", "unknown"),
+                "provider_id": p.get("provider_id") or p.get("id", "unknown"),
                 "name": p.get("name") or p.get("business_name", "Provider"),
                 "score": score,
                 "distance_km": distance,
@@ -120,7 +126,7 @@ def match_and_score_providers(state: MatchingState) -> Dict[str, Any]:
 
         top_candidate = scored_candidates[0] if scored_candidates else None
 
-        # 4. Invoke Gemini for Natural-Language Audit Rationale & Token Tracking
+        # 5. Invoke Gemini for Natural-Language Audit Rationale & Token Tracking
         if top_candidate:
             try:
                 prompt = [
@@ -129,7 +135,6 @@ def match_and_score_providers(state: MatchingState) -> Dict[str, Any]:
                 ]
                 ai_msg = llm.invoke(prompt)
 
-                # Clean string extraction to prevent dictionary/signature nesting
                 if isinstance(ai_msg.content, list):
                     text_blocks = [
                         block.get("text", "") 
@@ -147,7 +152,10 @@ def match_and_score_providers(state: MatchingState) -> Dict[str, Any]:
                 top_candidate["match_rationale"] = f"Top-ranked match based on distance ({top_candidate['distance_km']}km) and score ({top_candidate['score']})."
 
         state["ToolResults"] = scored_candidates
-        state["FinalOutcome"] = {"recommended_candidate": top_candidate}
+        state["FinalOutcome"] = {
+            "recommended_candidate": top_candidate,
+            "recommended_provider": top_candidate
+        }
         state["ApprovalStatus"] = "Pending"
         state["CompletedSteps"].append("match_and_score_providers")
 

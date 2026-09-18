@@ -92,6 +92,7 @@ public class ProvidersController : ControllerBase
     /// Flutter Mobile: Accept an active recommended dispatch match.
     /// </summary>
     [HttpPost("active-dispatch/accept")]
+    [HttpPost("active-dispatch/{jobId:guid}/accept")]
     [Authorize(Roles = "Provider")]
     public async Task<IActionResult> AcceptActiveDispatch(CancellationToken cancellationToken)
     {
@@ -139,6 +140,7 @@ public class ProvidersController : ControllerBase
     /// Flutter Mobile: Decline an active recommended dispatch match.
     /// </summary>
     [HttpPost("active-dispatch/decline")]
+    [HttpPost("active-dispatch/{jobId:guid}/decline")]
     [Authorize(Roles = "Provider")]
     public async Task<IActionResult> DeclineActiveDispatch(CancellationToken cancellationToken)
     {

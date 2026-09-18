@@ -1,10 +1,33 @@
+using System;
+using System.Collections.Generic;
+using System.Threading.Tasks;
 using AssistLK.Application.Quotations;
-public interface IQuotationService
+
+namespace AssistLK.Application.Services.Quotations;
+
+public class QuotationService : IQuotationService
 {
-    Task<QuotationDto> CreateAsync(CreateQuotationDto dto, string providerUserId);
-    Task<QuotationDto?> GetByIdAsync(int id);
-    Task<QuotationDto> SendForApprovalAsync(int quotationId, string providerUserId);
-    Task<BookingDto> ApproveAsync(int quotationId, ApproveQuotationDto dto, string customerUserId);
-    Task<QuotationDto> RejectAsync(int quotationId, RejectQuotationDto dto, string customerUserId);
-    Task<IEnumerable<QuotationDto>> GetByServiceRequestAsync(int serviceRequestId);
+    public Task<QuotationDto> CreateAsync(CreateQuotationDto dto, string providerUserId)
+        => throw new NotImplementedException();
+
+    public Task<QuotationDto?> GetByIdAsync(int id)
+        => throw new NotImplementedException();
+
+    public Task<QuotationDto> SendForApprovalAsync(int quotationId, string providerUserId)
+        => throw new NotImplementedException();
+
+    public Task<BookingDto> ApproveAsync(int quotationId, ApproveQuotationDto dto, string customerUserId)
+        => throw new NotImplementedException();
+
+    public Task<QuotationDto> RejectAsync(int quotationId, RejectQuotationDto dto, string customerUserId)
+        => throw new NotImplementedException();
+
+    public Task<IEnumerable<QuotationDto>> GetByServiceRequestAsync(int serviceRequestId)
+        => throw new NotImplementedException();
+
+    public Task<BookingDto?> GetBookingByIdAsync(int id)
+        => throw new NotImplementedException();
+
+    public Task<IEnumerable<BookingStatusHistoryDto>> GetBookingStatusHistoryAsync(int bookingId)
+        => throw new NotImplementedException();
 }

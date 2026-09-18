@@ -5,10 +5,14 @@ import 'package:geolocator/geolocator.dart';
 import 'package:flutter_tts/flutter_tts.dart';
 import 'package:latlong2/latlong.dart' as latlong;
 import 'package:dio/dio.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 import '../services/provider_service.dart';
 
 class ProviderDashboardProvider extends ChangeNotifier {
+  static const String _prefIsOnlineKey = 'provider_is_online';
+  static const String _prefOperatingRadiusKey = 'provider_operating_radius_km';
+
   final ProviderService providerService;
   final FlutterTts flutterTts = FlutterTts();
   final Dio _dio = Dio();
@@ -38,17 +42,31 @@ class ProviderDashboardProvider extends ChangeNotifier {
   Timer? _pollingTimer;
 
   Future<void> init() async {
-    await _checkPermissionsAndFetchLocation();
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      _isOnline = prefs.getBool(_prefIsOnlineKey) ?? false;
+      _operatingRadiusKm = prefs.getDouble(_prefOperatingRadiusKey) ?? 10.0;
+      notifyListeners();
+
+      if (_isOnline) {
+        fetchLatestDispatchedJob();
+        _startPolling();
+      }
+    } catch (e) {
+      debugPrint('Failed to load persisted provider preferences: $e');
+    }
+
+    // Acquire location asynchronously in the background without blocking initial UI
+    unawaited(_checkPermissionsAndFetchLocation());
   }
 
   Future<void> _checkPermissionsAndFetchLocation() async {
-    _setLoading(true);
     _error = null;
     try {
       bool serviceEnabled = await Geolocator.isLocationServiceEnabled();
       if (!serviceEnabled) {
         _error = 'Location services are disabled.';
-        _setLoading(false);
+        notifyListeners();
         return;
       }
 
@@ -57,14 +75,14 @@ class ProviderDashboardProvider extends ChangeNotifier {
         permission = await Geolocator.requestPermission();
         if (permission == LocationPermission.denied) {
           _error = 'Location permissions are denied.';
-          _setLoading(false);
+          notifyListeners();
           return;
         }
       }
 
       if (permission == LocationPermission.deniedForever) {
         _error = 'Location permissions are permanently denied.';
-        _setLoading(false);
+        notifyListeners();
         return;
       }
 
@@ -106,20 +124,21 @@ class ProviderDashboardProvider extends ChangeNotifier {
 
       // Clear any prior error state
       _error = null;
+      notifyListeners();
 
       if (_isOnline) {
         _syncAvailability();
       }
     } catch (e) {
       _error = 'Error fetching location: $e';
-    } finally {
-      _setLoading(false);
+      notifyListeners();
     }
   }
 
   void toggleOnlineStatus(bool value) {
     _isOnline = value;
     notifyListeners();
+    _saveIsOnline(value);
     _syncAvailability();
 
     // Query for active dispatches when turning online
@@ -129,6 +148,15 @@ class ProviderDashboardProvider extends ChangeNotifier {
     } else {
       _stopPolling();
       _clearJobState();
+    }
+  }
+
+  Future<void> _saveIsOnline(bool value) async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setBool(_prefIsOnlineKey, value);
+    } catch (e) {
+      debugPrint('Failed to save isOnline preference: $e');
     }
   }
   
@@ -149,10 +177,21 @@ class ProviderDashboardProvider extends ChangeNotifier {
   void setOperatingRadius(double value) {
     _operatingRadiusKm = value;
     notifyListeners();
+    _saveOperatingRadius(value);
   }
 
   void onRadiusChangeEnd(double value) {
+    _saveOperatingRadius(value);
     _syncAvailability();
+  }
+
+  Future<void> _saveOperatingRadius(double value) async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setDouble(_prefOperatingRadiusKey, value);
+    } catch (e) {
+      debugPrint('Failed to save operatingRadius preference: $e');
+    }
   }
 
   Future<void> _syncAvailability() async {

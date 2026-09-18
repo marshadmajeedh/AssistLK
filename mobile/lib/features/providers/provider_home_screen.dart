@@ -345,12 +345,20 @@ class _ProviderHomeView extends StatelessWidget {
                                 ),
                               ),
                               if (dashboard.activeJobMatch != null &&
-                                  dashboard.activeJobMatch!['customerLatitude'] != null &&
-                                  dashboard.activeJobMatch!['customerLongitude'] != null)
+                                  dashboard
+                                          .activeJobMatch!['customerLatitude'] !=
+                                      null &&
+                                  dashboard
+                                          .activeJobMatch!['customerLongitude'] !=
+                                      null)
                                 Marker(
                                   point: latlong.LatLng(
-                                    (dashboard.activeJobMatch!['customerLatitude'] as num).toDouble(),
-                                    (dashboard.activeJobMatch!['customerLongitude'] as num).toDouble(),
+                                    (dashboard.activeJobMatch!['customerLatitude']
+                                            as num)
+                                        .toDouble(),
+                                    (dashboard.activeJobMatch!['customerLongitude']
+                                            as num)
+                                        .toDouble(),
                                   ),
                                   width: 40,
                                   height: 40,

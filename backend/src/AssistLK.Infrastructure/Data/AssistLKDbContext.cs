@@ -5,6 +5,7 @@ using Microsoft.EntityFrameworkCore;
 
 namespace AssistLK.Infrastructure.Data;
 
+
 public class AssistLKDbContext : DbContext, IAgentWorkflowDbContext
 {
     public AssistLKDbContext(
@@ -22,6 +23,15 @@ public class AssistLKDbContext : DbContext, IAgentWorkflowDbContext
     public DbSet<ProblemAnalysis> ProblemAnalyses => Set<ProblemAnalysis>();
 
     public DbSet<ServiceRequestClarification> ServiceRequestClarifications => Set<ServiceRequestClarification>();
+
+
+    //My Part
+    public DbSet<Quotation> Quotations => Set<Quotation>();
+    public DbSet<QuotationItem> QuotationItems => Set<QuotationItem>();
+    public DbSet<Booking> Bookings => Set<Booking>();
+    public DbSet<BookingStatusHistory> BookingStatusHistories => Set<BookingStatusHistory>(); 
+    //My Part
+
 
     public DbSet<AgentWorkflow> AgentWorkflows =>
         Set<AgentWorkflow>();

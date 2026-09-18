@@ -14,6 +14,8 @@ using AssistLK.Application.Interfaces;
 using AssistLK.Application.Services;
 using AssistLK.Application.Services.Auth;
 using AssistLK.Domain.Entities;
+using FluentValidation;
+using FluentValidation.AspNetCore;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.IdentityModel.Tokens;
@@ -74,6 +76,11 @@ builder.Services
             new JsonStringEnumConverter(
                 allowIntegerValues: false));
     });
+
+builder.Services
+    .AddFluentValidationAutoValidation()
+    .AddFluentValidationClientsideAdapters()
+    .AddValidatorsFromAssemblyContaining<AssistLK.Application.Quotations.CreateQuotationDtoValidator>();
 
 
 builder.Services.AddScoped<
@@ -250,7 +257,6 @@ builder.Services.AddSwaggerGen(options =>
             Description =
                 "Enter JWT token."
         });
-
 
     options.AddSecurityRequirement(
         new OpenApiSecurityRequirement

@@ -11,6 +11,12 @@
 .svn/
 .swiftpm/
 migrate_working_dir/
+.env
+.env.local
+*.env
+appsettings.Development.json
+secrets.json
+**/secrets.json
 
 # IntelliJ related
 *.iml

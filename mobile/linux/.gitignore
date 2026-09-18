@@ -1,1 +1,9 @@
+# Local secrets
+.env
+.env.local
+*.env
+appsettings.Development.json
+secrets.json
+**/secrets.json
+
 flutter/ephemeral

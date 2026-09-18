@@ -130,30 +130,42 @@ def match_and_score_providers(state: MatchingState) -> Dict[str, Any]:
 
         top_candidate = scored_candidates[0] if scored_candidates else None
 
+        # Short-circuit if no candidates qualified inside their operating radius
+        if not top_candidate:
+            state["ToolResults"] = []
+            state["FinalOutcome"] = {
+                "recommended_candidate": None,
+                "recommended_provider": None,
+                "message": "No eligible providers found within their operational radius."
+            }
+            state["ApprovalStatus"] = "No_Eligible_Providers"
+            state["CurrentStep"] = "Completed"
+            state["CompletedSteps"].append("match_and_score_providers")
+            return state
+
         # 5. Invoke Gemini for Natural-Language Audit Rationale & Token Tracking
-        if top_candidate:
-            try:
-                prompt = [
-                    SystemMessage(content="You are an expert dispatcher for the AssistLK platform. Provide a concise, professional 1-sentence audit rationale explaining why this provider is the optimal match."),
-                    HumanMessage(content=f"Objective: {state['Objective']}. Selected: {top_candidate['name']}, Urgency: {urgency}/5, Distance: {top_candidate['distance_km']}km, Rating: {top_candidate['rating']} stars, Verified: {top_candidate['verified']}.")
+        try:
+            prompt = [
+                SystemMessage(content="You are an expert dispatcher for the AssistLK platform. Provide a concise, professional 1-sentence audit rationale explaining why this provider is the optimal match."),
+                HumanMessage(content=f"Objective: {state.get('Objective', '')}. Selected: {top_candidate['name']}, Urgency: {urgency}/5, Distance: {top_candidate['distance_km']}km, Rating: {top_candidate['rating']} stars, Verified: {top_candidate['verified']}.")
+            ]
+            ai_msg = llm.invoke(prompt)
+
+            if isinstance(ai_msg.content, list):
+                text_blocks = [
+                    block.get("text", "") 
+                    for block in ai_msg.content 
+                    if isinstance(block, dict) and "text" in block
                 ]
-                ai_msg = llm.invoke(prompt)
+                top_candidate["match_rationale"] = " ".join(text_blocks)
+            else:
+                top_candidate["match_rationale"] = str(ai_msg.content)
 
-                if isinstance(ai_msg.content, list):
-                    text_blocks = [
-                        block.get("text", "") 
-                        for block in ai_msg.content 
-                        if isinstance(block, dict) and "text" in block
-                    ]
-                    top_candidate["match_rationale"] = " ".join(text_blocks)
-                else:
-                    top_candidate["match_rationale"] = str(ai_msg.content)
-
-                if hasattr(ai_msg, "usage_metadata") and ai_msg.usage_metadata:
-                    state["usage_metadata"] = ai_msg.usage_metadata
-            except Exception as llm_err:
-                logger.warning(f"LLM rationale fallback: {llm_err}")
-                top_candidate["match_rationale"] = f"Top-ranked match based on distance ({top_candidate['distance_km']}km) and score ({top_candidate['score']})."
+            if hasattr(ai_msg, "usage_metadata") and ai_msg.usage_metadata:
+                state["usage_metadata"] = ai_msg.usage_metadata
+        except Exception as llm_err:
+            logger.warning(f"LLM rationale fallback: {llm_err}")
+            top_candidate["match_rationale"] = f"Top-ranked match based on distance ({top_candidate['distance_km']}km) and score ({top_candidate['score']})."
 
         state["ToolResults"] = scored_candidates
         state["FinalOutcome"] = {
@@ -174,8 +186,8 @@ def human_approval_gate(state: MatchingState) -> Dict[str, Any]:
     state["UpdatedAt"] = datetime.now(timezone.utc).isoformat()
 
     # Short-circuit if previous node failed
-    if state.get("ApprovalStatus") == "Failed" or state.get("Errors"):
-        state["CurrentStep"] = "Failed"
+    if state.get("ApprovalStatus") in ["Failed", "No_Eligible_Providers"] or state.get("Errors"):
+        state["CurrentStep"] = state.get("ApprovalStatus", "Failed")
         return state
 
     state["CurrentStep"] = "Awaiting_Admin_Approval"

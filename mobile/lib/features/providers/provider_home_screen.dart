@@ -44,10 +44,7 @@ class _ProviderHomeScreenState extends State<ProviderHomeScreen> {
       await _dashboardProvider?.providerService.acceptActiveDispatch(
         '/api/providers/active-dispatch/accept',
       );
-      if (_dashboardProvider != null) {
-        _dashboardProvider!.activeJobMatch = null;
-        _dashboardProvider!.clearActiveJobMatch();
-      }
+      _dashboardProvider?.clearActiveJobMatch();
       if (mounted) {
         setState(() {
           _hasAcceptedActiveMatch = true;
@@ -169,6 +166,10 @@ class _ProviderHomeScreenState extends State<ProviderHomeScreen> {
     );
   }
 
+  Future<void> _onDeclineMatch() async {
+    await _dashboardProvider?.declineJob();
+  }
+
   @override
   Widget build(BuildContext context) {
     if (_dashboardProvider == null) {
@@ -180,6 +181,7 @@ class _ProviderHomeScreenState extends State<ProviderHomeScreen> {
       child: _ProviderHomeView(
         hasAcceptedActiveMatch: _hasAcceptedActiveMatch,
         onAcceptMatch: () => _onAcceptMatch(context),
+        onDeclineMatch: _onDeclineMatch,
       ),
     );
   }
@@ -188,10 +190,12 @@ class _ProviderHomeScreenState extends State<ProviderHomeScreen> {
 class _ProviderHomeView extends StatelessWidget {
   final bool hasAcceptedActiveMatch;
   final VoidCallback onAcceptMatch;
+  final VoidCallback onDeclineMatch;
 
   const _ProviderHomeView({
     required this.hasAcceptedActiveMatch,
     required this.onAcceptMatch,
+    required this.onDeclineMatch,
   });
 
   @override
@@ -340,8 +344,34 @@ class _ProviderHomeView extends StatelessWidget {
                                   size: 40,
                                 ),
                               ),
+                              if (dashboard.activeJobMatch != null &&
+                                  dashboard.activeJobMatch!['customerLatitude'] != null &&
+                                  dashboard.activeJobMatch!['customerLongitude'] != null)
+                                Marker(
+                                  point: latlong.LatLng(
+                                    (dashboard.activeJobMatch!['customerLatitude'] as num).toDouble(),
+                                    (dashboard.activeJobMatch!['customerLongitude'] as num).toDouble(),
+                                  ),
+                                  width: 40,
+                                  height: 40,
+                                  child: const Icon(
+                                    Icons.location_on,
+                                    color: Colors.green,
+                                    size: 40,
+                                  ),
+                                ),
                             ],
                           ),
+                          if (dashboard.routePoints.isNotEmpty)
+                            PolylineLayer(
+                              polylines: [
+                                Polyline(
+                                  points: dashboard.routePoints,
+                                  strokeWidth: 4.0,
+                                  color: Colors.blueAccent,
+                                ),
+                              ],
+                            ),
                         ],
                       ),
 
@@ -366,6 +396,7 @@ class _ProviderHomeView extends StatelessWidget {
                                     ?.toString() ??
                                 'Standard',
                             onAccept: onAcceptMatch,
+                            onDecline: onDeclineMatch,
                           ),
                         ),
                     ],

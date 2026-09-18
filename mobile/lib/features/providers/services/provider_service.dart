@@ -28,4 +28,11 @@ class ProviderService {
         : endpoint;
     await apiClient.client.post(path);
   }
+
+  Future<void> declineActiveDispatch([String endpoint = '/api/providers/active-dispatch/decline']) async {
+    final path = endpoint.startsWith('/api') && apiClient.client.options.baseUrl.endsWith('/api')
+        ? endpoint.substring(4)
+        : endpoint;
+    await apiClient.client.post(path);
+  }
 }

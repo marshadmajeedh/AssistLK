@@ -74,7 +74,9 @@ async def start_match(req: MatchRequest):
             "thread_id": thread_id,
             "status": result.get("ApprovalStatus"),
             "recommended_provider": recommended,
-            "tokens_consumed": token_usage
+            "tokens_consumed": token_usage,
+            "final_outcome": final_outcome,
+            "message": final_outcome.get("message")
         }
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))

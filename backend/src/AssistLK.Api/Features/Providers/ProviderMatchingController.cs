@@ -89,40 +89,57 @@ public class ProviderMatchingController : ControllerBase
             var matchResponse = await _matchingService.StartMatchingAsync(matchRequest);
 
             execution.ThreadId = matchResponse.ThreadId;
+
+            if (matchResponse.Status == "No_Eligible_Providers" || matchResponse.RecommendedProvider == null)
+            {
+                execution.Status = MatchingExecutionStatus.Failed;
+                execution.CompletedAt = DateTime.UtcNow;
+                await _dbContext.SaveChangesAsync(cancellationToken);
+
+                var emptyMessage = !string.IsNullOrWhiteSpace(matchResponse.Message)
+                    ? matchResponse.Message
+                    : "No eligible providers found within their operational radius.";
+
+                return Ok(new
+                {
+                    threadId = matchResponse.ThreadId,
+                    status = matchResponse.Status,
+                    message = emptyMessage,
+                    tokensConsumed = matchResponse.TokensConsumed
+                });
+            }
+
             execution.Status = MatchingExecutionStatus.PendingApproval;
 
-            if (matchResponse.RecommendedProvider != null)
+            var rp = matchResponse.RecommendedProvider;
+
+            if (!Guid.TryParse(rp.Id, out var providerGuid))
             {
-                var rp = matchResponse.RecommendedProvider;
-
-                if (!Guid.TryParse(rp.Id, out var providerGuid))
-                {
-                    providerGuid = eligibleProviders.Count > 0 
-                        ? Guid.Parse(eligibleProviders[0].ProviderId) 
-                        : Guid.NewGuid();
-                }
-
-                var candidate = new MatchedCandidate
-                {
-                    MatchingExecutionId = execution.Id,
-                    ProviderId = providerGuid,
-                    Score = rp.Score,
-                    Rank = rp.Rank,
-                    DistanceKm = rp.DistanceKm,
-                    MatchRationale = rp.MatchRationale,
-                    Status = MatchedCandidateStatus.Recommended
-                };
-                _dbContext.MatchedCandidates.Add(candidate);
+                providerGuid = eligibleProviders.Count > 0 
+                    ? Guid.Parse(eligibleProviders[0].ProviderId) 
+                    : Guid.NewGuid();
             }
+
+            var candidate = new MatchedCandidate
+            {
+                MatchingExecutionId = execution.Id,
+                ProviderId = providerGuid,
+                Score = rp.Score,
+                Rank = rp.Rank,
+                DistanceKm = rp.DistanceKm,
+                MatchRationale = rp.MatchRationale,
+                Status = MatchedCandidateStatus.Recommended
+            };
+            _dbContext.MatchedCandidates.Add(candidate);
 
             await _dbContext.SaveChangesAsync(cancellationToken);
 
             return Ok(new 
-{ 
-    threadId = matchResponse.ThreadId, 
-    status = matchResponse.Status,
-    tokensConsumed = matchResponse.TokensConsumed
-});
+            { 
+                threadId = matchResponse.ThreadId, 
+                status = matchResponse.Status,
+                tokensConsumed = matchResponse.TokensConsumed
+            });
         }
         catch (ApplicationException ex)
         {

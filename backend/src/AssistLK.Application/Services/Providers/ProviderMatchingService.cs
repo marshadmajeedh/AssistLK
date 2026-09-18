@@ -120,6 +120,9 @@ public class MatchResponse
 
     [JsonPropertyName("final_outcome")]
     public object? FinalOutcome { get; set; }
+
+    [JsonPropertyName("message")]
+    public string? Message { get; set; }
 }
 
     public interface IProviderMatchingService

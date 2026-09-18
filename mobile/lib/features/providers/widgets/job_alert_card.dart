@@ -8,6 +8,7 @@ class JobAlertCard extends StatelessWidget {
   final String distance;
   final String urgency;
   final VoidCallback? onAccept;
+  final VoidCallback? onDecline;
 
   const JobAlertCard({
     super.key,
@@ -15,6 +16,7 @@ class JobAlertCard extends StatelessWidget {
     required this.distance,
     required this.urgency,
     this.onAccept,
+    this.onDecline,
   });
 
   @override
@@ -68,17 +70,32 @@ class JobAlertCard extends StatelessWidget {
               ],
             ),
             const SizedBox(height: AppSpacing.md),
-            SizedBox(
-              width: double.infinity,
-              child: ElevatedButton(
-                onPressed: onAccept ?? () {},
-                style: ElevatedButton.styleFrom(
-                  padding: const EdgeInsets.symmetric(vertical: 12),
-                  backgroundColor: Theme.of(context).primaryColor,
-                  foregroundColor: Colors.white,
+            Row(
+              children: [
+                Expanded(
+                  child: OutlinedButton(
+                    onPressed: onDecline ?? () {},
+                    style: OutlinedButton.styleFrom(
+                      padding: const EdgeInsets.symmetric(vertical: 12),
+                      foregroundColor: Colors.red,
+                      side: const BorderSide(color: Colors.red),
+                    ),
+                    child: const Text('Decline'),
+                  ),
                 ),
-                child: const Text('Accept Match'),
-              ),
+                const SizedBox(width: AppSpacing.md),
+                Expanded(
+                  child: ElevatedButton(
+                    onPressed: onAccept ?? () {},
+                    style: ElevatedButton.styleFrom(
+                      padding: const EdgeInsets.symmetric(vertical: 12),
+                      backgroundColor: Theme.of(context).primaryColor,
+                      foregroundColor: Colors.white,
+                    ),
+                    child: const Text('Accept Match'),
+                  ),
+                ),
+              ],
             ),
           ],
         ),

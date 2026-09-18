@@ -179,6 +179,7 @@ class ServiceRequestService {
     );
   }
 
+  /// Service Request Analysis Endpoint
   Future<ProblemUnderstandingResultModel> analyze(String id) async {
     final response = await apiClient.client.post(
       '/service-requests/$id/analyze',
@@ -191,6 +192,45 @@ class ServiceRequestService {
     return ProblemUnderstandingResultModel.fromJson(
       Map<String, dynamic>.from(response.data as Map),
     );
+  }
+
+  /// FastAPI Agent 4 Validation Route එකට අදාළ Call එක
+  Future<Map<String, dynamic>> validateTransition({
+    required String jobId,
+    required String currentStatus,
+    required String targetStatus,
+    required double elapsedMinutes,
+    String note = '',
+  }) async {
+    final response = await apiClient.client.post(
+      '/validation/validate-status',
+      data: {
+        'job_id': jobId,
+        'current_status': currentStatus,
+        'target_status': targetStatus,
+        'elapsed_minutes': elapsedMinutes.round(),
+        'note': note,
+      },
+      options: Options(
+        receiveTimeout: const Duration(seconds: 90),
+        sendTimeout: const Duration(seconds: 30),
+      ),
+    );
+
+    return Map<String, dynamic>.from(response.data as Map);
+  }
+
+  Future<Map<String, dynamic>> analyzeSentiment(String feedbackText) async {
+    final response = await apiClient.client.post(
+      '/validation/analyze-sentiment',
+      data: {'feedback_text': feedbackText},
+      options: Options(
+        receiveTimeout: const Duration(seconds: 90),
+        sendTimeout: const Duration(seconds: 30),
+      ),
+    );
+
+    return Map<String, dynamic>.from(response.data as Map);
   }
 
   Future<ServiceRequestModel> markReadyForMatching(String id) async {
@@ -288,18 +328,18 @@ class ServiceRequestService {
       }
 
       if (error.response?.statusCode == 400) {
-        return 'Invalid analysis request details.';
+        return 'Invalid validation request details.';
       }
 
       if (error.response?.statusCode == 404) {
-        return 'Service request not found.';
+        return 'Validation endpoint not found (404).';
       }
 
       if (error.response?.statusCode == 403) {
-        return 'You do not have permission to analyze this request.';
+        return 'You do not have permission to perform this action.';
       }
     }
 
-    return 'Analysis could not be completed. Please try again.';
+    return 'Validation could not be completed. Please try again.';
   }
 }

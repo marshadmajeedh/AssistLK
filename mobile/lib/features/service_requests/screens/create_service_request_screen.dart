@@ -1,14 +1,3 @@
-import '../../auth/providers/auth_provider.dart';
-import '../providers/problem_photos_controller.dart';
-import '../services/problem_image_picker.dart';
-import '../widgets/problem_photos.dart';
-import '../models/location_source.dart';
-import '../../customer/models/location_suggestion.dart';
-import '../widgets/location_attribution.dart';
-import '../providers/location_selection_controller.dart';
-import '../services/location_geocoding_service.dart';
-import '../widgets/location_selection.dart';
-
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
@@ -21,10 +10,21 @@ import '../../../../shared/widgets/app_button.dart';
 import '../../../../shared/widgets/app_card.dart';
 import '../../../../shared/widgets/app_image_asset.dart';
 import '../../../../shared/widgets/app_text_field.dart';
+
+import '../../auth/providers/auth_provider.dart';
+import '../../customer/models/location_suggestion.dart';
 import '../models/canonical_service_category.dart';
 import '../models/create_service_request_dto.dart';
+import '../models/location_source.dart';
+import '../providers/location_selection_controller.dart';
+import '../providers/problem_photos_controller.dart';
 import '../providers/service_request_provider.dart';
+import '../services/location_geocoding_service.dart';
 import '../services/location_service.dart';
+import '../services/problem_image_picker.dart';
+import '../widgets/location_attribution.dart';
+import '../widgets/location_selection.dart';
+import '../widgets/problem_photos.dart';
 import '../widgets/step_indicator.dart';
 import 'service_request_detail_screen.dart';
 
@@ -415,7 +415,6 @@ class _CreateServiceRequestScreenState
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // Service Preference Banner Card
           Container(
             width: double.infinity,
             padding: const EdgeInsets.all(AppSpacing.md),
@@ -500,7 +499,6 @@ class _CreateServiceRequestScreenState
           ),
           const SizedBox(height: AppSpacing.lg),
 
-          // Problem Description Field
           AppTextField(
             controller: _descriptionController,
             label: 'Problem Description',
@@ -556,7 +554,6 @@ class _CreateServiceRequestScreenState
         ),
         const SizedBox(height: AppSpacing.lg),
 
-        // Summary Card
         AppCard(
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
@@ -657,7 +654,6 @@ class _CreateServiceRequestScreenState
 
         DraftProblemPhotos(controller: _photos, review: true),
         const SizedBox(height: AppSpacing.md),
-        // AI Confirmation Disclosure Banner
         Container(
           width: double.infinity,
           padding: const EdgeInsets.all(AppSpacing.md),

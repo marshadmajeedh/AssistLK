@@ -12,6 +12,8 @@ public class AgentServicesOptions
     /// </summary>
     public string ProblemUnderstandingUrl { get; set; } = "http://127.0.0.1:8001";
 
+    public string TrackingValidationUrl { get; set; } = "http://127.0.0.1:8000";
+
     /// <summary>
     /// Optional shared secret header for internal service-to-service authentication (X-Internal-Api-Key).
     /// </summary>
@@ -34,6 +36,14 @@ public class AgentServicesOptions
         {
             throw new InvalidOperationException(
                 $"Invalid AgentServices:ProblemUnderstandingUrl '{ProblemUnderstandingUrl}'. It must be a valid absolute HTTP or HTTPS URL.");
+        }
+
+        if (string.IsNullOrWhiteSpace(TrackingValidationUrl) ||
+            !Uri.TryCreate(TrackingValidationUrl, UriKind.Absolute, out var trackingUri) ||
+            (trackingUri.Scheme != Uri.UriSchemeHttp && trackingUri.Scheme != Uri.UriSchemeHttps))
+        {
+            throw new InvalidOperationException(
+                $"Invalid AgentServices:TrackingValidationUrl '{TrackingValidationUrl}'. It must be a valid absolute HTTP or HTTPS URL.");
         }
 
         if (TimeoutSeconds <= 0)

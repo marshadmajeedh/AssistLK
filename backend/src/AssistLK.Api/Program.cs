@@ -1,29 +1,33 @@
+using AssistLK.Agents;
 using AssistLK.Agents.Abstractions;
 using AssistLK.Agents.Adapters;
 using AssistLK.Agents.Clients;
 using AssistLK.Agents.Configuration;
 using AssistLK.Agents.Core;
 using AssistLK.Agents.Tools;
+using AssistLK.Api.Authentication;
 using AssistLK.Api.Middleware;
 using AssistLK.Api.Seed;
-using AssistLK.Infrastructure;
-using System.Text;
-using System.Text.Json.Serialization;
-using AssistLK.Api.Authentication;
 using AssistLK.Application.Interfaces;
 using AssistLK.Application.Services;
 using AssistLK.Application.Services.Auth;
 using AssistLK.Domain.Entities;
+using AssistLK.Infrastructure;
+using AssistLK.Infrastructure.Data;
+using dotenv.net;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.Identity;
+using Microsoft.EntityFrameworkCore;
 using Microsoft.IdentityModel.Tokens;
 using Microsoft.OpenApi.Models;
-using dotenv.net;
+using System.Text;
+using System.Text.Json.Serialization;
 
 // Load local .env configuration into environment variables before builder initialization
 Program.LoadDotEnv();
 
 var builder = WebApplication.CreateBuilder(args);
+builder.Configuration.AddEnvironmentVariables();
 
 
 // -----------------------------
@@ -66,6 +70,10 @@ builder.Services.AddSingleton<AssistLK.Application.Attachments.IServiceRequestAt
         options.Resolve(environment.ContentRootPath, environment.WebRootPath));
 });
 
+// DbContext Registration (PostgreSQL / Npgsql)
+builder.Services.AddDbContext<ApplicationDbContext>(options =>
+    options.UseNpgsql(connectionString));
+
 builder.Services
     .AddControllers()
     .AddJsonOptions(options =>
@@ -97,6 +105,9 @@ builder.Services.AddScoped<
 // Agent Infrastructure
 // -----------------------------
 
+// Agents Project Services Registration (Custom Assistant Agent DI)
+builder.Services.AddAgentServices();
+
 builder.Services.AddScoped<AgentWorkflowService>();
 builder.Services.AddScoped<AgentExecutionService>();
 builder.Services.AddScoped<AgentMonitoringService>();
@@ -121,12 +132,23 @@ builder.Services.AddSingleton(sp =>
     return options;
 });
 
-// External Python Agent Client
+// External Python Agent Client (Agent 1)
 builder.Services.AddHttpClient<IProblemUnderstandingClient, ProblemUnderstandingHttpClient>((sp, client) =>
 {
     var options = sp.GetRequiredService<AgentServicesOptions>();
     var baseUrl = !string.IsNullOrWhiteSpace(options.ProblemUnderstandingUrl)
         ? options.ProblemUnderstandingUrl.TrimEnd('/')
+        : "http://127.0.0.1:8001";
+    client.BaseAddress = new Uri(baseUrl);
+    client.Timeout = TimeSpan.FromSeconds(options.TimeoutSeconds > 0 ? options.TimeoutSeconds : 45);
+});
+
+// 🆕 Agent 4 (Validation & Safety Agent) HttpClient Registration
+builder.Services.AddHttpClient<ValidationSafetyAgent>((sp, client) =>
+{
+    var options = sp.GetRequiredService<AgentServicesOptions>();
+    var baseUrl = !string.IsNullOrWhiteSpace(options.TrackingValidationUrl)
+        ? options.TrackingValidationUrl.TrimEnd('/')
         : "http://127.0.0.1:8001";
     client.BaseAddress = new Uri(baseUrl);
     client.Timeout = TimeSpan.FromSeconds(options.TimeoutSeconds > 0 ? options.TimeoutSeconds : 45);
@@ -283,24 +305,10 @@ builder.Services.AddCors(options =>
         policy =>
         {
             policy
-                .SetIsOriginAllowed(origin =>
-                {
-                    if (!Uri.TryCreate(
-                        origin,
-                        UriKind.Absolute,
-                        out var uri))
-                    {
-                        return false;
-                    }
-
-                    return uri.Scheme ==
-                           Uri.UriSchemeHttp
-                           &&
-                           uri.Host ==
-                           "localhost";
-                })
+                .SetIsOriginAllowed(_ => true)
                 .AllowAnyHeader()
-                .AllowAnyMethod();
+                .AllowAnyMethod()
+                .AllowCredentials();
         });
 });
 

@@ -5,12 +5,14 @@ import '../config/app_config.dart';
 
 class ApiClient {
   ApiClient({Dio? dio, TokenStorage? tokenStorage})
-    : _dio = dio ?? Dio(),
-      _tokenStorage = tokenStorage ?? TokenStorage() {
+      : _dio = dio ?? Dio(),
+        _tokenStorage = tokenStorage ?? TokenStorage() {
     _dio.options.baseUrl = AppConfig.apiBaseUrl;
     _dio.options.connectTimeout = const Duration(seconds: 15);
-    _dio.options.receiveTimeout = const Duration(seconds: 15);
+    _dio.options.receiveTimeout = const Duration(seconds: 90);
+    _dio.options.sendTimeout = const Duration(seconds: 30);
     _dio.options.headers['Content-Type'] = 'application/json';
+
     _dio.interceptors.add(
       InterceptorsWrapper(
         onRequest: (options, handler) async {

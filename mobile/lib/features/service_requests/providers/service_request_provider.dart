@@ -1,5 +1,6 @@
 import 'dart:async';
 
+import 'package:dio/dio.dart';
 import 'package:flutter/foundation.dart';
 
 import '../models/create_service_request_dto.dart';
@@ -24,6 +25,8 @@ class ServiceRequestProvider extends ChangeNotifier {
   List<ServiceRequestModel> _requests = [];
   ServiceRequestModel? _currentRequest;
   ProblemUnderstandingResultModel? _currentAnalysis;
+  Map<String, dynamic>? _lastValidationResult;
+  Map<String, dynamic>? _lastSentimentResult;
   bool _isLoading = false;
   bool _isAnalyzing = false;
   bool _analysisStateNeedsRefresh = false;
@@ -50,6 +53,8 @@ class ServiceRequestProvider extends ChangeNotifier {
   List<ServiceRequestModel> get requests => List.unmodifiable(_requests);
   ServiceRequestModel? get currentRequest => _currentRequest;
   ProblemUnderstandingResultModel? get currentAnalysis => _currentAnalysis;
+  Map<String, dynamic>? get lastValidationResult => _lastValidationResult;
+  Map<String, dynamic>? get lastSentimentResult => _lastSentimentResult;
   bool get isLoading => _isLoading;
   bool get isAnalyzing => _isAnalyzing;
   bool get analysisStateNeedsRefresh => _analysisStateNeedsRefresh;
@@ -83,7 +88,6 @@ class ServiceRequestProvider extends ChangeNotifier {
       if (!_isCurrent(generation)) return false;
       _requests = List<ServiceRequestModel>.from(fetched);
 
-      // Update currentRequest if it exists in the new list
       if (_currentRequest != null) {
         final match = _requests.where(
           (r) => r.serviceRequestId == _currentRequest!.serviceRequestId,
@@ -112,8 +116,7 @@ class ServiceRequestProvider extends ChangeNotifier {
     try {
       final request = await serviceRequestService.getById(id);
       if (!_isCurrent(generation)) return null;
-      _currentRequest = request;
-      _updateRequestInList(request);
+      _applyRequestUpdate(request);
       _analysisStateNeedsRefresh = false;
       return request;
     } catch (err) {
@@ -212,6 +215,39 @@ class ServiceRequestProvider extends ChangeNotifier {
     }
   }
 
+  Future<Map<String, dynamic>?> validateTransition({
+    required String jobId,
+    required String currentStatus,
+    required String targetStatus,
+    required double elapsedMinutes,
+    String note = '',
+  }) async {
+    final generation = _generation;
+    if (!_isCurrent(generation)) return null;
+    _setAnalyzing(true);
+    _error = null;
+
+    try {
+      final result = await serviceRequestService.validateTransition(
+        jobId: jobId,
+        currentStatus: currentStatus,
+        targetStatus: targetStatus,
+        elapsedMinutes: elapsedMinutes,
+        note: note,
+      );
+      if (!_isCurrent(generation)) return null;
+
+      _lastValidationResult = result;
+      return result;
+    } catch (err) {
+      if (!_isCurrent(generation)) return null;
+      _error = serviceRequestService.getAnalysisErrorMessage(err);
+      return null;
+    } finally {
+      if (_isCurrent(generation)) _setAnalyzing(false);
+    }
+  }
+
   Future<ProblemUnderstandingResultModel?> analyzeRequest(
     String id, {
     Duration? pollInterval,
@@ -230,132 +266,133 @@ class ServiceRequestProvider extends ChangeNotifier {
       final result = await serviceRequestService.analyze(id);
       if (!_isCurrent(generation)) return null;
       _currentAnalysis = result;
-      _analysisStateNeedsRefresh = false;
 
-      // Update the current request's status, category, urgency if available
-      if (_currentRequest?.serviceRequestId == id) {
-        _currentRequest = _currentRequest!.copyWith(
-          status: result.status,
-          category: result.category,
-          urgency: result.urgency,
-        );
-        _updateRequestInList(_currentRequest!);
-      } else {
-        final index = _requests.indexWhere((r) => r.serviceRequestId == id);
-        if (index >= 0) {
-          final updated = _requests[index].copyWith(
-            status: result.status,
-            category: result.category,
-            urgency: result.urgency,
-          );
-          _requests[index] = updated;
-        }
-      }
-
-      // The analyze response does not contain persisted questions or timestamps.
-      // Refresh once before ending the loading state; never repeat the POST if
-      // this read fails after a successful execution.
       try {
         final refreshed = await serviceRequestService.getById(id);
         if (!_isCurrent(generation)) return null;
-        _currentRequest = refreshed;
-        _updateRequestInList(refreshed);
-      } catch (refreshError) {
+        _applyRequestUpdate(refreshed);
+        _analysisStateNeedsRefresh = false;
+      } catch (_) {
         if (!_isCurrent(generation)) return null;
         _analysisStateNeedsRefresh = true;
-        _error = serviceRequestService.getErrorMessage(refreshError);
       }
+
       return result;
     } catch (err) {
       if (!_isCurrent(generation)) return null;
-      final analysisError = serviceRequestService.getAnalysisErrorMessage(err);
-      final isTimeoutOrUncertain = serviceRequestService
-          .isTimeoutOrUncertainTransport(err);
 
-      if (!isTimeoutOrUncertain) {
-        // Deterministic HTTP/API error (e.g. 400, 403, 404, 409, 500)
-        // Attempt one authoritative GET to synchronize state
+      final shouldRefresh =
+          serviceRequestService.isTimeoutOrUncertainTransport(err) ||
+          (err is DioException && err.response?.statusCode == 409);
+
+      if (shouldRefresh) {
+        await _reconcileAnalysisState(
+          id,
+          err,
+          generation: generation,
+          pollInterval: pollInterval,
+          maxPolls: maxPolls,
+        );
+      } else {
         try {
           final refreshed = await serviceRequestService.getById(id);
           if (!_isCurrent(generation)) return null;
-          _currentRequest = refreshed;
-          _updateRequestInList(refreshed);
+          _applyRequestUpdate(refreshed);
           _analysisStateNeedsRefresh = false;
         } catch (_) {
           if (!_isCurrent(generation)) return null;
           _analysisStateNeedsRefresh = true;
         }
+        _error = serviceRequestService.getAnalysisErrorMessage(err);
+      }
+      return null;
+    } finally {
+      if (_isCurrent(generation)) _setAnalyzing(false);
+    }
+  }
 
-        _error = analysisError;
-        return null;
+  Future<void> _reconcileAnalysisState(
+    String id,
+    Object analysisError, {
+    required int generation,
+    Duration? pollInterval,
+    int? maxPolls,
+  }) async {
+    final message = serviceRequestService.getAnalysisErrorMessage(analysisError);
+    final isConflict =
+        analysisError is DioException && analysisError.response?.statusCode == 409;
+
+    try {
+      final request = await serviceRequestService.getById(id);
+      if (!_isCurrent(generation)) return;
+      _applyRequestUpdate(request);
+
+      if (request.status != ServiceRequestStatus.analyzing) {
+        _analysisStateNeedsRefresh = false;
+        _error = isConflict ? message : null;
+        return;
       }
 
-      // Timeout / uncertain transport outcome where server completion is unknown:
-      // 1. Initial authoritative GET
-      ServiceRequestModel refreshed;
-      try {
-        refreshed = await serviceRequestService.getById(id);
-        if (!_isCurrent(generation)) return null;
-      } catch (_) {
-        if (!_isCurrent(generation)) return null;
-        // Authoritative GET itself failed -> state is genuinely uncertain
-        _analysisStateNeedsRefresh = true;
-        _error = analysisError;
-        return null;
-      }
-
-      _currentRequest = refreshed;
-      _updateRequestInList(refreshed);
-      _analysisStateNeedsRefresh = false;
-      _error = null; // Backend reachable; clear transport timeout error
-
-      // 2. If status has already transitioned away from Analyzing, stop immediately
-      if (refreshed.status != ServiceRequestStatus.analyzing) {
-        return null;
-      }
-
-      // 3. Status is still Analyzing -> enter bounded reconciliation polling (GET only)
       final interval = pollInterval ?? reconciliationPollInterval;
-      final limit = maxPolls ?? maxReconciliationPolls;
-      int pollCount = 0;
+      final polls = maxPolls ?? maxReconciliationPolls;
 
-      while (pollCount < limit) {
-        pollCount++;
+      for (var poll = 0; poll < polls; poll++) {
         if (interval > Duration.zero) {
-          await Future.delayed(interval);
-          if (!_isCurrent(generation)) return null;
+          await Future<void>.delayed(interval);
+          if (!_isCurrent(generation)) return;
         }
 
-        if (_isDisposed || _currentRequest?.serviceRequestId != id) {
-          return null;
+        if (_currentRequest?.serviceRequestId != id) {
+          return;
         }
 
         try {
           final pollRefreshed = await serviceRequestService.getById(id);
-          if (!_isCurrent(generation)) return null;
-          _currentRequest = pollRefreshed;
-          _updateRequestInList(pollRefreshed);
+          if (!_isCurrent(generation)) return;
+
+          _applyRequestUpdate(pollRefreshed);
           _error = null;
 
           if (pollRefreshed.status != ServiceRequestStatus.analyzing) {
             _analysisStateNeedsRefresh = false;
-            return null;
+            return;
           }
         } catch (pollErr) {
-          if (!_isCurrent(generation)) return null;
-          // If polling GET becomes unreliable, mark state as needing refresh
+          if (!_isCurrent(generation)) return;
           _analysisStateNeedsRefresh = true;
           _error = serviceRequestService.getErrorMessage(pollErr);
-          return null;
+          return;
         }
       }
 
-      // 4. Grace period expired while backend is still Analyzing:
-      // Leave authoritative request status as Analyzing,
-      // clear error (informational UI is driven by status/isAnalyzing/analysisStateNeedsRefresh),
-      // analysisStateNeedsRefresh remains false because backend was reached.
       _analysisStateNeedsRefresh = false;
       _error = null;
+    } catch (_) {
+      if (!_isCurrent(generation)) return;
+      _analysisStateNeedsRefresh = true;
+      _error = message;
+    }
+  }
+
+  void _applyRequestUpdate(ServiceRequestModel request) {
+    _currentRequest = request;
+    _updateRequestInList(request);
+  }
+
+  Future<Map<String, dynamic>?> analyzeSentiment(String feedbackText) async {
+    final generation = _generation;
+    if (!_isCurrent(generation)) return null;
+    _setAnalyzing(true);
+    _error = null;
+
+    try {
+      final result = await serviceRequestService.analyzeSentiment(feedbackText);
+      if (!_isCurrent(generation)) return null;
+      _lastSentimentResult = result;
+      return result;
+    } catch (err) {
+      if (!_isCurrent(generation)) return null;
+      _error = serviceRequestService.getAnalysisErrorMessage(err);
       return null;
     } finally {
       if (_isCurrent(generation)) _setAnalyzing(false);
@@ -452,6 +489,8 @@ class ServiceRequestProvider extends ChangeNotifier {
     _requests = [];
     _currentRequest = null;
     _currentAnalysis = null;
+    _lastValidationResult = null;
+    _lastSentimentResult = null;
     _isLoading = false;
     _isAnalyzing = false;
     _analysisStateNeedsRefresh = false;

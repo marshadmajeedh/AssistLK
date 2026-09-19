@@ -62,8 +62,9 @@ public class VisualEvidencePostgreSqlTests(PostgreSqlTestFixture fixture) : Post
             await using var db = PostgreSqlTestDatabase.CreateDbContext(database);
             var migrator = db.GetService<IMigrator>();
             var migrations = (await db.Database.GetAppliedMigrationsAsync()).ToArray();
-            var previous = migrations[^2];
-            Assert.EndsWith("AddProblemAnalysisVisualEvidence", migrations[^1]);
+            var targetIndex = Array.FindIndex(migrations, m => m.EndsWith("AddProblemAnalysisVisualEvidence", StringComparison.Ordinal));
+            Assert.True(targetIndex > 0, "Expected AddProblemAnalysisVisualEvidence migration to exist in applied migrations after an earlier migration.");
+            var previous = migrations[targetIndex - 1];
             await migrator.MigrateAsync(previous);
             var user = new User { FullName = "Legacy Test", Email = "legacy@example.test", PasswordHash = "dummy", PhoneNumber = "0771234567" };
             var request = new ServiceRequest { CustomerId = user.Id, Description = "Legacy sink leak", LocationText = "Colombo" };
@@ -76,7 +77,8 @@ public class VisualEvidencePostgreSqlTests(PostgreSqlTestFixture fixture) : Post
             Assert.Empty(legacy.VisualEvidence.AttachmentIdsUsed);
             Assert.Empty(legacy.VisualEvidence.Observations);
             await migrator.MigrateAsync(previous);
-            Assert.Single(await db.Database.GetPendingMigrationsAsync());
+            var pendingMigrations = (await db.Database.GetPendingMigrationsAsync()).ToList();
+            Assert.Contains(pendingMigrations, m => m.EndsWith("AddProblemAnalysisVisualEvidence", StringComparison.Ordinal));
             await migrator.MigrateAsync();
             db.ChangeTracker.Clear();
             Assert.Equal("Possible legacy leak.", (await db.ProblemAnalyses.SingleAsync(a => a.Id == id)).DetectedProblem);

@@ -3,6 +3,7 @@ using System;
 using AssistLK.Infrastructure.Data;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 
@@ -11,9 +12,11 @@ using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 namespace AssistLK.Infrastructure.Data.Migrations
 {
     [DbContext(typeof(AssistLKDbContext))]
-    partial class AssistLKDbContextModelSnapshot : ModelSnapshot
+    [Migration("20260915075802_AddProviderMatchingComponent2")]
+    partial class AddProviderMatchingComponent2
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
@@ -337,9 +340,6 @@ namespace AssistLK.Infrastructure.Data.Migrations
                         .ValueGeneratedOnAdd()
                         .HasColumnType("uuid");
 
-                    b.Property<DateTime?>("CompletedAt")
-                        .HasColumnType("timestamp with time zone");
-
                     b.Property<DateTime>("CreatedAt")
                         .HasColumnType("timestamp with time zone");
 
@@ -348,9 +348,6 @@ namespace AssistLK.Infrastructure.Data.Migrations
 
                     b.Property<Guid>("ServiceRequestId")
                         .HasColumnType("uuid");
-
-                    b.Property<DateTime?>("StartedAt")
-                        .HasColumnType("timestamp with time zone");
 
                     b.Property<string>("Status")
                         .IsRequired()
@@ -362,11 +359,6 @@ namespace AssistLK.Infrastructure.Data.Migrations
                         .HasMaxLength(40)
                         .HasColumnType("character varying(40)");
 
-                    b.Property<string>("ThreadId")
-                        .IsRequired()
-                        .HasMaxLength(100)
-                        .HasColumnType("character varying(100)");
-
                     b.Property<DateTime>("UpdatedAt")
                         .HasColumnType("timestamp with time zone");
 
@@ -375,8 +367,6 @@ namespace AssistLK.Infrastructure.Data.Migrations
                     b.HasIndex("ServiceRequestId");
 
                     b.HasIndex("Status");
-
-                    b.HasIndex("ThreadId");
 
                     b.ToTable("MatchingExecutions", (string)null);
                 });

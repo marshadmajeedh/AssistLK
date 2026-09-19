@@ -44,6 +44,24 @@ public class AssistLKDbContext : DbContext, IAgentWorkflowDbContext
     public DbSet<AgentAction> AgentActions =>
         Set<AgentAction>();
 
+    public DbSet<ProviderProfile> ProviderProfiles =>
+        Set<ProviderProfile>();
+
+    public DbSet<ProviderSkill> ProviderSkills =>
+        Set<ProviderSkill>();
+
+    public DbSet<ProviderLocation> ProviderLocations =>
+        Set<ProviderLocation>();
+
+    public DbSet<ProviderAvailability> ProviderAvailabilities =>
+        Set<ProviderAvailability>();
+
+    public DbSet<MatchingExecution> MatchingExecutions =>
+        Set<MatchingExecution>();
+
+    public DbSet<MatchedCandidate> MatchedCandidates =>
+        Set<MatchedCandidate>();
+
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
         base.OnModelCreating(modelBuilder);
@@ -234,6 +252,12 @@ public class AssistLKDbContext : DbContext, IAgentWorkflowDbContext
             .HasForeignKey(x => x.ServiceRequestId).OnDelete(DeleteBehavior.Cascade);
         ConfigureProblemAnalysis(modelBuilder);
         ConfigureServiceRequestClarification(modelBuilder);
+        ConfigureProviderProfile(modelBuilder);
+        ConfigureProviderSkill(modelBuilder);
+        ConfigureProviderLocation(modelBuilder);
+        ConfigureProviderAvailability(modelBuilder);
+        ConfigureMatchingExecution(modelBuilder);
+        ConfigureMatchedCandidate(modelBuilder);
     }
 
     private static void ConfigureUser(ModelBuilder modelBuilder)
@@ -458,6 +482,172 @@ public class AssistLKDbContext : DbContext, IAgentWorkflowDbContext
 
         clarification.HasIndex(x => new { x.ServiceRequestId, x.ClarificationRound, x.Sequence })
             .IsUnique();
+    }
+
+    private static void ConfigureProviderProfile(ModelBuilder modelBuilder)
+    {
+        var profile = modelBuilder.Entity<ProviderProfile>();
+
+        profile.ToTable("ProviderProfiles");
+        profile.HasKey(x => x.Id);
+
+        profile.Property(x => x.UserId).IsRequired();
+        profile.Property(x => x.BusinessName).IsRequired().HasMaxLength(200);
+        profile.Property(x => x.VerificationStatus).HasConversion<string>().IsRequired().HasMaxLength(30);
+        profile.Property(x => x.Rating).IsRequired().HasPrecision(3, 2);
+        profile.Property(x => x.TotalCompletedJobs).IsRequired();
+        profile.Property(x => x.MaxActiveJobs).IsRequired();
+        profile.Property(x => x.IsOnline).IsRequired();
+        profile.Property(x => x.CreatedAt).IsRequired();
+        profile.Property(x => x.UpdatedAt).IsRequired();
+
+        profile.HasIndex(x => x.UserId).IsUnique();
+        profile.HasIndex(x => x.VerificationStatus);
+
+        profile.HasOne(x => x.User)
+            .WithMany()
+            .HasForeignKey(x => x.UserId)
+            .OnDelete(DeleteBehavior.Restrict);
+    }
+
+    private static void ConfigureProviderSkill(ModelBuilder modelBuilder)
+    {
+        var skill = modelBuilder.Entity<ProviderSkill>();
+
+        skill.ToTable("ProviderSkills");
+        skill.HasKey(x => x.Id);
+
+        skill.Property(x => x.ProviderId).IsRequired();
+        skill.Property(x => x.Category).IsRequired().HasMaxLength(100);
+        skill.Property(x => x.SkillName).IsRequired().HasMaxLength(150);
+        skill.Property(x => x.CertificationUrl).HasMaxLength(500).IsRequired(false);
+        skill.Property(x => x.IsVerified).IsRequired();
+        skill.Property(x => x.CreatedAt).IsRequired();
+        skill.Property(x => x.UpdatedAt).IsRequired();
+
+        skill.HasOne(x => x.Provider)
+            .WithMany(x => x.Skills)
+            .HasForeignKey(x => x.ProviderId)
+            .OnDelete(DeleteBehavior.Cascade);
+
+        skill.HasIndex(x => x.ProviderId);
+        skill.HasIndex(x => x.Category);
+    }
+
+    private static void ConfigureProviderLocation(ModelBuilder modelBuilder)
+    {
+        var location = modelBuilder.Entity<ProviderLocation>();
+
+        location.ToTable(
+            "ProviderLocations",
+            table =>
+            {
+                table.HasCheckConstraint("CK_ProviderLocations_Latitude", "\"Latitude\" BETWEEN -90 AND 90");
+                table.HasCheckConstraint("CK_ProviderLocations_Longitude", "\"Longitude\" BETWEEN -180 AND 180");
+                table.HasCheckConstraint("CK_ProviderLocations_OperatingRadiusKm", "\"OperatingRadiusKm\" >= 0");
+            });
+
+        location.HasKey(x => x.Id);
+
+        location.Property(x => x.ProviderId).IsRequired();
+        location.Property(x => x.Latitude).HasPrecision(9, 6);
+        location.Property(x => x.Longitude).HasPrecision(9, 6);
+        location.Property(x => x.OperatingRadiusKm).HasPrecision(6, 2);
+        location.Property(x => x.LastLocationUpdate).IsRequired();
+        location.Property(x => x.CreatedAt).IsRequired();
+        location.Property(x => x.UpdatedAt).IsRequired();
+
+        location.HasOne(x => x.Provider)
+            .WithMany(x => x.Locations)
+            .HasForeignKey(x => x.ProviderId)
+            .OnDelete(DeleteBehavior.Cascade);
+
+        location.HasIndex(x => x.ProviderId);
+    }
+
+    private static void ConfigureProviderAvailability(ModelBuilder modelBuilder)
+    {
+        var availability = modelBuilder.Entity<ProviderAvailability>();
+
+        availability.ToTable(
+            "ProviderAvailabilities",
+            table =>
+            {
+                table.HasCheckConstraint("CK_ProviderAvailabilities_DayOfWeek", "\"DayOfWeek\" BETWEEN 0 AND 6");
+            });
+
+        availability.HasKey(x => x.Id);
+
+        availability.Property(x => x.ProviderId).IsRequired();
+        availability.Property(x => x.DayOfWeek).IsRequired();
+        availability.Property(x => x.StartTime).IsRequired();
+        availability.Property(x => x.EndTime).IsRequired();
+        availability.Property(x => x.IsAvailable).IsRequired();
+        availability.Property(x => x.CreatedAt).IsRequired();
+        availability.Property(x => x.UpdatedAt).IsRequired();
+
+        availability.HasOne(x => x.Provider)
+            .WithMany(x => x.Availability)
+            .HasForeignKey(x => x.ProviderId)
+            .OnDelete(DeleteBehavior.Cascade);
+
+        availability.HasIndex(x => x.ProviderId);
+    }
+
+    private static void ConfigureMatchingExecution(ModelBuilder modelBuilder)
+    {
+        var execution = modelBuilder.Entity<MatchingExecution>();
+
+        execution.ToTable("MatchingExecutions");
+        execution.HasKey(x => x.Id);
+
+        execution.Property(x => x.ServiceRequestId).IsRequired();
+        execution.Property(x => x.StrategyUsed).HasConversion<string>().IsRequired().HasMaxLength(40);
+        execution.Property(x => x.Status).HasConversion<string>().IsRequired().HasMaxLength(30);
+        execution.Property(x => x.ThreadId).HasMaxLength(100);
+        execution.Property(x => x.ExecutedAt).IsRequired();
+        execution.Property(x => x.StartedAt);
+        execution.Property(x => x.CompletedAt);
+        execution.Property(x => x.CreatedAt).IsRequired();
+        execution.Property(x => x.UpdatedAt).IsRequired();
+
+        execution.HasIndex(x => x.ServiceRequestId);
+        execution.HasIndex(x => x.Status);
+        execution.HasIndex(x => x.ThreadId);
+    }
+
+    private static void ConfigureMatchedCandidate(ModelBuilder modelBuilder)
+    {
+        var candidate = modelBuilder.Entity<MatchedCandidate>();
+
+        candidate.ToTable(
+            "MatchedCandidates",
+            table => table.HasCheckConstraint("CK_MatchedCandidates_Score", "\"Score\" >= 0 AND \"Score\" <= 1"));
+
+        candidate.HasKey(x => x.Id);
+
+        candidate.Property(x => x.MatchingExecutionId).IsRequired();
+        candidate.Property(x => x.ProviderId).IsRequired();
+        candidate.Property(x => x.Score).HasPrecision(5, 4);
+        candidate.Property(x => x.Rank).IsRequired();
+        candidate.Property(x => x.DistanceKm).HasPrecision(8, 2);
+        candidate.Property(x => x.MatchRationale).IsRequired().HasColumnType("text");
+        candidate.Property(x => x.Status).HasConversion<string>().IsRequired().HasMaxLength(30);
+        candidate.Property(x => x.CreatedAt).IsRequired();
+        candidate.Property(x => x.UpdatedAt).IsRequired();
+
+        candidate.HasOne(x => x.MatchingExecution)
+            .WithMany(x => x.Candidates)
+            .HasForeignKey(x => x.MatchingExecutionId)
+            .OnDelete(DeleteBehavior.Cascade);
+
+        candidate.HasOne(x => x.Provider)
+            .WithMany()
+            .HasForeignKey(x => x.ProviderId)
+            .OnDelete(DeleteBehavior.Restrict);
+
+        candidate.HasIndex(x => x.MatchingExecutionId);
+        candidate.HasIndex(x => x.ProviderId);
     }
 
     public override async Task<int> SaveChangesAsync(

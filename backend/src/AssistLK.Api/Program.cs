@@ -335,7 +335,15 @@ if(app.Environment.IsDevelopment())
 }
 
 
+var uploadsPath = Path.Combine(app.Environment.WebRootPath ?? Path.Combine(Directory.GetCurrentDirectory(), "wwwroot"), "uploads", "certificates");
+if (!Directory.Exists(uploadsPath))
+{
+    Directory.CreateDirectory(uploadsPath);
+}
+
 app.UseHttpsRedirection();
+
+app.UseStaticFiles();
 
 app.UseCors("AssistLKClients");
 

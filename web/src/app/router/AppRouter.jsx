@@ -19,6 +19,7 @@ import PlaceholderPage from "../../shared/components/PlaceholderPage";
 import AdminDashboardPage from "../../features/admin/pages/AdminDashboardPage";
 import AdminServiceRequestListPage from "../../features/admin/pages/AdminServiceRequestListPage";
 import AiWorkflowsPage from "../../features/aiWorkflows/pages/AiWorkflowsPage";
+import ProviderVerificationQueue from "../../features/providers/ProviderVerificationQueue";
 
 function RootRedirect() {
 	const user = useAuthStore((state) => state.user);
@@ -70,7 +71,7 @@ function AppRouter() {
 						<Route
 							path="/providers"
 							element={
-								<PlaceholderPage title="Providers" />
+								<ProviderVerificationQueue />
 							}
 						/>
 

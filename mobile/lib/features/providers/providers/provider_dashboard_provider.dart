@@ -19,6 +19,8 @@ class ProviderDashboardProvider extends ChangeNotifier {
 
   ProviderDashboardProvider({required this.providerService});
 
+  Map<String, dynamic>? profile;
+  bool _isProfileLoading = true;
   bool _isOnline = false;
   double _operatingRadiusKm = 10.0;
   double _latitude = 6.9271; // Default fallback to Colombo, Sri Lanka
@@ -31,12 +33,24 @@ class ProviderDashboardProvider extends ChangeNotifier {
   String? _lastAnnouncedJobId;
   List<latlong.LatLng> routePoints = [];
 
+  bool get isProfileLoading => _isProfileLoading;
   bool get isOnline => _isOnline;
   double get operatingRadiusKm => _operatingRadiusKm;
   double get latitude => _latitude;
   double get longitude => _longitude;
   bool get isLoading => _isLoading;
   String? get error => _error;
+
+  String get verificationStatus =>
+      profile?['verificationStatus']?.toString() ?? 'Pending';
+  bool get isVerified => verificationStatus.toLowerCase() == 'verified';
+  bool get isPending => verificationStatus.toLowerCase() == 'pending';
+  bool get isRejected => verificationStatus.toLowerCase() == 'rejected';
+
+  String get fullName => profile?['fullName']?.toString() ?? '';
+  String get businessName => profile?['businessName']?.toString() ?? '';
+  String get category => profile?['category']?.toString() ?? 'Plumbing';
+  double get rating => (profile?['rating'] as num?)?.toDouble() ?? 5.0;
 
   StreamSubscription<Position>? _positionStreamSubscription;
   Timer? _pollingTimer;
@@ -47,17 +61,85 @@ class ProviderDashboardProvider extends ChangeNotifier {
       _isOnline = prefs.getBool(_prefIsOnlineKey) ?? false;
       _operatingRadiusKm = prefs.getDouble(_prefOperatingRadiusKey) ?? 10.0;
       notifyListeners();
-
-      if (_isOnline) {
-        fetchLatestDispatchedJob();
-        _startPolling();
-      }
     } catch (e) {
       debugPrint('Failed to load persisted provider preferences: $e');
     }
 
-    // Acquire location asynchronously in the background without blocking initial UI
-    unawaited(_checkPermissionsAndFetchLocation());
+    await fetchProfile();
+  }
+
+  Future<void> fetchProfile() async {
+    _isProfileLoading = true;
+    _error = null;
+    notifyListeners();
+
+    try {
+      final data = await providerService.getProfile();
+      profile = data;
+
+      final num? rad = data['operatingRadiusKm'] as num?;
+      if (rad != null && rad > 0) {
+        _operatingRadiusKm = rad.toDouble();
+      }
+      final num? lat = data['latitude'] as num?;
+      final num? lng = data['longitude'] as num?;
+      if (lat != null && lng != null && lat != 0 && lng != 0) {
+        _latitude = lat.toDouble();
+        _longitude = lng.toDouble();
+      }
+      if (data['isOnline'] is bool) {
+        _isOnline = data['isOnline'] as bool;
+      }
+
+      _isProfileLoading = false;
+      notifyListeners();
+
+      if (isVerified) {
+        unawaited(_checkPermissionsAndFetchLocation());
+        if (_isOnline) {
+          fetchLatestDispatchedJob();
+          _startPolling();
+        }
+      } else {
+        _stopPolling();
+        _clearJobState();
+      }
+    } catch (e) {
+      debugPrint('Failed to load provider profile: $e');
+      _error = 'Failed to load profile: $e';
+      _isProfileLoading = false;
+      notifyListeners();
+    }
+  }
+
+  Future<void> updateProfile({
+    required String businessName,
+    required double operatingRadiusKm,
+    double? latitude,
+    double? longitude,
+  }) async {
+    _isLoading = true;
+    notifyListeners();
+    try {
+      final updated = await providerService.updateProfile(
+        businessName: businessName,
+        operatingRadiusKm: operatingRadiusKm,
+        latitude: latitude,
+        longitude: longitude,
+      );
+      profile = {...?profile, ...updated};
+      _operatingRadiusKm = operatingRadiusKm;
+      if (latitude != null) _latitude = latitude;
+      if (longitude != null) _longitude = longitude;
+      _isLoading = false;
+      notifyListeners();
+      await _saveOperatingRadius(operatingRadiusKm);
+    } catch (e) {
+      _isLoading = false;
+      _error = 'Failed to update profile: $e';
+      notifyListeners();
+      rethrow;
+    }
   }
 
   Future<void> _checkPermissionsAndFetchLocation() async {
@@ -86,19 +168,22 @@ class ProviderDashboardProvider extends ChangeNotifier {
         return;
       }
 
-      // Web-safe location acquisition:
-      // Chrome/Web throws an UnsupportedOperationException on getLastKnownPosition.
+      // Safe location acquisition
       Position position;
       if (kIsWeb) {
         position = await Geolocator.getCurrentPosition(
-          desiredAccuracy: LocationAccuracy.high,
+          locationSettings: const LocationSettings(
+            accuracy: LocationAccuracy.high,
+          ),
         );
       } else {
         Position? lastKnown = await Geolocator.getLastKnownPosition();
         position =
             lastKnown ??
             await Geolocator.getCurrentPosition(
-              desiredAccuracy: LocationAccuracy.high,
+              locationSettings: const LocationSettings(
+                accuracy: LocationAccuracy.high,
+              ),
             );
       }
 
@@ -117,16 +202,15 @@ class ProviderDashboardProvider extends ChangeNotifier {
             _latitude = pos.latitude;
             _longitude = pos.longitude;
             notifyListeners();
-            if (_isOnline) {
+            if (_isOnline && isVerified) {
               _syncAvailability();
             }
           });
 
-      // Clear any prior error state
       _error = null;
       notifyListeners();
 
-      if (_isOnline) {
+      if (_isOnline && isVerified) {
         _syncAvailability();
       }
     } catch (e) {
@@ -136,12 +220,13 @@ class ProviderDashboardProvider extends ChangeNotifier {
   }
 
   void toggleOnlineStatus(bool value) {
+    if (!isVerified) return;
+
     _isOnline = value;
     notifyListeners();
     _saveIsOnline(value);
     _syncAvailability();
 
-    // Query for active dispatches when turning online
     if (_isOnline) {
       fetchLatestDispatchedJob();
       _startPolling();
@@ -159,11 +244,12 @@ class ProviderDashboardProvider extends ChangeNotifier {
       debugPrint('Failed to save isOnline preference: $e');
     }
   }
-  
+
   void _startPolling() {
+    if (!isVerified) return;
     _pollingTimer?.cancel();
     _pollingTimer = Timer.periodic(const Duration(seconds: 5), (_) {
-      if (_isOnline) {
+      if (_isOnline && isVerified) {
         fetchLatestDispatchedJob();
       }
     });
@@ -182,7 +268,9 @@ class ProviderDashboardProvider extends ChangeNotifier {
 
   void onRadiusChangeEnd(double value) {
     _saveOperatingRadius(value);
-    _syncAvailability();
+    if (isVerified) {
+      _syncAvailability();
+    }
   }
 
   Future<void> _saveOperatingRadius(double value) async {
@@ -195,6 +283,7 @@ class ProviderDashboardProvider extends ChangeNotifier {
   }
 
   Future<void> _syncAvailability() async {
+    if (!isVerified) return;
     try {
       await providerService.updateAvailability(
         isOnline: _isOnline,
@@ -209,6 +298,7 @@ class ProviderDashboardProvider extends ChangeNotifier {
 
   // Fetches approved matches from PostgreSQL via ASP.NET Core
   Future<void> fetchLatestDispatchedJob() async {
+    if (!isVerified) return;
     try {
       final response = await providerService.apiClient.client.get(
         '/providers/active-dispatch',
@@ -216,14 +306,13 @@ class ProviderDashboardProvider extends ChangeNotifier {
       if (response.statusCode == 200 && response.data != null) {
         final data = Map<String, dynamic>.from(response.data);
         activeJobMatch = data;
-        
+
         final jobId = data['jobId']?.toString();
         if (jobId != null && jobId != _lastAnnouncedJobId) {
           _lastAnnouncedJobId = jobId;
           _announceJob(data);
         }
 
-        // Fetch OSRM route if coordinates are available
         final dynamic rawLat = data['customerLatitude'];
         final dynamic rawLng = data['customerLongitude'];
         if (rawLat != null && rawLng != null && routePoints.isEmpty) {
@@ -231,7 +320,7 @@ class ProviderDashboardProvider extends ChangeNotifier {
           final double custLng = (rawLng as num).toDouble();
           await _fetchRoute(custLat, custLng);
         }
-        
+
         notifyListeners();
         return;
       } else {
@@ -246,7 +335,8 @@ class ProviderDashboardProvider extends ChangeNotifier {
 
   Future<void> _fetchRoute(double custLat, double custLng) async {
     try {
-      final url = 'https://router.project-osrm.org/route/v1/driving/$_longitude,$_latitude;$custLng,$custLat?geometries=geojson';
+      final url =
+          'https://router.project-osrm.org/route/v1/driving/$_longitude,$_latitude;$custLng,$custLat?geometries=geojson';
       final response = await _dio.get(url);
       if (response.statusCode == 200 && response.data != null) {
         final routes = response.data['routes'] as List;
@@ -271,9 +361,11 @@ class ProviderDashboardProvider extends ChangeNotifier {
     final category = data['category']?.toString() ?? 'Service Request';
     final distance = data['distanceKm']?.toString() ?? 'unknown';
     final urgency = data['urgency']?.toString() ?? 'Standard';
-    await flutterTts.speak('New $category job alert, $distance kilometers away. $urgency urgency.');
+    await flutterTts.speak(
+      'New $category job alert, $distance kilometers away. $urgency urgency.',
+    );
   }
-  
+
   void _clearJobState() {
     activeJobMatch = null;
     routePoints = [];
@@ -283,7 +375,7 @@ class ProviderDashboardProvider extends ChangeNotifier {
   void clearActiveJobMatch() {
     _clearJobState();
   }
-  
+
   Future<void> declineJob() async {
     try {
       await providerService.declineActiveDispatch();
@@ -292,11 +384,6 @@ class ProviderDashboardProvider extends ChangeNotifier {
     } catch (e) {
       debugPrint('Failed to decline match: $e');
     }
-  }
-
-  void _setLoading(bool value) {
-    _isLoading = value;
-    notifyListeners();
   }
 
   @override

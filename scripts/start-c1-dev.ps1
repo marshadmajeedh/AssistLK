@@ -22,7 +22,8 @@ param(
     [int]$HealthPollIntervalMs = 500,
     [string]$PythonHost = "127.0.0.1",
     [int]$PythonPort = 8001,
-    [switch]$NoDotnet
+    [switch]$NoDotnet,
+    [switch]$ReusePython
 )
 
 $ErrorActionPreference = "Continue"
@@ -108,6 +109,48 @@ function Get-AgentHealth {
 }
 
 # -------------------------------------------------------------
+# Helper: Parse key value safely from a .env file
+# -------------------------------------------------------------
+function Get-EnvFileKeyValue {
+    param(
+        [string]$FilePath,
+        [string]$Key
+    )
+    if (-not (Test-Path $FilePath -PathType Leaf)) { return $null }
+    try {
+        $lines = Get-Content -Path $FilePath -ErrorAction Stop
+        foreach ($line in $lines) {
+            $trimmed = $line.Trim()
+            if ($trimmed.StartsWith("#") -or -not ($trimmed.Contains("="))) { continue }
+            $parts = $trimmed.Split("=", 2)
+            if ($parts[0].Trim() -eq $Key) {
+                $val = $parts[1].Trim()
+                if (($val.StartsWith('"') -and $val.EndsWith('"')) -or ($val.StartsWith("'") -and $val.EndsWith("'"))) {
+                    if ($val.Length -ge 2) {
+                        $val = $val.Substring(1, $val.Length - 2).Trim()
+                    }
+                }
+                return $val
+            }
+        }
+    } catch { }
+    return $null
+}
+
+# -------------------------------------------------------------
+# Helper: Compute safe 8-character SHA-256 fingerprint for logging
+# -------------------------------------------------------------
+function Get-KeyFingerprint {
+    param([string]$Key)
+    if ([string]::IsNullOrWhiteSpace($Key)) { return $null }
+    $bytes = [System.Text.Encoding]::UTF8.GetBytes($Key)
+    $sha256 = [System.Security.Cryptography.SHA256]::Create()
+    $hashBytes = $sha256.ComputeHash($bytes)
+    $hex = -join ($hashBytes | ForEach-Object { "{0:X2}" -f $_ })
+    return $hex.Substring(0, 8)
+}
+
+# -------------------------------------------------------------
 # 1. Resolve Repository Root & Validate Paths
 # -------------------------------------------------------------
 $ScriptDir = Split-Path -Parent $MyInvocation.MyCommand.Path
@@ -154,6 +197,61 @@ if (-not (Test-Path $ApiProjectPath -PathType Container)) {
 }
 
 # -------------------------------------------------------------
+# 1b. Validate Internal Authentication Consistency
+# -------------------------------------------------------------
+Write-Host "`nValidating internal authentication configuration..." -ForegroundColor Cyan
+
+$rootEnvFile = Join-Path $RepoRoot ".env"
+$agentEnvFile = Join-Path $PythonAgentDir ".env"
+
+$aspnetKey = if (-not [string]::IsNullOrWhiteSpace($env:AgentServices__InternalApiKey)) {
+    $env:AgentServices__InternalApiKey.Trim().Trim('"', "'")
+} else {
+    Get-EnvFileKeyValue -FilePath $rootEnvFile -Key "AgentServices__InternalApiKey"
+}
+
+$pythonKey = if (-not [string]::IsNullOrWhiteSpace($env:INTERNAL_API_KEY)) {
+    $env:INTERNAL_API_KEY.Trim().Trim('"', "'")
+} else {
+    Get-EnvFileKeyValue -FilePath $agentEnvFile -Key "INTERNAL_API_KEY"
+}
+
+$aspConfigured = -not [string]::IsNullOrWhiteSpace($aspnetKey)
+$pyConfigured  = -not [string]::IsNullOrWhiteSpace($pythonKey)
+
+$aspFp = if ($aspConfigured) { Get-KeyFingerprint $aspnetKey } else { "none" }
+$pyFp  = if ($pyConfigured)  { Get-KeyFingerprint $pythonKey }  else { "none" }
+$aspLen = if ($aspConfigured) { $aspnetKey.Length } else { 0 }
+$pyLen  = if ($pyConfigured)  { $pythonKey.Length }  else { 0 }
+
+Write-Host "  ASP.NET key: $(if ($aspConfigured) { "configured (length: $aspLen, fingerprint: $aspFp)" } else { "missing / dev-open" })" -ForegroundColor $(if ($aspConfigured) { "Green" } else { "DarkGray" })
+Write-Host "  Python key:  $(if ($pyConfigured) { "configured (length: $pyLen, fingerprint: $pyFp)" } else { "missing / dev-open" })" -ForegroundColor $(if ($pyConfigured) { "Green" } else { "DarkGray" })
+
+if ($aspConfigured -ne $pyConfigured) {
+    Write-Host "`n[ERROR] Internal service API key configuration mismatch detected!" -ForegroundColor Red
+    Write-Host "  ASP.NET key: $(if ($aspConfigured) { "configured (length: $aspLen, fingerprint: $aspFp)" } else { "missing" })" -ForegroundColor Yellow
+    Write-Host "  Python key:  $(if ($pyConfigured) { "configured (length: $pyLen, fingerprint: $pyFp)" } else { "missing" })" -ForegroundColor Yellow
+    Write-Host "Both services must be configured with the exact same shared secret." -ForegroundColor Yellow
+    Write-Host "Please align AgentServices__InternalApiKey in .env and INTERNAL_API_KEY in agent-services/problem-understanding-agent/.env.`n" -ForegroundColor Yellow
+    exit 1
+}
+
+if ($aspConfigured -and $pyConfigured -and ($aspnetKey -ne $pythonKey)) {
+    Write-Host "`n[ERROR] Internal service API key mismatch between ASP.NET and Python agent!" -ForegroundColor Red
+    Write-Host "  ASP.NET fingerprint: $aspFp (length: $aspLen)" -ForegroundColor Yellow
+    Write-Host "  Python fingerprint:  $pyFp (length: $pyLen)" -ForegroundColor Yellow
+    Write-Host "The shared secrets do not match. Please ensure both files contain the exact same key.`n" -ForegroundColor Yellow
+    exit 1
+}
+
+# Export consistent environment variables for child processes
+$env:AgentServices__ProblemUnderstandingUrl = "http://${PythonHost}:${PythonPort}"
+if ($aspConfigured) {
+    $env:AgentServices__InternalApiKey = $aspnetKey
+    $env:INTERNAL_API_KEY = $pythonKey
+}
+
+# -------------------------------------------------------------
 # 2. Check Existing Instance & Port Conflict Safety
 # -------------------------------------------------------------
 $healthUrl = "http://${PythonHost}:${PythonPort}/health"
@@ -167,17 +265,43 @@ if ($portOccupied) {
     $initialHealth = Get-AgentHealth -Url $healthUrl
 
     if ($initialHealth.IsSuccess -and $initialHealth.IsExpectedAgent) {
-        Write-Host "AssistLK Python agent is already running on port ${PythonPort}." -ForegroundColor Green
-        Write-Host "  Provider: $($initialHealth.Data.provider) | Model: $($initialHealth.Data.model)" -ForegroundColor DarkGray
-        # Existing instance detected; will not kill on exit
-        $scriptStartedPython = $false
+        $conn = Get-NetTCPConnection -LocalPort $PythonPort -State Listen -ErrorAction SilentlyContinue
+        $existingPid = if ($conn) { $conn.OwningProcess } else { $null }
+
+        if ($ReusePython) {
+            Write-Host "AssistLK Python agent is already running on port ${PythonPort}$(if ($existingPid) { " (PID: $existingPid)" }) [-ReusePython specified]." -ForegroundColor Yellow
+            Write-Host "  Provider: $($initialHealth.Data.provider) | Model: $($initialHealth.Data.model)" -ForegroundColor DarkGray
+            $scriptStartedPython = $false
+        } else {
+            Write-Host "Existing AssistLK Python agent detected on port ${PythonPort}$(if ($existingPid) { " (PID: $existingPid)" })." -ForegroundColor Yellow
+            Write-Host "Restarting Python agent to guarantee current configuration is loaded..." -ForegroundColor Cyan
+
+            if ($existingPid) {
+                Stop-ProcessTree -ProcessId $existingPid
+            } else {
+                $procs = Get-CimInstance Win32_Process -Filter "Name LIKE 'python%'" | Where-Object { $_.CommandLine -like "*${PythonPort}*" -or $_.CommandLine -like "*problem-understanding-agent*" }
+                foreach ($proc in $procs) {
+                    Stop-ProcessTree -ProcessId $proc.ProcessId
+                }
+            }
+            Start-Sleep -Milliseconds 600
+
+            $stillOccupied = Test-PortInUse -Address $PythonHost -Port $PythonPort
+            if ($stillOccupied) {
+                Write-Host "`n[ERROR] Port ${PythonPort} remains occupied after stopping stale agent." -ForegroundColor Red
+                exit 1
+            }
+            $portOccupied = $false
+        }
     } else {
         Write-Host "`n[ERROR] Port ${PythonPort} is occupied, but ${healthUrl} did not identify the expected AssistLK problem-understanding-agent service." -ForegroundColor Red
         Write-Host "[SAFETY STOP] Unrecognized process detected on port ${PythonPort}. The process will NOT be terminated." -ForegroundColor Yellow
         Write-Host "Please close the conflicting application or configure another port before retrying.`n" -ForegroundColor Yellow
         exit 1
     }
-} else {
+}
+
+if (-not $portOccupied) {
     # ---------------------------------------------------------
     # 3. Start Python Agent in Virtual Environment
     # ---------------------------------------------------------
@@ -241,12 +365,10 @@ if ($NoDotnet) {
 # -------------------------------------------------------------
 Write-Host "`n[2/2] Configuring ASP.NET environment for Python agent service..." -ForegroundColor Cyan
 
-$env:AgentServices__ProblemUnderstandingUrl = "http://${PythonHost}:${PythonPort}"
-
 Write-Host "  AgentServices__ProblemUnderstandingUrl  = http://${PythonHost}:${PythonPort}" -ForegroundColor Green
 
-if (-not [string]::IsNullOrWhiteSpace($env:AgentServices__InternalApiKey)) {
-    Write-Host "  AgentServices__InternalApiKey           = [CONFIGURED IN ENVIRONMENT]" -ForegroundColor Green
+if ($aspConfigured) {
+    Write-Host "  AgentServices__InternalApiKey           = [CONFIGURED (length: $aspLen, fingerprint: $aspFp)]" -ForegroundColor Green
 } else {
     Write-Host "  AgentServices__InternalApiKey           = [NOT SET / DEV OPEN]" -ForegroundColor DarkGray
 }

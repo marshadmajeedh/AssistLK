@@ -49,8 +49,12 @@ def verify_internal_auth(
         # Open in development when key is not configured
         return
 
-    supplied_key = x_internal_api_key or x_api_key
-    if not supplied_key or supplied_key.strip() != required_key.strip():
+    raw_key = x_internal_api_key or x_api_key
+    supplied_key = raw_key if isinstance(raw_key, str) else None
+    cleaned_required = required_key.strip().strip("\"'")
+    cleaned_supplied = supplied_key.strip().strip("\"'") if supplied_key else None
+
+    if not cleaned_supplied or cleaned_supplied != cleaned_required:
         logger.warning("Unauthorized internal request: invalid or missing internal API key.")
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,

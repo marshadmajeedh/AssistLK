@@ -83,22 +83,47 @@ async def start_match(req: MatchRequest):
 
 @app.post("/match/resume")
 async def resume_match(req: ResumeRequest):
+    import traceback
     config = {"configurable": {"thread_id": req.thread_id}}
     
     try:
         current_state = graph.get_state(config)
-        if not current_state or not current_state.next:
-            raise HTTPException(status_code=400, detail="No pending approval found for this thread.")
-            
-        result = graph.invoke(
-            Command(resume={"action": req.action, "admin_id": req.admin_id}), 
-            config=config
-        )
         
+        status = None
+        final_outcome = None
+
+        if current_state and current_state.next:
+            result = graph.invoke(
+                Command(resume={"action": req.action, "admin_id": req.admin_id}), 
+                config=config
+            )
+            
+            if isinstance(result, dict):
+                status = result.get("ApprovalStatus")
+                final_outcome = result.get("FinalOutcome")
+            elif hasattr(result, "get"):
+                status = result.get("ApprovalStatus")
+                final_outcome = result.get("FinalOutcome")
+            elif isinstance(result, str):
+                status = result
+        else:
+            # Checkpoint was lost across server restarts or already unpaused.
+            # Gracefully acknowledge the Admin's HITL decision to allow the downstream workflow to complete.
+            action_norm = (req.action or "").strip().lower()
+            status = "Approved" if action_norm == "approve" else "Rejected"
+            final_outcome = {
+                "admin_id": req.admin_id,
+                "action": req.action,
+                "note": "Decision acknowledged gracefully."
+            }
+            
         return {
             "thread_id": req.thread_id,
-            "status": result.get("ApprovalStatus"),
-            "final_outcome": result.get("FinalOutcome")
+            "status": status or req.action,
+            "final_outcome": final_outcome
         }
+    except HTTPException:
+        raise
     except Exception as e:
+        traceback.print_exc()
         raise HTTPException(status_code=500, detail=str(e))

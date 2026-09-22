@@ -199,20 +199,93 @@ def human_approval_gate(state: MatchingState) -> Dict[str, Any]:
         "recommended": final_outcome.get("recommended_candidate")
     })
 
-    if isinstance(decision, dict) and decision.get("action") == "Approve":
+    # Safely unpack the resume payload whether passed as {"action": "Approve"} or raw string "Approve"
+    action_str = ""
+    if isinstance(decision, dict):
+        action_str = str(decision.get("action") or decision.get("Action") or "")
+    elif isinstance(decision, str):
+        action_str = decision
+
+    if action_str.strip().lower() == "approve":
         state["ApprovalStatus"] = "Approved"
     else:
         state["ApprovalStatus"] = "Rejected"
 
+    if "CompletedSteps" not in state or state["CompletedSteps"] is None:
+        state["CompletedSteps"] = []
     state["CompletedSteps"].append("human_approval_gate")
     return state
 
 def finalize_workflow(state: MatchingState) -> Dict[str, Any]:
     state["CompletedAt"] = datetime.now(timezone.utc).isoformat()
     state["CurrentStep"] = "Completed"
+    
+    if "FinalOutcome" not in state or state["FinalOutcome"] is None:
+        state["FinalOutcome"] = {}
+    if "CompletedSteps" not in state or state["CompletedSteps"] is None:
+        state["CompletedSteps"] = []
+    if "finalize_workflow" not in state["CompletedSteps"]:
+        state["CompletedSteps"].append("finalize_workflow")
+        
     return state
 
-# Compile graph with MemorySaver checkpointer
+import pickle
+from collections import defaultdict
+
+class PersistentMemorySaver(MemorySaver):
+    def __init__(self, file_path=None):
+        super().__init__()
+        if file_path is None:
+            data_dir = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "data")
+            file_path = os.path.join(data_dir, "checkpoints.pkl")
+        self.file_path = file_path
+        self._load()
+
+    def _to_plain_dict(self, d):
+        if hasattr(d, "items"):
+            return {k: self._to_plain_dict(v) for k, v in d.items()}
+        return d
+
+    def _save(self):
+        try:
+            os.makedirs(os.path.dirname(os.path.abspath(self.file_path)), exist_ok=True)
+            with open(self.file_path, "wb") as f:
+                data = (
+                    self._to_plain_dict(self.storage),
+                    self._to_plain_dict(self.writes),
+                    self._to_plain_dict(self.blobs)
+                )
+                pickle.dump(data, f)
+        except Exception as e:
+            logger.warning(f"Failed to persist LangGraph checkpoint: {e}")
+
+    def _load(self):
+        if not os.path.exists(self.file_path):
+            return
+        try:
+            with open(self.file_path, "rb") as f:
+                storage_raw, writes_raw, blobs_raw = pickle.load(f)
+                for tid, ns_dict in storage_raw.items():
+                    for ns, cp_dict in ns_dict.items():
+                        self.storage[tid][ns].update(cp_dict)
+                for k, v in writes_raw.items():
+                    self.writes[k].update(v)
+                self.blobs.update(blobs_raw)
+                logger.info(f"Loaded LangGraph checkpoints from {self.file_path}")
+        except Exception as e:
+            logger.warning(f"Failed to load LangGraph checkpoint: {e}")
+
+    def put(self, config, checkpoint, metadata, new_versions):
+        res = super().put(config, checkpoint, metadata, new_versions)
+        self._save()
+        return res
+
+    def put_writes(self, config, writes, task_id, task_type="regular"):
+        res = super().put_writes(config, writes, task_id, task_type)
+        self._save()
+        return res
+
+# Compile graph with PersistentMemorySaver checkpointer
 builder = StateGraph(MatchingState)
 builder.add_node("match_and_score_providers", match_and_score_providers)
 builder.add_node("human_approval_gate", human_approval_gate)
@@ -223,5 +296,5 @@ builder.add_edge("match_and_score_providers", "human_approval_gate")
 builder.add_edge("human_approval_gate", "finalize_workflow")
 builder.add_edge("finalize_workflow", END)
 
-checkpointer = MemorySaver()
+checkpointer = PersistentMemorySaver()
 graph = builder.compile(checkpointer=checkpointer)

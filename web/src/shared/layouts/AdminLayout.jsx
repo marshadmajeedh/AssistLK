@@ -67,7 +67,7 @@ function AdminLayout() {
             Service Requests
           </NavLink>
 
-          <NavLink to="/providers">
+          <NavLink to="/admin/providers">
             Providers
           </NavLink>
 
@@ -82,6 +82,7 @@ function AdminLayout() {
           <NavLink to="/ai-workflows">
             AI Workflows
           </NavLink>
+
         </nav>
 
         <div className="admin-sidebar-footer" style={{ marginTop: spacing.xl }}>

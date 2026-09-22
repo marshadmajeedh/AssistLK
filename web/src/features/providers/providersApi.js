@@ -15,3 +15,13 @@ export const getCertificateUrl = (fileName) => {
   const prefix = baseUrl.endsWith('/api') ? '' : '/api';
   return `${baseUrl}${prefix}/providers/certificates/${fileName}`;
 };
+
+export const getMatchApprovals = async () => {
+  const response = await apiClient.get('/api/providers/match/pending');
+  return response.data;
+};
+
+export const resumeMatch = async (threadId, action) => {
+  const response = await apiClient.post(`/api/providers/match/${threadId}/resume`, { action });
+  return response.data;
+};

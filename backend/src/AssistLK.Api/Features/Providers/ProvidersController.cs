@@ -328,17 +328,36 @@ public class ProvidersController : ControllerBase
 
         var latestMatch = await _dbContext.MatchedCandidates
             .Include(m => m.MatchingExecution)
-            .Where(m => m.ProviderId == profile.Id && m.Status == MatchedCandidateStatus.Recommended)
+            .Where(m => m.ProviderId == profile.Id 
+                     && m.Status == MatchedCandidateStatus.Recommended
+                     && m.MatchingExecution != null
+                     && m.MatchingExecution.Status == MatchingExecutionStatus.Completed)
             .OrderByDescending(m => m.CreatedAt)
             .FirstOrDefaultAsync(cancellationToken);
         if (latestMatch == null) return NoContent(); 
 
         ServiceRequest? serviceRequest = null;
+        string? component1Review = null;
         if (latestMatch.MatchingExecution != null)
         {
+            var srId = latestMatch.MatchingExecution.ServiceRequestId;
             serviceRequest = await _serviceRequestRepository.GetByIdAsync(
-                latestMatch.MatchingExecution.ServiceRequestId,
+                srId,
                 cancellationToken: cancellationToken);
+
+            var analysis = await _dbContext.ProblemAnalyses
+                .Where(p => p.ServiceRequestId == srId)
+                .OrderByDescending(p => p.CreatedAt)
+                .FirstOrDefaultAsync(cancellationToken);
+
+            if (analysis != null && !string.IsNullOrWhiteSpace(analysis.DetectedProblem))
+            {
+                component1Review = analysis.DetectedProblem;
+            }
+            else if (!string.IsNullOrWhiteSpace(serviceRequest?.Description))
+            {
+                component1Review = serviceRequest.Description;
+            }
         }
 
         var category = !string.IsNullOrWhiteSpace(serviceRequest?.Category) && serviceRequest.Category != "Unclassified"
@@ -355,7 +374,11 @@ public class ProvidersController : ControllerBase
             category = category,
             distanceKm = latestMatch.DistanceKm,
             urgency = urgency,
-            rationale = latestMatch.MatchRationale,
+            description = serviceRequest?.Description,
+            detectedProblem = component1Review,
+            aiRationale = component1Review ?? serviceRequest?.Description ?? latestMatch.MatchRationale,
+            rationale = component1Review ?? serviceRequest?.Description ?? latestMatch.MatchRationale,
+            matchingRationale = latestMatch.MatchRationale,
             score = latestMatch.Score,
             customerLatitude = serviceRequest?.Latitude,
             customerLongitude = serviceRequest?.Longitude
@@ -374,7 +397,11 @@ public class ProvidersController : ControllerBase
         if (profile == null) return NotFound("Provider profile not found.");
 
         var candidate = await _dbContext.MatchedCandidates
-            .Where(m => m.ProviderId == profile.Id && m.Status == MatchedCandidateStatus.Recommended)
+            .Include(m => m.MatchingExecution)
+            .Where(m => m.ProviderId == profile.Id 
+                     && m.Status == MatchedCandidateStatus.Recommended
+                     && m.MatchingExecution != null
+                     && m.MatchingExecution.Status == MatchingExecutionStatus.Completed)
             .OrderByDescending(m => m.CreatedAt)
             .FirstOrDefaultAsync(cancellationToken);
         if (candidate == null) return NotFound("No active recommended match found.");
@@ -397,7 +424,11 @@ public class ProvidersController : ControllerBase
         if (profile == null) return NotFound("Provider profile not found.");
 
         var candidate = await _dbContext.MatchedCandidates
-            .Where(m => m.ProviderId == profile.Id && m.Status == MatchedCandidateStatus.Recommended)
+            .Include(m => m.MatchingExecution)
+            .Where(m => m.ProviderId == profile.Id 
+                     && m.Status == MatchedCandidateStatus.Recommended
+                     && m.MatchingExecution != null
+                     && m.MatchingExecution.Status == MatchingExecutionStatus.Completed)
             .OrderByDescending(m => m.CreatedAt)
             .FirstOrDefaultAsync(cancellationToken);
         if (candidate == null) return NotFound("No active recommended match found.");

@@ -9,6 +9,7 @@ import 'providers/provider_dashboard_provider.dart';
 import 'services/provider_service.dart';
 import 'widgets/job_alert_card.dart';
 import 'widgets/update_profile_bottom_sheet.dart';
+import 'providers/web_notifications.dart';
 
 class ProviderHomeScreen extends StatefulWidget {
   const ProviderHomeScreen({super.key});
@@ -308,6 +309,168 @@ class _ProviderHomeView extends StatelessWidget {
           ),
         ],
       ),
+    );
+  }
+
+  void _openSettingsDialog(
+    BuildContext context,
+    ProviderDashboardProvider dashboard,
+  ) {
+    showDialog(
+      context: context,
+      builder: (dialogCtx) {
+        return StatefulBuilder(
+          builder: (context, setDialogState) {
+            final permStatus = getNotificationPermissionStatus();
+            return AlertDialog(
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(16),
+              ),
+              title: const Row(
+                children: [
+                  Icon(Icons.settings, color: Colors.blue),
+                  SizedBox(width: 8),
+                  Text(
+                    'Workspace Settings',
+                    style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+                  ),
+                ],
+              ),
+              content: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Text(
+                    'Audio & Alert Preferences',
+                    style: TextStyle(
+                      fontWeight: FontWeight.bold,
+                      fontSize: 13,
+                      color: Colors.blueGrey,
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                  SwitchListTile(
+                    contentPadding: EdgeInsets.zero,
+                    secondary: Icon(
+                      dashboard.isVoiceAlertEnabled
+                          ? Icons.volume_up
+                          : Icons.volume_off,
+                      color: dashboard.isVoiceAlertEnabled
+                          ? Colors.blue
+                          : Colors.grey,
+                    ),
+                    title: const Text(
+                      'AI Voice Alert',
+                      style:
+                          TextStyle(fontSize: 14, fontWeight: FontWeight.bold),
+                    ),
+                    subtitle: const Text(
+                      'Speaks basic audio notification when a new job arrives',
+                      style: TextStyle(fontSize: 12),
+                    ),
+                    value: dashboard.isVoiceAlertEnabled,
+                    onChanged: (val) {
+                      dashboard.toggleVoiceAlert(val);
+                      setDialogState(() {});
+                    },
+                  ),
+                  const Divider(height: 20),
+                  const Text(
+                    'Desktop Notifications (Chrome)',
+                    style: TextStyle(
+                      fontWeight: FontWeight.bold,
+                      fontSize: 13,
+                      color: Colors.blueGrey,
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                  Row(
+                    children: [
+                      Icon(
+                        permStatus == 'granted'
+                            ? Icons.check_circle
+                            : Icons.info_outline,
+                        color: permStatus == 'granted'
+                            ? Colors.green
+                            : Colors.orange,
+                        size: 18,
+                      ),
+                      const SizedBox(width: 8),
+                      Text(
+                        'Status: ${permStatus.toUpperCase()}',
+                        style: TextStyle(
+                          fontSize: 12,
+                          fontWeight: FontWeight.bold,
+                          color: permStatus == 'granted'
+                              ? Colors.green.shade800
+                              : Colors.orange.shade800,
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 10),
+                  Wrap(
+                    spacing: 8,
+                    runSpacing: 6,
+                    children: [
+                      ElevatedButton.icon(
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: Colors.blue.shade700,
+                          foregroundColor: Colors.white,
+                          padding: const EdgeInsets.symmetric(
+                              horizontal: 10, vertical: 8),
+                          visualDensity: VisualDensity.compact,
+                        ),
+                        icon: const Icon(Icons.notifications_active, size: 16),
+                        label: const Text('Enable Notifications',
+                            style: TextStyle(fontSize: 12)),
+                        onPressed: () {
+                          requestNotificationPermissions();
+                          setDialogState(() {});
+                        },
+                      ),
+                      OutlinedButton.icon(
+                        style: OutlinedButton.styleFrom(
+                          padding: const EdgeInsets.symmetric(
+                              horizontal: 10, vertical: 8),
+                          visualDensity: VisualDensity.compact,
+                        ),
+                        icon: const Icon(Icons.send, size: 16),
+                        label: const Text('Test Notification',
+                            style: TextStyle(fontSize: 12)),
+                        onPressed: () {
+                          sendTestNotification();
+                        },
+                      ),
+                    ],
+                  ),
+                  if (permStatus == 'denied') ...[
+                    const SizedBox(height: 10),
+                    Container(
+                      padding: const EdgeInsets.all(8),
+                      decoration: BoxDecoration(
+                        color: Colors.red.shade50,
+                        borderRadius: BorderRadius.circular(6),
+                        border: Border.all(color: Colors.red.shade200),
+                      ),
+                      child: Text(
+                        'Notifications are blocked by Chrome.\nTo enable: Click the tune/padlock icon on the left of the URL bar -> Site settings -> Notifications -> Set to Allow.',
+                        style: TextStyle(fontSize: 11, color: Colors.red.shade900),
+                      ),
+                    ),
+                  ],
+                ],
+              ),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.of(dialogCtx).pop(),
+                  child: const Text('Done'),
+                ),
+              ],
+            );
+          },
+        );
+      },
     );
   }
 
@@ -719,6 +882,11 @@ class _ProviderHomeView extends StatelessWidget {
         title: const Text('Provider Workspace'),
         actions: [
           IconButton(
+            icon: const Icon(Icons.settings_outlined),
+            tooltip: 'Workspace Settings',
+            onPressed: () => _openSettingsDialog(context, dashboard),
+          ),
+          IconButton(
             icon: const Icon(Icons.refresh),
             tooltip: 'Refresh Status',
             onPressed: () => dashboard.fetchProfile(),
@@ -1087,11 +1255,26 @@ class _ProviderHomeView extends StatelessWidget {
                                     ?.toString() ??
                                 'Service Request',
                             distance:
-                                '${dashboard.activeJobMatch!['distanceKm']} km',
+                                dashboard.liveDistanceKm != null
+                                    ? dashboard.liveDistanceKm!.toStringAsFixed(1)
+                                    : '${dashboard.activeJobMatch!['distanceKm']}',
                             urgency:
                                 dashboard.activeJobMatch!['urgency']
                                     ?.toString() ??
                                 'Standard',
+                            description: dashboard
+                                .activeJobMatch!['description']
+                                ?.toString(),
+                            aiRationale: (dashboard
+                                        .activeJobMatch!['detectedProblem'] ??
+                                    dashboard
+                                        .activeJobMatch!['aiRationale'] ??
+                                    dashboard
+                                        .activeJobMatch!['rationale'])
+                                ?.toString(),
+                            isOutOfRange: dashboard.liveDistanceKm != null &&
+                                dashboard.liveDistanceKm! >
+                                    dashboard.operatingRadiusKm,
                             onAccept: onAcceptMatch,
                             onDecline: onDeclineMatch,
                           ),

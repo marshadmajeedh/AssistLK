@@ -8,10 +8,12 @@ import 'package:dio/dio.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../services/provider_service.dart';
+import 'web_notifications.dart';
 
 class ProviderDashboardProvider extends ChangeNotifier {
   static const String _prefIsOnlineKey = 'provider_is_online';
   static const String _prefOperatingRadiusKey = 'provider_operating_radius_km';
+  static const String _prefVoiceAlertKey = 'provider_voice_alert_enabled';
 
   final ProviderService providerService;
   final FlutterTts flutterTts = FlutterTts();
@@ -27,6 +29,8 @@ class ProviderDashboardProvider extends ChangeNotifier {
   double _longitude = 79.8612;
   bool _isLoading = false;
   String? _error;
+  bool _isVoiceAlertEnabled = true;
+  double? _liveDistanceKm;
 
   // Stores the real job dispatched from your Python/C# backend
   Map<String, dynamic>? activeJobMatch;
@@ -40,6 +44,8 @@ class ProviderDashboardProvider extends ChangeNotifier {
   double get longitude => _longitude;
   bool get isLoading => _isLoading;
   String? get error => _error;
+  bool get isVoiceAlertEnabled => _isVoiceAlertEnabled;
+  double? get liveDistanceKm => _liveDistanceKm;
 
   String get verificationStatus =>
       profile?['verificationStatus']?.toString() ?? 'Pending';
@@ -60,6 +66,7 @@ class ProviderDashboardProvider extends ChangeNotifier {
       final prefs = await SharedPreferences.getInstance();
       _isOnline = prefs.getBool(_prefIsOnlineKey) ?? false;
       _operatingRadiusKm = prefs.getDouble(_prefOperatingRadiusKey) ?? 10.0;
+      _isVoiceAlertEnabled = prefs.getBool(_prefVoiceAlertKey) ?? true;
       notifyListeners();
     } catch (e) {
       debugPrint('Failed to load persisted provider preferences: $e');
@@ -201,6 +208,7 @@ class ProviderDashboardProvider extends ChangeNotifier {
           ).listen((Position pos) {
             _latitude = pos.latitude;
             _longitude = pos.longitude;
+            _updateLiveDistance();
             notifyListeners();
             if (_isOnline && isVerified) {
               _syncAvailability();
@@ -219,8 +227,48 @@ class ProviderDashboardProvider extends ChangeNotifier {
     }
   }
 
-  void toggleOnlineStatus(bool value) {
+  void _updateLiveDistance() {
+    if (activeJobMatch != null) {
+      final num? cLat = activeJobMatch!['customerLatitude'] as num?;
+      final num? cLng = activeJobMatch!['customerLongitude'] as num?;
+      if (cLat != null && cLng != null) {
+        final distanceInMeters = Geolocator.distanceBetween(
+          _latitude,
+          _longitude,
+          cLat.toDouble(),
+          cLng.toDouble(),
+        );
+        _liveDistanceKm = distanceInMeters / 1000.0;
+      }
+    } else {
+      _liveDistanceKm = null;
+    }
+  }
+
+  void toggleVoiceAlert(bool value) async {
+    _isVoiceAlertEnabled = value;
+    notifyListeners();
+    if (value && kIsWeb) {
+      requestNotificationPermissions();
+    }
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setBool(_prefVoiceAlertKey, value);
+    } catch (e) {
+      debugPrint('Failed to save voice alert preference: $e');
+    }
+  }
+
+  void toggleOnlineStatus(bool value) async {
     if (!isVerified) return;
+
+    if (value) {
+      if (kIsWeb) {
+        requestNotificationPermissions();
+      }
+      // Force an immediate GPS sync before going online
+      await _checkPermissionsAndFetchLocation();
+    }
 
     _isOnline = value;
     notifyListeners();
@@ -306,11 +354,12 @@ class ProviderDashboardProvider extends ChangeNotifier {
       if (response.statusCode == 200 && response.data != null) {
         final data = Map<String, dynamic>.from(response.data);
         activeJobMatch = data;
+        _updateLiveDistance();
 
         final jobId = data['jobId']?.toString();
         if (jobId != null && jobId != _lastAnnouncedJobId) {
           _lastAnnouncedJobId = jobId;
-          _announceJob(data);
+          unawaited(_announceJob(data));
         }
 
         final dynamic rawLat = data['customerLatitude'];
@@ -318,18 +367,19 @@ class ProviderDashboardProvider extends ChangeNotifier {
         if (rawLat != null && rawLng != null && routePoints.isEmpty) {
           final double custLat = (rawLat as num).toDouble();
           final double custLng = (rawLng as num).toDouble();
-          await _fetchRoute(custLat, custLng);
+          unawaited(_fetchRoute(custLat, custLng));
         }
 
         notifyListeners();
         return;
-      } else {
+      } else if (response.statusCode == 204) {
+        // Only clear if server explicitly reports no active dispatch
         _clearJobState();
         return;
       }
     } catch (e) {
-      debugPrint('Network fetch for active dispatch failed or was empty: $e');
-      _clearJobState();
+      debugPrint('Network fetch for active dispatch notice: $e');
+      // Do not clear the active job on transient network glitches
     }
   }
 
@@ -353,17 +403,38 @@ class ProviderDashboardProvider extends ChangeNotifier {
         }
       }
     } catch (e) {
-      debugPrint('Failed to fetch OSRM route: $e');
+      debugPrint('OSRM route fetch skipped or unavailable: $e');
     }
   }
 
   Future<void> _announceJob(Map<String, dynamic> data) async {
-    final category = data['category']?.toString() ?? 'Service Request';
-    final distance = data['distanceKm']?.toString() ?? 'unknown';
-    final urgency = data['urgency']?.toString() ?? 'Standard';
-    await flutterTts.speak(
-      'New $category job alert, $distance kilometers away. $urgency urgency.',
-    );
+    try {
+      final category = data['category']?.toString() ?? 'Service Request';
+      final distance = _liveDistanceKm?.toStringAsFixed(1) ??
+          data['distanceKm']?.toString() ??
+          'unknown';
+      final urgency = data['urgency']?.toString() ?? 'Standard';
+      final problemDesc = (data['detectedProblem'] ??
+              data['description'] ??
+              'New service dispatch received.')
+          .toString();
+
+      if (kIsWeb) {
+        showWebNotification(
+          'New $category Job ($distance km)',
+          problemDesc,
+        );
+      }
+
+      if (_isVoiceAlertEnabled) {
+        // Basic voice message only: never read the long AI review text
+        await flutterTts.speak(
+          'New $category job alert, $distance kilometers away. $urgency urgency.',
+        );
+      }
+    } catch (e) {
+      debugPrint('Job announcement warning: $e');
+    }
   }
 
   void _clearJobState() {

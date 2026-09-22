@@ -1,4 +1,5 @@
 import 'dart:typed_data';
+
 import 'package:flutter/material.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:geocoding/geocoding.dart';
@@ -132,7 +133,9 @@ class _ProviderRegistrationScreenState
           ScaffoldMessenger.of(context).showSnackBar(
             const SnackBar(
               backgroundColor: Colors.green,
-              content: Text('Address location resolved via Nominatim fallback!'),
+              content: Text(
+                'Address location resolved via Nominatim fallback!',
+              ),
             ),
           );
           return;
@@ -152,9 +155,9 @@ class _ProviderRegistrationScreenState
     } catch (e) {
       debugPrint('Nominatim geocoding failed: $e');
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Geocoding search failed: $e')),
-        );
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('Geocoding search failed: $e')));
       }
     } finally {
       if (mounted) {
@@ -260,9 +263,8 @@ class _ProviderRegistrationScreenState
       }
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Failed to pick file: $e')),
-        );
+        ScaffoldMessenger.of(context)
+            .showSnackBar(SnackBar(content: Text('Failed to pick file: $e')));
       }
     }
   }
@@ -287,7 +289,9 @@ class _ProviderRegistrationScreenState
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
           backgroundColor: Colors.red,
-          content: Text('Valid coordinates are required. Please resolve your location.'),
+          content: Text(
+            'Valid coordinates are required. Please resolve your location.',
+          ),
         ),
       );
       return;
@@ -403,9 +407,7 @@ class _ProviderRegistrationScreenState
         _pdfBytes != null || _pdfPath != null || _pdfFileName != null;
 
     return Scaffold(
-      appBar: AppBar(
-        title: const Text('Provider Registration'),
-      ),
+      appBar: AppBar(title: const Text('Provider Registration')),
       body: Stepper(
         currentStep: _currentStep,
         onStepContinue: _isUploading ? null : _onStepContinue,
@@ -477,8 +479,9 @@ class _ProviderRegistrationScreenState
                               ? Icons.visibility_outlined
                               : Icons.visibility_off_outlined,
                         ),
-                        onPressed: () =>
-                            setState(() => _obscurePassword = !_obscurePassword),
+                        onPressed: () => setState(
+                          () => _obscurePassword = !_obscurePassword,
+                        ),
                       ),
                     ),
                     obscureText: _obscurePassword,
@@ -585,7 +588,9 @@ class _ProviderRegistrationScreenState
                             ? const SizedBox(
                                 width: 20,
                                 height: 20,
-                                child: CircularProgressIndicator(strokeWidth: 2),
+                                child: CircularProgressIndicator(
+                                  strokeWidth: 2,
+                                ),
                               )
                             : const Icon(Icons.search),
                         tooltip: 'Search Address Geocoding',
@@ -626,8 +631,11 @@ class _ProviderRegistrationScreenState
                       ),
                       child: Row(
                         children: [
-                          Icon(Icons.check_circle,
-                              color: Colors.green.shade700, size: 20),
+                          Icon(
+                            Icons.check_circle,
+                            color: Colors.green.shade700,
+                            size: 20,
+                          ),
                           const SizedBox(width: 8),
                           Expanded(
                             child: Text(
@@ -653,8 +661,11 @@ class _ProviderRegistrationScreenState
                       ),
                       child: Row(
                         children: [
-                          Icon(Icons.info_outline,
-                              color: Colors.amber.shade800, size: 20),
+                          Icon(
+                            Icons.info_outline,
+                            color: Colors.amber.shade800,
+                            size: 20,
+                          ),
                           const SizedBox(width: 8),
                           const Expanded(
                             child: Text(
@@ -709,8 +720,8 @@ class _ProviderRegistrationScreenState
                     items: _categories
                         .map((c) => DropdownMenuItem(value: c, child: Text(c)))
                         .toList(),
-                    onChanged: (val) => setState(
-                        () => _selectedCategory = val ?? 'Plumbing'),
+                    onChanged: (val) =>
+                        setState(() => _selectedCategory = val ?? 'Plumbing'),
                     decoration: const InputDecoration(
                       labelText: 'Official Service Category',
                       prefixIcon: Icon(Icons.category_outlined),
@@ -722,7 +733,8 @@ class _ProviderRegistrationScreenState
                   TextFormField(
                     decoration: const InputDecoration(
                       labelText: 'Skill Competency',
-                      hintText: 'e.g., Pipe & Leak Repair / Circuit Installation',
+                      hintText:
+                          'e.g., Pipe & Leak Repair / Circuit Installation',
                       prefixIcon: Icon(Icons.handyman_outlined),
                     ),
                     validator: (val) {
@@ -760,8 +772,7 @@ class _ProviderRegistrationScreenState
                           : 'Attached: $_pdfFileName',
                     ),
                     style: ElevatedButton.styleFrom(
-                      backgroundColor:
-                          hasFile ? Colors.green.shade700 : null,
+                      backgroundColor: hasFile ? Colors.green.shade700 : null,
                       foregroundColor: hasFile ? Colors.white : null,
                     ),
                     onPressed: _pickFile,

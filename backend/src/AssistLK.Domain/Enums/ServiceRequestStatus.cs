@@ -7,5 +7,6 @@ public enum ServiceRequestStatus
     AwaitingInformation,
     Analyzed,
     ReadyForMatching,
+    Completed, // <--- මෙන්න මේක එකතු කරන්න
     Cancelled
 }

@@ -22,6 +22,7 @@ public static class DependencyInjection
         );
         services.AddScoped<IUserRepository, UserRepository>();
         services.AddScoped<IServiceRequestRepository, ServiceRequestRepository>();
+        services.AddScoped<IServiceJobRepository, ServiceJobRepository>();
         services.AddScoped<IProblemAnalysisRepository, ProblemAnalysisRepository>();
         services.AddScoped<AssistLK.Application.Attachments.IServiceRequestAttachmentRepository, ServiceRequestAttachmentRepository>();
         services.AddScoped<AssistLK.Application.Attachments.ServiceRequestAttachmentService>();

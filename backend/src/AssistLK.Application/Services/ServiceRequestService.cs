@@ -57,13 +57,16 @@ public class ServiceRequestService : IServiceRequestService
 
     private readonly IServiceRequestRepository _serviceRequestRepository;
     private readonly IProblemAnalysisRepository _problemAnalysisRepository;
+    private readonly IServiceJobRepository _serviceJobRepository;
 
     public ServiceRequestService(
         IServiceRequestRepository serviceRequestRepository,
-        IProblemAnalysisRepository problemAnalysisRepository)
+        IProblemAnalysisRepository problemAnalysisRepository,
+        IServiceJobRepository serviceJobRepository)
     {
         _serviceRequestRepository = serviceRequestRepository;
         _problemAnalysisRepository = problemAnalysisRepository;
+        _serviceJobRepository = serviceJobRepository;
     }
 
     public async Task<ServiceRequestResponse> CreateAsync(
@@ -97,7 +100,7 @@ public class ServiceRequestService : IServiceRequestService
         await _serviceRequestRepository.AddAsync(serviceRequest, cancellationToken);
         await _serviceRequestRepository.SaveChangesAsync(cancellationToken);
 
-        return MapResponse(serviceRequest, includeVisualEvidence: true);
+        return await MapResponse(serviceRequest, includeVisualEvidence: true, cancellationToken: cancellationToken);
     }
 
     public async Task<ServiceRequestResponse> GetByIdAsync(
@@ -112,7 +115,7 @@ public class ServiceRequestService : IServiceRequestService
             includeClarifications: true,
             cancellationToken: cancellationToken);
 
-        return MapResponse(serviceRequest, includeVisualEvidence: true);
+        return await MapResponse(serviceRequest, includeVisualEvidence: true, cancellationToken: cancellationToken);
     }
 
     public async Task<IReadOnlyList<ServiceRequestResponse>> GetCurrentCustomerRequestsAsync(
@@ -123,7 +126,15 @@ public class ServiceRequestService : IServiceRequestService
             customerId,
             cancellationToken);
 
-        return requests.Select(r => MapResponse(r)).ToArray();
+        var responses = new List<ServiceRequestResponse>(requests.Count);
+        foreach (var request in requests)
+        {
+            responses.Add(await MapResponse(
+                request,
+                cancellationToken: cancellationToken));
+        }
+
+        return responses;
     }
 
     public async Task<ServiceRequestResponse> UpdateAsync(
@@ -187,7 +198,7 @@ public class ServiceRequestService : IServiceRequestService
         _serviceRequestRepository.Update(serviceRequest);
         await _serviceRequestRepository.SaveChangesAsync(cancellationToken);
 
-        return MapResponse(serviceRequest, includeVisualEvidence: true);
+        return await MapResponse(serviceRequest, includeVisualEvidence: true, cancellationToken: cancellationToken);
     }
 
     public async Task<ServiceRequestResponse> CancelAsync(
@@ -210,7 +221,7 @@ public class ServiceRequestService : IServiceRequestService
         _serviceRequestRepository.Update(serviceRequest);
         await _serviceRequestRepository.SaveChangesAsync(cancellationToken);
 
-        return MapResponse(serviceRequest, includeVisualEvidence: true);
+        return await MapResponse(serviceRequest, includeVisualEvidence: true, cancellationToken: cancellationToken);
     }
 
     public async Task<ProblemAnalysisResponse> ApplyProblemAnalysisResultAsync(
@@ -399,7 +410,7 @@ public class ServiceRequestService : IServiceRequestService
         _serviceRequestRepository.Update(serviceRequest);
         await _serviceRequestRepository.SaveChangesAsync(cancellationToken);
 
-        return MapResponse(serviceRequest, includeVisualEvidence: true);
+        return await MapResponse(serviceRequest, includeVisualEvidence: true, cancellationToken: cancellationToken);
     }
 
     public virtual async Task<ServiceRequestStatus> GetPreAnalysisStatusAsync(
@@ -456,7 +467,7 @@ public class ServiceRequestService : IServiceRequestService
         _serviceRequestRepository.Update(serviceRequest);
         await _serviceRequestRepository.SaveChangesAsync(cancellationToken);
 
-        return MapResponse(serviceRequest, includeVisualEvidence: true);
+        return await MapResponse(serviceRequest, includeVisualEvidence: true, cancellationToken: cancellationToken);
     }
 
     public async Task<ServiceRequestResponse> MarkReadyForMatchingAsync(
@@ -535,7 +546,7 @@ public class ServiceRequestService : IServiceRequestService
         _serviceRequestRepository.Update(serviceRequest);
         await _serviceRequestRepository.SaveChangesAsync(cancellationToken);
 
-        return MapResponse(serviceRequest, includeVisualEvidence: true);
+        return await MapResponse(serviceRequest, includeVisualEvidence: true, cancellationToken: cancellationToken);
     }
 
     public async Task<IReadOnlyList<ServiceRequestClarificationDto>> SubmitClarificationAnswersAsync(
@@ -677,7 +688,15 @@ public class ServiceRequestService : IServiceRequestService
             parsedUrgency,
             cancellationToken);
 
-        return requests.Select(r => MapResponse(r)).ToArray();
+        var responses = new List<ServiceRequestResponse>(requests.Count);
+        foreach (var request in requests)
+        {
+            responses.Add(await MapResponse(
+                request,
+                cancellationToken: cancellationToken));
+        }
+
+        return responses;
     }
 
     public async Task<ServiceRequestResponse> GetByIdForAdminAsync(
@@ -695,7 +714,7 @@ public class ServiceRequestService : IServiceRequestService
             throw new KeyNotFoundException("Service request was not found.");
         }
 
-        return MapResponse(serviceRequest);
+        return await MapResponse(serviceRequest, cancellationToken: cancellationToken);
     }
 
     private async Task<ServiceRequest> GetOwnedRequestAsync(
@@ -819,7 +838,10 @@ public class ServiceRequestService : IServiceRequestService
         }
     }
 
-    private static ServiceRequestResponse MapResponse(ServiceRequest serviceRequest, bool includeVisualEvidence = false)
+    private async Task<ServiceRequestResponse> MapResponse(
+        ServiceRequest serviceRequest,
+        bool includeVisualEvidence = false,
+        CancellationToken cancellationToken = default)
     {
         ProblemAnalysisSummaryDto? latestAnalysis = null;
         if (serviceRequest.ProblemAnalyses != null && serviceRequest.ProblemAnalyses.Any())
@@ -851,6 +873,9 @@ public class ServiceRequestService : IServiceRequestService
         return new ServiceRequestResponse
         {
             ServiceRequestId = serviceRequest.Id,
+            ServiceJobId = await _serviceJobRepository.GetIdByServiceRequestIdAsync(
+                serviceRequest.Id,
+                cancellationToken),
             EvidenceRevision = serviceRequest.EvidenceRevision,
             CustomerId = serviceRequest.CustomerId,
             CategoryHint = serviceRequest.CategoryHint,

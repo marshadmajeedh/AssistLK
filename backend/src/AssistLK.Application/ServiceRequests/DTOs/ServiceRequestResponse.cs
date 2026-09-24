@@ -8,6 +8,7 @@ public class ServiceRequestResponse
     public long EvidenceRevision { get; set; } = 1;
 
     public Guid ServiceRequestId { get; set; }
+    public Guid? ServiceJobId { get; set; }
     public Guid CustomerId { get; set; }
     public string? CategoryHint { get; set; }
     public string Category { get; set; } = string.Empty;

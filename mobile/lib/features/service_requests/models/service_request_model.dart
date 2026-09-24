@@ -8,6 +8,7 @@ class ServiceRequestModel {
   static const Object _sentinel = Object();
 
   final String serviceRequestId;
+  final String? serviceJobId;
   final String customerId;
   final String? categoryHint;
   final String category;
@@ -25,6 +26,7 @@ class ServiceRequestModel {
 
   const ServiceRequestModel({
     required this.serviceRequestId,
+    this.serviceJobId,
     required this.customerId,
     this.categoryHint,
     required this.category,
@@ -80,6 +82,7 @@ class ServiceRequestModel {
   factory ServiceRequestModel.fromJson(Map<String, dynamic> json) {
     return ServiceRequestModel(
       serviceRequestId: json['serviceRequestId']?.toString() ?? '',
+      serviceJobId: json['serviceJobId']?.toString(),
       customerId: json['customerId']?.toString() ?? '',
       categoryHint: json['categoryHint'] as String?,
       category: json['category'] as String? ?? 'Unclassified',
@@ -120,6 +123,7 @@ class ServiceRequestModel {
   Map<String, dynamic> toJson() {
     return {
       'serviceRequestId': serviceRequestId,
+      'serviceJobId': serviceJobId,
       'customerId': customerId,
       'categoryHint': categoryHint,
       'category': category,
@@ -139,6 +143,7 @@ class ServiceRequestModel {
 
   ServiceRequestModel copyWith({
     String? serviceRequestId,
+    String? serviceJobId,
     String? customerId,
     Object? categoryHint = _sentinel,
     String? category,
@@ -156,6 +161,7 @@ class ServiceRequestModel {
   }) {
     return ServiceRequestModel(
       serviceRequestId: serviceRequestId ?? this.serviceRequestId,
+      serviceJobId: serviceJobId ?? this.serviceJobId,
       customerId: customerId ?? this.customerId,
       categoryHint: identical(categoryHint, _sentinel)
           ? this.categoryHint

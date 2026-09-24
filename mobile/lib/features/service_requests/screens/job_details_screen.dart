@@ -35,12 +35,14 @@ class _JobDetailsScreenState extends State<JobDetailsScreen> {
     setState(() => _isUpdating = true);
 
     try {
-      final result = await context.read<ServiceRequestProvider>().validateTransition(
-        jobId: widget.jobId,
-        currentStatus: _status,
-        targetStatus: targetState,
-        elapsedMinutes: 0,
-      );
+      final result = await context
+          .read<ServiceRequestProvider>()
+          .validateTransition(
+            jobId: widget.jobId,
+            currentStatus: _status,
+            targetStatus: targetState,
+            elapsedMinutes: 0,
+          );
 
       if (!mounted) return;
 
@@ -48,9 +50,21 @@ class _JobDetailsScreenState extends State<JobDetailsScreen> {
         final isValid = result['is_valid'] ?? result['isValid'] ?? false;
 
         if (isValid == true) {
-          setState(() {
-            _status = targetState;
-          });
+          if (targetState == 'COMPLETED') {
+            final persisted = await context
+                .read<ServiceRequestProvider>()
+                .updateRequestStatusToCompleted(widget.jobId);
+            if (!mounted) return;
+            if (!persisted) {
+              _showErrorDialog(
+                context.read<ServiceRequestProvider>().error ??
+                    'Failed to persist the completed status.',
+              );
+              return;
+            }
+          }
+
+          setState(() => _status = targetState);
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(
               content: Text('Status updated successfully to $targetState'),
@@ -58,7 +72,10 @@ class _JobDetailsScreenState extends State<JobDetailsScreen> {
             ),
           );
         } else {
-          final message = result['reason'] ?? result['message'] ?? 'Invalid status transition.';
+          final message =
+              result['reason'] ??
+              result['message'] ??
+              'Invalid status transition.';
           _showErrorDialog(message.toString());
         }
       } else {
@@ -91,18 +108,13 @@ class _JobDetailsScreenState extends State<JobDetailsScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(
-        title: Text('Job #${widget.jobId}'),
-      ),
+      appBar: AppBar(title: Text('Job #${widget.jobId}')),
       body: Padding(
         padding: const EdgeInsets.all(AppSpacing.lg),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text(
-              'Current Status: $_status',
-              style: AppTextStyles.cardHeading,
-            ),
+            Text('Current Status: $_status', style: AppTextStyles.cardHeading),
             const SizedBox(height: AppSpacing.xl),
             AppButton(
               text: 'Start Job',
@@ -111,7 +123,9 @@ class _JobDetailsScreenState extends State<JobDetailsScreen> {
             ),
             const SizedBox(height: AppSpacing.md),
             OutlinedButton(
-              onPressed: _isUpdating ? null : () => _updateJobStatus('COMPLETED'),
+              onPressed: _isUpdating
+                  ? null
+                  : () => _updateJobStatus('COMPLETED'),
               style: OutlinedButton.styleFrom(
                 minimumSize: const Size(double.infinity, 48),
               ),

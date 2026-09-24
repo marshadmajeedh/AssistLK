@@ -6,6 +6,8 @@ import '../widgets/problem_photos.dart';
 import '../widgets/request_summary_artwork.dart';
 import '../models/location_source.dart';
 import '../widgets/location_attribution.dart';
+// FeedbackScreen එක සඳහා අලුත් import එක
+import '../../feedback/screens/feedback_screen.dart';
 
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
@@ -93,6 +95,8 @@ class _ServiceRequestDetailScreenState
         return 'Needs more information';
       case ServiceRequestStatus.analyzed:
       case ServiceRequestStatus.readyForMatching:
+      // Completed status එකේදිත් Category එක හරියටම පෙන්වීමට
+      case ServiceRequestStatus.completed:
         return CanonicalServiceCategory.fromCanonicalOrDisplayName(
               request.category,
             )?.displayName ??
@@ -315,8 +319,10 @@ class _ServiceRequestDetailScreenState
       appBar: AppBar(
         title: const Text('Request Details'),
         actions: [
+          // Completed වුණාම Cancel button එක පෙන්වන්නේ නැති වෙන්න හැදුවා
           if (request.status != ServiceRequestStatus.cancelled &&
               request.status != ServiceRequestStatus.readyForMatching &&
+              request.status != ServiceRequestStatus.completed &&
               request.status != ServiceRequestStatus.analyzing &&
               !provider.isAnalyzing &&
               !provider.analysisStateNeedsRefresh)
@@ -794,7 +800,7 @@ class _ServiceRequestDetailScreenState
         );
 
       case ServiceRequestStatus.readyForMatching:
-        final displayAnalysis =
+        final readyDisplayAnalysis =
             analysis ??
             (request.latestAnalysis != null
                 ? ProblemUnderstandingResultModel(
@@ -825,7 +831,7 @@ class _ServiceRequestDetailScreenState
         return Column(
           children: [
             AnalysisResultCard(
-              analysis: displayAnalysis,
+              analysis: readyDisplayAnalysis,
               visualEvidence:
                   request.latestAnalysis?.visualEvidence ??
                   const AnalysisVisualEvidence(),
@@ -838,32 +844,84 @@ class _ServiceRequestDetailScreenState
           ],
         );
 
-      case ServiceRequestStatus.cancelled:
-        return Container(
-          width: double.infinity,
-          padding: const EdgeInsets.all(AppSpacing.md),
-          decoration: BoxDecoration(
-            color: const Color(0xFFFEF2F2),
-            borderRadius: BorderRadius.circular(AppRadius.medium),
-            border: Border.all(color: const Color(0xFFFECACA)),
-          ),
-          child: const Row(
+      // Job Completed UI සහ Feedback Button එක
+      case ServiceRequestStatus.completed:
+        return AppCard(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Icon(Icons.cancel_rounded, color: AppColors.error),
-              SizedBox(width: AppSpacing.sm),
-              Expanded(
-                child: Text(
-                  'This service request has been cancelled.',
-                  style: TextStyle(
-                    fontSize: 14,
-                    color: AppColors.error,
-                    fontWeight: FontWeight.w500,
+              const Row(
+                children: [
+                  Icon(
+                    Icons.check_circle_rounded,
+                    color: AppColors.success,
+                    size: 24,
                   ),
+                  SizedBox(width: AppSpacing.sm),
+                  Expanded(
+                    child: Text(
+                      'Job Completed',
+                      style: AppTextStyles.cardHeading,
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: AppSpacing.xs),
+              Text(
+                'Your service request has been successfully completed. We would love to hear your thoughts!',
+                style: AppTextStyles.body.copyWith(
+                  color: AppColors.textSecondary,
                 ),
+              ),
+              const SizedBox(height: AppSpacing.md),
+              AppButton(
+                text: 'Provide Feedback',
+                onPressed: () {
+                  final serviceJobId = request.serviceJobId;
+                  if (serviceJobId == null || serviceJobId.isEmpty) {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      const SnackBar(
+                        content: Text(
+                          'Feedback is unavailable until a service job is assigned.',
+                        ),
+                      ),
+                    );
+                    return;
+                  }
+
+                  Navigator.of(context).push(
+                    MaterialPageRoute(
+                      builder: (_) => FeedbackScreen(jobId: serviceJobId),
+                    ),
+                  );
+                },
               ),
             ],
           ),
         );
+
+      case ServiceRequestStatus.cancelled:
+        return AppCard(
+          child: Padding(
+            padding: const EdgeInsets.symmetric(vertical: AppSpacing.md),
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                const Icon(Icons.cancel_outlined, color: AppColors.error),
+                const SizedBox(width: AppSpacing.sm),
+                Text(
+                  'This request has been cancelled.',
+                  style: AppTextStyles.body.copyWith(
+                    color: AppColors.textSecondary,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        );
+
+      default:
+        return const SizedBox.shrink();
     }
   }
 }

@@ -84,6 +84,13 @@ class StatusBadge extends StatelessWidget {
           border: Color(0xFFBBF7D0),
           foreground: AppColors.success,
         );
+      // අලුතින් එකතු කළ Completed status එක සඳහා වර්ණ
+      case ServiceRequestStatus.completed:
+        return const _BadgeColors(
+          background: Color(0xFFECFDF5), 
+          border: Color(0xFFA7F3D0),     
+          foreground: Color(0xFF059669), // තද කොළ පැහැයක්
+        );
       case ServiceRequestStatus.cancelled:
         return const _BadgeColors(
           background: Color(0xFFF3F4F6),

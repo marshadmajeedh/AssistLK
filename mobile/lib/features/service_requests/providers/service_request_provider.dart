@@ -311,6 +311,43 @@ class ServiceRequestProvider extends ChangeNotifier {
     }
   }
 
+  Future<bool> updateRequestStatusToCompleted(String jobId) async {
+    final generation = _generation;
+    if (!_isCurrent(generation)) return false;
+    _setLoading(true);
+    _error = null;
+
+    try {
+      await serviceRequestService.updateRequestStatusToCompleted(jobId);
+      if (!_isCurrent(generation)) return false;
+
+      final completedRequest = _requests
+          .cast<ServiceRequestModel?>()
+          .firstWhere(
+            (request) => request?.serviceRequestId == jobId,
+            orElse: () => null,
+          );
+      if (completedRequest != null) {
+        final updated = completedRequest.copyWith(
+          status: ServiceRequestStatus.completed,
+          updatedAt: DateTime.now(),
+        );
+        _updateRequestInList(updated);
+        if (_currentRequest?.serviceRequestId == jobId) {
+          _currentRequest = updated;
+        }
+      }
+      notifyListeners();
+      return true;
+    } catch (err) {
+      if (!_isCurrent(generation)) return false;
+      _error = serviceRequestService.getErrorMessage(err);
+      return false;
+    } finally {
+      if (_isCurrent(generation)) _setLoading(false);
+    }
+  }
+
   Future<void> _reconcileAnalysisState(
     String id,
     Object analysisError, {
@@ -318,9 +355,12 @@ class ServiceRequestProvider extends ChangeNotifier {
     Duration? pollInterval,
     int? maxPolls,
   }) async {
-    final message = serviceRequestService.getAnalysisErrorMessage(analysisError);
+    final message = serviceRequestService.getAnalysisErrorMessage(
+      analysisError,
+    );
     final isConflict =
-        analysisError is DioException && analysisError.response?.statusCode == 409;
+        analysisError is DioException &&
+        analysisError.response?.statusCode == 409;
 
     try {
       final request = await serviceRequestService.getById(id);

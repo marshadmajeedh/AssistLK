@@ -220,6 +220,23 @@ class ServiceRequestService {
     return Map<String, dynamic>.from(response.data as Map);
   }
 
+  Future<Map<String, dynamic>> updateRequestStatusToCompleted(
+    String jobId, {
+    double timeElapsedMinutes = 0,
+    String notes = 'Work completed',
+  }) async {
+    final response = await apiClient.client.put(
+      '/service-jobs/$jobId/status',
+      data: {
+        'newStatus': 'Completed',
+        'timeElapsedMinutes': timeElapsedMinutes,
+        'notes': notes,
+      },
+    );
+
+    return Map<String, dynamic>.from(response.data as Map);
+  }
+
   Future<Map<String, dynamic>> analyzeSentiment(String feedbackText) async {
     final response = await apiClient.client.post(
       '/validation/analyze-sentiment',

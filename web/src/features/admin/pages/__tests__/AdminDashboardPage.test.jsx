@@ -5,9 +5,11 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import AdminDashboardPage from "../AdminDashboardPage";
 import requestsService from "../../services/adminServiceRequestService";
 import agentService from "../../../aiWorkflows/services/agentMonitoringService";
+import serviceTrackingService from "../../../serviceTracking/services/serviceTrackingService";
 
 vi.mock("../../services/adminServiceRequestService", () => ({ default: { getAll: vi.fn() } }));
 vi.mock("../../../aiWorkflows/services/agentMonitoringService", () => ({ default: { getMetrics: vi.fn() } }));
+vi.mock("../../../serviceTracking/services/serviceTrackingService", () => ({ default: { getComplaints: vi.fn() } }));
 const statuses = ["Created", "Analyzing", "AwaitingInformation", "Analyzed", "ReadyForMatching", "Cancelled", "Analyzed"];
 const requests = statuses.map((status, index) => ({
   serviceRequestId: `a000000${index}-1234-4567-8901-123456789abc`,
@@ -23,6 +25,7 @@ beforeEach(() => {
   vi.resetAllMocks();
   requestsService.getAll.mockResolvedValue(requests);
   agentService.getMetrics.mockResolvedValue(executions);
+  serviceTrackingService.getComplaints.mockResolvedValue([]);
 });
 function renderDashboard() {
   return render(<MemoryRouter initialEntries={["/dashboard"]}><Routes>
@@ -173,6 +176,6 @@ describe("Admin dashboard authoritative metrics", () => {
     agentService.getMetrics.mockResolvedValue([{ ...executions[0], provider: "Gemini", degraded: true, errorSummary: "private failure" }]);
     await loaded();
     expect(document.body).not.toHaveTextContent(/Gemini|degraded|private failure/);
-    expect(screen.getAllByRole("button").map((button) => button.textContent)).toEqual(["View All Requests", "View AI Workflows"]);
+    expect(screen.getAllByRole("button").map((button) => button.textContent)).toEqual(["View All Requests", "View Complaints", "View AI Workflows"]);
   });
 });

@@ -19,6 +19,7 @@ import PlaceholderPage from "../../shared/components/PlaceholderPage";
 import AdminDashboardPage from "../../features/admin/pages/AdminDashboardPage";
 import AdminServiceRequestListPage from "../../features/admin/pages/AdminServiceRequestListPage";
 import AiWorkflowsPage from "../../features/aiWorkflows/pages/AiWorkflowsPage";
+import ServiceTrackingPage from "../../features/serviceTracking/pages/ServiceTrackingPage";
 
 function RootRedirect() {
 	const user = useAuthStore((state) => state.user);
@@ -84,7 +85,7 @@ function AppRouter() {
 						<Route
 							path="/service-tracking"
 							element={
-								<PlaceholderPage title="Service Tracking" />
+								<ServiceTrackingPage />
 							}
 						/>
 

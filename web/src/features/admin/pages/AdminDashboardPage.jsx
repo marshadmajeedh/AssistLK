@@ -8,6 +8,7 @@ import ErrorMessage from "../../../shared/components/ErrorMessage";
 import { colors, spacing, typography } from "../../../shared/theme";
 import adminServiceRequestService from "../services/adminServiceRequestService";
 import agentMonitoringService from "../../aiWorkflows/services/agentMonitoringService";
+import serviceTrackingService from "../../serviceTracking/services/serviceTrackingService";
 import { formatDuration, formatRecordedAt, isValidMetricNumber, summarizeMetrics } from "../../aiWorkflows/utils/metricFormatters";
 import { formatDate } from "../utils/monitoringFormatters";
 import { UrgencyBadge } from "../components/RequestMonitoringDetails";
@@ -66,7 +67,7 @@ export default function AdminDashboardPage() {
   
   // Component 4: Service Tracking & AI Safety Collection
   const trackingSummary = useDashboardCollection(
-    () => fetch('/api/reports/service-summary').then(res => res.ok ? res.json() : []),
+    serviceTrackingService.getComplaints,
     "service tracking & safety logs"
   );
 
@@ -75,11 +76,10 @@ export default function AdminDashboardPage() {
   const agentCards = [["Total Agent Executions", summary.total], ["Completed Executions", summary.completed],
     ["Failed Executions", summary.failed], ["Average Execution Duration", formatDuration(summary.averageDuration)], ["Total Tool Calls", summary.toolCalls]];
 
-  const flaggedCount = trackingSummary.data.filter(j => j.isFlagged).length;
   const safetyCards = [
-    ["Active Tracked Jobs", trackingSummary.data.length],
-    ["AI Suspicious Flags", flaggedCount],
-    ["Completed Jobs", trackingSummary.data.filter(j => j.status === 'Completed').length]
+    ["Total Complaints", trackingSummary.data.length],
+    ["Open Complaints", trackingSummary.data.filter((complaint) => complaint.status === "Open").length],
+    ["Resolved Complaints", trackingSummary.data.filter((complaint) => complaint.status === "Resolved").length]
   ];
 
   return <div className="admin-dashboard" style={{ ...typography.body, color: colors.textPrimary,
@@ -132,36 +132,27 @@ export default function AdminDashboardPage() {
     <section aria-labelledby="dashboard-tracking-heading">
       <div className="dashboard-section-header">
         <h2 id="dashboard-tracking-heading" style={typography.sectionHeading}>Component 4: Service Tracking & Safety Operations</h2>
+        <AppButton variant="outline" onClick={() => navigate("/service-tracking")}>View Complaints</AppButton>
       </div>
       <CollectionState result={trackingSummary} loadingMessage="Loading safety & tracking metrics..." retryLabel="Retry Safety Metrics">
         <Metrics cards={safetyCards} />
         <AppCard className="table-shell">
-          <h3 style={typography.cardHeading}>Live Job Safety Monitoring</h3>
-          {trackingSummary.data.length === 0 ? <p>No tracked service jobs available.</p> : <table className="dashboard-table">
-            <caption>Live Service Jobs and Guardrail Status</caption>
+          <h3 style={typography.cardHeading}>Recent Complaints</h3>
+          {trackingSummary.data.length === 0 ? <p>No complaints found.</p> : <table className="dashboard-table">
+            <caption>Latest {Math.min(5, trackingSummary.data.length)} complaints</caption>
             <thead>
               <tr>
-                {["Job ID", "Status", "AI Safety Status", "Review Sentiment", "Action"].map((label) => <th scope="col" key={label}>{label}</th>)}
+                {["Subject", "Type", "Status", "Description", "Created"].map((label) => <th scope="col" key={label}>{label}</th>)}
               </tr>
             </thead>
             <tbody>
-              {trackingSummary.data.slice(0, 5).map((job) => (
-                <tr key={job.id} style={job.isFlagged ? { backgroundColor: '#ffe6e6' } : {}}>
-                  <td data-label="Job ID">#{job.id}</td>
-                  <td data-label="Status"><StatusBadge status={job.status} /></td>
-                  <td data-label="AI Safety Status">
-                    {job.isFlagged ? (
-                      <span style={{ color: colors.error, fontWeight: "bold" }}>⚠️ SUSPICIOUS TRANSITION</span>
-                    ) : (
-                      <span style={{ color: colors.success, fontWeight: "bold" }}>VALID</span>
-                    )}
-                  </td>
-                  <td data-label="Review Sentiment">{job.sentiment || "N/A"}</td>
-                  <td data-label="Action">
-                    <AppButton variant="outline" onClick={() => alert(`Reviewing Job #${job.id}`)}>
-                      Review Log
-                    </AppButton>
-                  </td>
+              {trackingSummary.data.slice(0, 5).map((complaint) => (
+                <tr key={complaint.id}>
+                  <td data-label="Subject">{complaint.subject || "—"}</td>
+                  <td data-label="Type">{complaint.type || "—"}</td>
+                  <td data-label="Status"><StatusBadge status={complaint.status} /></td>
+                  <td data-label="Description">{complaint.description || "—"}</td>
+                  <td data-label="Created">{complaint.createdAt ? new Date(complaint.createdAt).toLocaleString() : "—"}</td>
                 </tr>
               ))}
             </tbody>

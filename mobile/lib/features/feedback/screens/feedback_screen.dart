@@ -1,8 +1,8 @@
-import 'dart:convert';
 import 'package:flutter/material.dart';
-import 'package:http/http.dart' as http;
 
-import '../../../core/config/app_config.dart';
+// ෆයිල් දෙකම එකම ෆෝල්ඩරයේ තියෙන නිසා කෙළින්ම නම විතරක් දුන්නා
+import 'feedback_service.dart';
+
 import '../../../shared/theme/app_spacing.dart';
 import '../../../shared/widgets/app_button.dart';
 
@@ -17,6 +17,9 @@ class FeedbackScreen extends StatefulWidget {
 
 class _FeedbackScreenState extends State<FeedbackScreen> {
   final TextEditingController _feedbackController = TextEditingController();
+  final FeedbackService _feedbackService =
+      FeedbackService(); // Service එක මෙතනට ගත්තා
+
   int _selectedRating = 5;
   bool _isLoading = false;
 
@@ -35,47 +38,46 @@ class _FeedbackScreenState extends State<FeedbackScreen> {
 
     setState(() => _isLoading = true);
 
+    // කෙළින්ම HTTP call කරනවා වෙනුවට අපි Service එක පාවිච්චි කරනවා
+    Map<String, dynamic>? result;
+    String? errorMessage;
     try {
-      final response = await http.post(
-        Uri.parse('${AppConfig.agentBaseUrl}/agent/analyze-sentiment'),
-        headers: {'Content-Type': 'application/json'},
-        body: jsonEncode({
-          'job_id': widget.jobId,
-          'rating': _selectedRating,
-          'feedback_text': text,
-        }),
+      result = await _feedbackService.submitFeedback(
+        jobId: widget.jobId,
+        customerId: '3fa85f64-5717-4562-b3fc-2c963f66afa6', // දැනට Test Customer ID එකක්
+        rating: _selectedRating,
+        comment: text,
       );
+    } on FeedbackSubmissionException catch (e) {
+      errorMessage = e.message;
+    }
 
-      if (!mounted) return;
+    if (!mounted) return;
+    setState(() => _isLoading = false);
 
-      if (response.statusCode == 200) {
-        final data = jsonDecode(response.body) as Map<String, dynamic>;
-        final isFlagged = data['flagged_for_review'] ?? data['flaggedForReview'] ?? false;
+    if (errorMessage != null) {
+      _showAlert('Error', errorMessage);
+    } else if (result != null) {
+      // Backend එකෙන් එන 'autoEscalatedToComplaint' අගය පරීක්ෂා කිරීම
+      bool isEscalated = result['autoEscalatedToComplaint'] ?? false;
 
-        if (isFlagged == true) {
-          _showAlert(
-            'Thank You!',
-            'Your feedback will be reviewed by the admin team before being added to the system.',
-            shouldPop: true,
-          );
-        } else {
-          _showAlert(
-            'Thank You!',
-            'Your feedback has been submitted successfully.',
-            shouldPop: true,
-          );
-        }
-        _feedbackController.clear();
+      if (isEscalated) {
+        _showAlert(
+          'Complaint Registered',
+          result['message'] ??
+              'Due to negative feedback, a complaint has been auto-created.',
+          shouldPop: true,
+        );
       } else {
-        _showAlert('Error', 'Failed to send feedback. Please try again.');
+        _showAlert(
+          'Thank You!',
+          result['message'] ?? 'Thank you for your valuable feedback!',
+          shouldPop: true,
+        );
       }
-    } catch (e) {
-      if (!mounted) return;
-      _showAlert('Error', 'Network connection error. Please try again.');
-    } finally {
-      if (mounted) {
-        setState(() => _isLoading = false);
-      }
+      _feedbackController.clear();
+    } else {
+      _showAlert('Error', 'Failed to send feedback. Please try again.');
     }
   }
 
@@ -88,9 +90,9 @@ class _FeedbackScreenState extends State<FeedbackScreen> {
         actions: [
           TextButton(
             onPressed: () {
-              Navigator.of(ctx).pop();
+              Navigator.of(ctx).pop(); // Alert එක close කිරීම
               if (shouldPop && mounted) {
-                Navigator.of(context).pop();
+                Navigator.of(context).pop(); // Screen එකෙන් back වීම
               }
             },
             child: const Text('OK'),
@@ -124,38 +126,39 @@ class _FeedbackScreenState extends State<FeedbackScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(
-        title: const Text('Service Feedback'),
-      ),
-      body: SingleChildScrollView(
-        padding: const EdgeInsets.all(AppSpacing.lg),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            const Text(
-              'How was your experience?',
-              textAlign: TextAlign.center,
-              style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
-            ),
-            const SizedBox(height: AppSpacing.md),
-            _buildStarRating(),
-            const SizedBox(height: AppSpacing.lg),
-            TextField(
-              controller: _feedbackController,
-              decoration: const InputDecoration(
-                labelText: 'Enter your feedback',
-                hintText: 'Share your thoughts here...',
-                border: OutlineInputBorder(),
+      appBar: AppBar(title: const Text('Service Feedback')),
+      body: GestureDetector(
+        onTap: () => FocusScope.of(context).unfocus(), // Keyboard එක hide කරන්න
+        child: SingleChildScrollView(
+          padding: const EdgeInsets.all(AppSpacing.lg),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              const Text(
+                'How was your experience?',
+                textAlign: TextAlign.center,
+                style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
               ),
-              maxLines: 4,
-            ),
-            const SizedBox(height: AppSpacing.lg),
-            AppButton(
-              text: 'Submit Feedback',
-              isLoading: _isLoading,
-              onPressed: _submitFeedback,
-            ),
-          ],
+              const SizedBox(height: AppSpacing.md),
+              _buildStarRating(),
+              const SizedBox(height: AppSpacing.lg),
+              TextField(
+                controller: _feedbackController,
+                decoration: const InputDecoration(
+                  labelText: 'Enter your feedback',
+                  hintText: 'Share your thoughts here...',
+                  border: OutlineInputBorder(),
+                ),
+                maxLines: 4,
+              ),
+              const SizedBox(height: AppSpacing.lg),
+              AppButton(
+                text: 'Submit Feedback',
+                isLoading: _isLoading,
+                onPressed: _submitFeedback,
+              ),
+            ],
+          ),
         ),
       ),
     );

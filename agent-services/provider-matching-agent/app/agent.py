@@ -66,23 +66,51 @@ def match_and_score_providers(state: MatchingState) -> Dict[str, Any]:
         # 3. Check for dynamic database providers sent from ASP.NET Core
         providers = state.get("eligible_providers")
 
+        # Extract requested category from Objective if available
+        obj_text = state.get("Objective", "").lower()
+        req_category = "plumbing"
+        if "category:" in obj_text:
+            try:
+                req_category = obj_text.split("category:")[1].split(",")[0].strip()
+            except Exception:
+                pass
+
         # Fallback to tools.py only if no live candidates were passed
         if not providers:
             try:
                 search_res = SearchEligibleProviders.invoke({
                     "urgency": urgency,
-                    "requirements": ["plumbing"]
+                    "requirements": [req_category]
                 })
             except Exception:
                 search_res = SearchEligibleProviders.invoke({
-                    "category": "plumbing",
-                    "required_skills": ["plumbing"]
+                    "category": req_category,
+                    "required_skills": [req_category]
                 })
             providers = search_res.get("providers", []) if isinstance(search_res, dict) else []
 
         # 4. Spatial Distance Calculation & Urgency-Adaptive Scoring
         scored_candidates = []
+        is_req_vehicle = "vehicle" in req_category
+        is_req_plumb = "plumb" in req_category
+        is_req_electr = "electr" in req_category
+        is_req_appliance = "appliance" in req_category
+
         for p in providers:
+            # Check domain compatibility if candidate skills are specified
+            p_skills = [s.lower() for s in (p.get("skills") or [])]
+            if p_skills and req_category and req_category != "unclassified":
+                skill_match = any(
+                    (is_req_vehicle and "vehicle" in s) or
+                    (is_req_plumb and ("plumb" in s or "pipe" in s or "leak" in s)) or
+                    (is_req_electr and ("electr" in s or "wire" in s or "circuit" in s)) or
+                    (is_req_appliance and "appliance" in s) or
+                    (req_category in s)
+                    for s in p_skills
+                )
+                if not skill_match:
+                    continue
+
             p_lat = p.get("latitude", 6.9271)
             p_lon = p.get("longitude", 79.8612)
             radius_limit = p.get("operating_radius_km") or p.get("OperatingRadiusKm") or 5.0

@@ -68,11 +68,45 @@ public class ProviderMatchingCoordinator : IProviderMatchingCoordinator
         int urgencyScore = sr.Urgency == ServiceRequestUrgency.Unknown ? 2 : (int)sr.Urgency;
         var objective = $"Category: {sr.Category}, Urgency: {urgencyScore}, Problem: {sr.ProblemSummary}, Location: {sr.LocationText}";
 
-        // 3. Fetch live active, verified providers directly from database
-        var eligibleProviders = await _dbContext.ProviderProfiles
+        // 3. Fetch live active, verified providers directly from database matching request category
+        var targetCat = (sr.Category ?? string.Empty).Trim().ToLowerInvariant();
+        bool isVehicle = targetCat.Contains("vehicle");
+        bool isPlumbing = targetCat.Contains("plumb");
+        bool isElectrical = targetCat.Contains("electr");
+        bool isAppliance = targetCat.Contains("appliance");
+
+        var eligibleQuery = _dbContext.ProviderProfiles
             .Include(p => p.Locations)
             .Include(p => p.Skills)
-            .Where(p => p.IsOnline && p.VerificationStatus == ProviderVerificationStatus.Verified)
+            .Where(p => p.IsOnline && p.VerificationStatus == ProviderVerificationStatus.Verified);
+
+        if (isVehicle)
+        {
+            eligibleQuery = eligibleQuery.Where(p => p.Skills.Any(s => 
+                s.Category.ToLower().Contains("vehicle") || s.SkillName.ToLower().Contains("vehicle")));
+        }
+        else if (isPlumbing)
+        {
+            eligibleQuery = eligibleQuery.Where(p => p.Skills.Any(s => 
+                s.Category.ToLower().Contains("plumb") || s.SkillName.ToLower().Contains("plumb") || s.SkillName.ToLower().Contains("pipe") || s.SkillName.ToLower().Contains("leak")));
+        }
+        else if (isElectrical)
+        {
+            eligibleQuery = eligibleQuery.Where(p => p.Skills.Any(s => 
+                s.Category.ToLower().Contains("electr") || s.SkillName.ToLower().Contains("electr") || s.SkillName.ToLower().Contains("wire") || s.SkillName.ToLower().Contains("circuit")));
+        }
+        else if (isAppliance)
+        {
+            eligibleQuery = eligibleQuery.Where(p => p.Skills.Any(s => 
+                s.Category.ToLower().Contains("appliance") || s.SkillName.ToLower().Contains("appliance")));
+        }
+        else if (!string.IsNullOrWhiteSpace(sr.Category) && sr.Category != "Unclassified")
+        {
+            eligibleQuery = eligibleQuery.Where(p => p.Skills.Any(s => 
+                s.Category.ToLower() == targetCat || s.SkillName.ToLower().Contains(targetCat)));
+        }
+
+        var eligibleProviders = await eligibleQuery
             .Select(p => new ProviderCandidateDto
             {
                 ProviderId = p.Id.ToString(),

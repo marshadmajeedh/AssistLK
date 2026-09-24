@@ -42,7 +42,7 @@ public class AttachmentServiceTests
             Db.ServiceRequests.Add(Request); Db.SaveChanges();
             Repository = new Repository(new ServiceRequestAttachmentRepository(Db));
             Service = new(Repository, Storage, new Normalizer(), NullLogger<ServiceRequestAttachmentService>.Instance);
-            Requests = new(new ServiceRequestRepository(Db), new ProblemAnalysisRepository(Db));
+            Requests = new(new ServiceRequestRepository(Db), new ProblemAnalysisRepository(Db), new TestDoubles.InMemoryServiceJobRepository());
         }
         public Task<AttachmentResponse> Upload() => Service.UploadAsync(Request.Id, Request.CustomerId, Stream.Null, "../../address.jpg", "image/jpeg");
         public void Dispose() => Db.Dispose();

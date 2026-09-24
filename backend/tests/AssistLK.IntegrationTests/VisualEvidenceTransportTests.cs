@@ -70,7 +70,7 @@ public class VisualEvidenceTransportTests
             Workflow = new(new AgentWorkflowService(Db), new AgentContextService(memory), memory,
                 new AgentMonitoringService(Db), new AgentSafetyService(new AgentSafetyPolicyEngine(), Db),
                 new AgentOrchestrator(registry), registry,
-                new ServiceRequestService(new ServiceRequestRepository(Db), new ProblemAnalysisRepository(Db)), Evidence);
+                new ServiceRequestService(new ServiceRequestRepository(Db), new ProblemAnalysisRepository(Db), new TestDoubles.InMemoryServiceJobRepository()), Evidence);
         }
 
         public ServiceRequestAttachment Add(int slot, int size = 64)

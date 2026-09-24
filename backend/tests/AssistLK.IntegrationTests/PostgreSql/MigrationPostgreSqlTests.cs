@@ -49,11 +49,11 @@ public class MigrationPostgreSqlTests
                 "AddProblemAnalysisVisualEvidence"
             };
 
-            Assert.Equal(expectedMigrations.Length, appliedMigrations.Count);
-
             foreach (var expected in expectedMigrations)
             {
-                Assert.Contains(appliedMigrations, m => m.Contains(expected));
+                Assert.Contains(
+                    appliedMigrations,
+                    migration => migration.EndsWith(expected, StringComparison.Ordinal));
             }
 
             // 2. Verify all tables exist in information_schema

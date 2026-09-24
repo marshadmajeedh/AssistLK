@@ -281,6 +281,106 @@ namespace AssistLK.Infrastructure.Data.Migrations
                     b.ToTable("AgentWorkflows");
                 });
 
+            modelBuilder.Entity("AssistLK.Domain.Entities.MatchedCandidate", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<decimal>("DistanceKm")
+                        .HasPrecision(8, 2)
+                        .HasColumnType("numeric(8,2)");
+
+                    b.Property<string>("MatchRationale")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<Guid>("MatchingExecutionId")
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("ProviderId")
+                        .HasColumnType("uuid");
+
+                    b.Property<int>("Rank")
+                        .HasColumnType("integer");
+
+                    b.Property<decimal>("Score")
+                        .HasPrecision(5, 4)
+                        .HasColumnType("numeric(5,4)");
+
+                    b.Property<string>("Status")
+                        .IsRequired()
+                        .HasMaxLength(30)
+                        .HasColumnType("character varying(30)");
+
+                    b.Property<DateTime>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("MatchingExecutionId");
+
+                    b.HasIndex("ProviderId");
+
+                    b.ToTable("MatchedCandidates", null, t =>
+                        {
+                            t.HasCheckConstraint("CK_MatchedCandidates_Score", "\"Score\" >= 0 AND \"Score\" <= 1");
+                        });
+                });
+
+            modelBuilder.Entity("AssistLK.Domain.Entities.MatchingExecution", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTime?>("CompletedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<DateTime>("ExecutedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid>("ServiceRequestId")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTime?>("StartedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("Status")
+                        .IsRequired()
+                        .HasMaxLength(30)
+                        .HasColumnType("character varying(30)");
+
+                    b.Property<string>("StrategyUsed")
+                        .IsRequired()
+                        .HasMaxLength(40)
+                        .HasColumnType("character varying(40)");
+
+                    b.Property<string>("ThreadId")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
+                    b.Property<DateTime>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("ServiceRequestId");
+
+                    b.HasIndex("Status");
+
+                    b.HasIndex("ThreadId");
+
+                    b.ToTable("MatchingExecutions", (string)null);
+                });
+
             modelBuilder.Entity("AssistLK.Domain.Entities.ProblemAnalysis", b =>
                 {
                     b.Property<Guid>("Id")
@@ -330,6 +430,176 @@ namespace AssistLK.Infrastructure.Data.Migrations
 
                             t.HasCheckConstraint("CK_ProblemAnalyses_EvidenceRevision", "\"EvidenceRevision\" > 0");
                         });
+                });
+
+            modelBuilder.Entity("AssistLK.Domain.Entities.ProviderAvailability", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<int>("DayOfWeek")
+                        .HasColumnType("integer");
+
+                    b.Property<TimeSpan>("EndTime")
+                        .HasColumnType("interval");
+
+                    b.Property<bool>("IsAvailable")
+                        .HasColumnType("boolean");
+
+                    b.Property<Guid>("ProviderId")
+                        .HasColumnType("uuid");
+
+                    b.Property<TimeSpan>("StartTime")
+                        .HasColumnType("interval");
+
+                    b.Property<DateTime>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("ProviderId");
+
+                    b.ToTable("ProviderAvailabilities", null, t =>
+                        {
+                            t.HasCheckConstraint("CK_ProviderAvailabilities_DayOfWeek", "\"DayOfWeek\" BETWEEN 0 AND 6");
+                        });
+                });
+
+            modelBuilder.Entity("AssistLK.Domain.Entities.ProviderLocation", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<DateTime>("LastLocationUpdate")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<decimal>("Latitude")
+                        .HasPrecision(9, 6)
+                        .HasColumnType("numeric(9,6)");
+
+                    b.Property<decimal>("Longitude")
+                        .HasPrecision(9, 6)
+                        .HasColumnType("numeric(9,6)");
+
+                    b.Property<decimal>("OperatingRadiusKm")
+                        .HasPrecision(6, 2)
+                        .HasColumnType("numeric(6,2)");
+
+                    b.Property<Guid>("ProviderId")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTime>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("ProviderId");
+
+                    b.ToTable("ProviderLocations", null, t =>
+                        {
+                            t.HasCheckConstraint("CK_ProviderLocations_Latitude", "\"Latitude\" BETWEEN -90 AND 90");
+
+                            t.HasCheckConstraint("CK_ProviderLocations_Longitude", "\"Longitude\" BETWEEN -180 AND 180");
+
+                            t.HasCheckConstraint("CK_ProviderLocations_OperatingRadiusKm", "\"OperatingRadiusKm\" >= 0");
+                        });
+                });
+
+            modelBuilder.Entity("AssistLK.Domain.Entities.ProviderProfile", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("BusinessName")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<bool>("IsOnline")
+                        .HasColumnType("boolean");
+
+                    b.Property<int>("MaxActiveJobs")
+                        .HasColumnType("integer");
+
+                    b.Property<decimal>("Rating")
+                        .HasPrecision(3, 2)
+                        .HasColumnType("numeric(3,2)");
+
+                    b.Property<int>("TotalCompletedJobs")
+                        .HasColumnType("integer");
+
+                    b.Property<DateTime>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid>("UserId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("VerificationStatus")
+                        .IsRequired()
+                        .HasMaxLength(30)
+                        .HasColumnType("character varying(30)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("UserId")
+                        .IsUnique();
+
+                    b.HasIndex("VerificationStatus");
+
+                    b.ToTable("ProviderProfiles", (string)null);
+                });
+
+            modelBuilder.Entity("AssistLK.Domain.Entities.ProviderSkill", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("Category")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
+                    b.Property<string>("CertificationUrl")
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<bool>("IsVerified")
+                        .HasColumnType("boolean");
+
+                    b.Property<Guid>("ProviderId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("SkillName")
+                        .IsRequired()
+                        .HasMaxLength(150)
+                        .HasColumnType("character varying(150)");
+
+                    b.Property<DateTime>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("Category");
+
+                    b.HasIndex("ProviderId");
+
+                    b.ToTable("ProviderSkills", (string)null);
                 });
 
             modelBuilder.Entity("AssistLK.Domain.Entities.ServiceRequest", b =>
@@ -639,6 +909,25 @@ namespace AssistLK.Infrastructure.Data.Migrations
                     b.Navigation("Workflow");
                 });
 
+            modelBuilder.Entity("AssistLK.Domain.Entities.MatchedCandidate", b =>
+                {
+                    b.HasOne("AssistLK.Domain.Entities.MatchingExecution", "MatchingExecution")
+                        .WithMany("Candidates")
+                        .HasForeignKey("MatchingExecutionId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.HasOne("AssistLK.Domain.Entities.ProviderProfile", "Provider")
+                        .WithMany()
+                        .HasForeignKey("ProviderId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.Navigation("MatchingExecution");
+
+                    b.Navigation("Provider");
+                });
+
             modelBuilder.Entity("AssistLK.Domain.Entities.ProblemAnalysis", b =>
                 {
                     b.HasOne("AssistLK.Domain.Entities.ServiceRequest", "ServiceRequest")
@@ -648,6 +937,50 @@ namespace AssistLK.Infrastructure.Data.Migrations
                         .IsRequired();
 
                     b.Navigation("ServiceRequest");
+                });
+
+            modelBuilder.Entity("AssistLK.Domain.Entities.ProviderAvailability", b =>
+                {
+                    b.HasOne("AssistLK.Domain.Entities.ProviderProfile", "Provider")
+                        .WithMany("Availability")
+                        .HasForeignKey("ProviderId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Provider");
+                });
+
+            modelBuilder.Entity("AssistLK.Domain.Entities.ProviderLocation", b =>
+                {
+                    b.HasOne("AssistLK.Domain.Entities.ProviderProfile", "Provider")
+                        .WithMany("Locations")
+                        .HasForeignKey("ProviderId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Provider");
+                });
+
+            modelBuilder.Entity("AssistLK.Domain.Entities.ProviderProfile", b =>
+                {
+                    b.HasOne("AssistLK.Domain.Entities.User", "User")
+                        .WithMany()
+                        .HasForeignKey("UserId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.Navigation("User");
+                });
+
+            modelBuilder.Entity("AssistLK.Domain.Entities.ProviderSkill", b =>
+                {
+                    b.HasOne("AssistLK.Domain.Entities.ProviderProfile", "Provider")
+                        .WithMany("Skills")
+                        .HasForeignKey("ProviderId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Provider");
                 });
 
             modelBuilder.Entity("AssistLK.Domain.Entities.ServiceRequest", b =>
@@ -690,6 +1023,20 @@ namespace AssistLK.Infrastructure.Data.Migrations
                     b.Navigation("AuditLogs");
 
                     b.Navigation("Executions");
+                });
+
+            modelBuilder.Entity("AssistLK.Domain.Entities.MatchingExecution", b =>
+                {
+                    b.Navigation("Candidates");
+                });
+
+            modelBuilder.Entity("AssistLK.Domain.Entities.ProviderProfile", b =>
+                {
+                    b.Navigation("Availability");
+
+                    b.Navigation("Locations");
+
+                    b.Navigation("Skills");
                 });
 
             modelBuilder.Entity("AssistLK.Domain.Entities.ServiceRequest", b =>

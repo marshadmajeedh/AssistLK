@@ -17,7 +17,7 @@ public class Component1LifecycleTests
         var reqRepo = new InMemoryServiceRequestRepository(requests, analyses);
         var anaRepo = new InMemoryProblemAnalysisRepository(analyses);
 
-        var service = new ServiceRequestService(reqRepo, anaRepo);
+        var service = new ServiceRequestService(reqRepo, anaRepo, new TestDoubles.InMemoryServiceJobRepository());
         return (service, requests, analyses);
     }
 

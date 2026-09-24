@@ -41,7 +41,7 @@ public class ClarificationWorkflowPostgreSqlTests : PostgreSqlIntegrationTestBas
 
         var requestRepo = new ServiceRequestRepository(context);
         var analysisRepo = new ProblemAnalysisRepository(context);
-        var requestService = new ServiceRequestService(requestRepo, analysisRepo);
+        var requestService = new ServiceRequestService(requestRepo, analysisRepo, new TestDoubles.InMemoryServiceJobRepository());
 
         return new ProblemUnderstandingWorkflowService(
             workflowService,
@@ -110,7 +110,7 @@ public class ClarificationWorkflowPostgreSqlTests : PostgreSqlIntegrationTestBas
             var result = await workflow.AnalyzeAsync(requestId, customer.Id);
             Assert.True(result.Success);
             Assert.Equal(ServiceRequestStatus.AwaitingInformation, result.Status);
-            var service = new ServiceRequestService(new ServiceRequestRepository(context), new ProblemAnalysisRepository(context));
+            var service = new ServiceRequestService(new ServiceRequestRepository(context), new ProblemAnalysisRepository(context), new TestDoubles.InMemoryServiceJobRepository());
             var request = await service.GetByIdAsync(requestId, customer.Id);
             var question = Assert.Single(request.Clarifications.Where(c => c.ClarificationRound == round));
             Assert.Null(question.Answer);
@@ -138,7 +138,7 @@ public class ClarificationWorkflowPostgreSqlTests : PostgreSqlIntegrationTestBas
         }
         await using (var context = CreateDbContext())
         {
-            var service = new ServiceRequestService(new ServiceRequestRepository(context), new ProblemAnalysisRepository(context));
+            var service = new ServiceRequestService(new ServiceRequestRepository(context), new ProblemAnalysisRepository(context), new TestDoubles.InMemoryServiceJobRepository());
             var request = await service.GetByIdAsync(requestId, customer.Id);
             Assert.Equal(finalNeedsInformation ? ServiceRequestStatus.AwaitingInformation : ServiceRequestStatus.Analyzed, request.Status);
             Assert.Equal(2, request.Clarifications.Count);
@@ -203,7 +203,8 @@ public class ClarificationWorkflowPostgreSqlTests : PostgreSqlIntegrationTestBas
         {
             var service = new ServiceRequestService(
                 new ServiceRequestRepository(context),
-                new ProblemAnalysisRepository(context));
+                new ProblemAnalysisRepository(context),
+                new TestDoubles.InMemoryServiceJobRepository());
 
             var result = await service.SubmitClarificationAnswersAsync(customer.Id, requestId, new SubmitClarificationAnswersRequest
             {
@@ -224,7 +225,8 @@ public class ClarificationWorkflowPostgreSqlTests : PostgreSqlIntegrationTestBas
         {
             var service = new ServiceRequestService(
                 new ServiceRequestRepository(context),
-                new ProblemAnalysisRepository(context));
+                new ProblemAnalysisRepository(context),
+                new TestDoubles.InMemoryServiceJobRepository());
 
             var reloaded = await service.GetByIdAsync(requestId, customer.Id);
 
@@ -373,7 +375,8 @@ public class ClarificationWorkflowPostgreSqlTests : PostgreSqlIntegrationTestBas
         {
             var service = new ServiceRequestService(
                 new ServiceRequestRepository(context),
-                new ProblemAnalysisRepository(context));
+                new ProblemAnalysisRepository(context),
+                new TestDoubles.InMemoryServiceJobRepository());
 
             await service.UpdateAsync(customer.Id, requestId, new UpdateServiceRequestRequest
             {
@@ -406,7 +409,8 @@ public class ClarificationWorkflowPostgreSqlTests : PostgreSqlIntegrationTestBas
         {
             var service = new ServiceRequestService(
                 new ServiceRequestRepository(context),
-                new ProblemAnalysisRepository(context));
+                new ProblemAnalysisRepository(context),
+                new TestDoubles.InMemoryServiceJobRepository());
 
             var ready = await service.MarkReadyForMatchingAsync(requestId, customer.Id);
             Assert.Equal(ServiceRequestStatus.ReadyForMatching, ready.Status);
@@ -460,7 +464,8 @@ public class ClarificationWorkflowPostgreSqlTests : PostgreSqlIntegrationTestBas
         {
             var service = new ServiceRequestService(
                 new ServiceRequestRepository(context),
-                new ProblemAnalysisRepository(context));
+                new ProblemAnalysisRepository(context),
+                new TestDoubles.InMemoryServiceJobRepository());
 
             var res = await service.SubmitClarificationAnswersAsync(customer.Id, requestId, submission);
             Assert.Single(res);
@@ -472,7 +477,8 @@ public class ClarificationWorkflowPostgreSqlTests : PostgreSqlIntegrationTestBas
         {
             var service = new ServiceRequestService(
                 new ServiceRequestRepository(context),
-                new ProblemAnalysisRepository(context));
+                new ProblemAnalysisRepository(context),
+                new TestDoubles.InMemoryServiceJobRepository());
 
             var res = await service.SubmitClarificationAnswersAsync(customer.Id, requestId, submission);
             Assert.Single(res);
@@ -492,7 +498,8 @@ public class ClarificationWorkflowPostgreSqlTests : PostgreSqlIntegrationTestBas
         {
             var service = new ServiceRequestService(
                 new ServiceRequestRepository(context),
-                new ProblemAnalysisRepository(context));
+                new ProblemAnalysisRepository(context),
+                new TestDoubles.InMemoryServiceJobRepository());
 
             await service.BeginAnalysisAsync(requestId);
 
@@ -550,7 +557,8 @@ public class ClarificationWorkflowPostgreSqlTests : PostgreSqlIntegrationTestBas
         {
             var service = new ServiceRequestService(
                 new ServiceRequestRepository(context),
-                new ProblemAnalysisRepository(context));
+                new ProblemAnalysisRepository(context),
+                new TestDoubles.InMemoryServiceJobRepository());
 
             await service.ApplyProblemAnalysisResultAsync(new ApplyProblemAnalysisResult
             {
@@ -616,7 +624,8 @@ public class ClarificationWorkflowPostgreSqlTests : PostgreSqlIntegrationTestBas
         {
             var service = new ServiceRequestService(
                 new ServiceRequestRepository(context),
-                new ProblemAnalysisRepository(context));
+                new ProblemAnalysisRepository(context),
+                new TestDoubles.InMemoryServiceJobRepository());
 
             var reloaded = await service.GetByIdAsync(requestId, customer.Id);
 

@@ -58,7 +58,7 @@ public class Component1WorkflowTests
 
             var reqRepo = new InMemoryServiceRequestRepository(Requests, Analyses);
             var anaRepo = new InMemoryProblemAnalysisRepository(Analyses);
-            RequestService = new ServiceRequestService(reqRepo, anaRepo);
+            RequestService = new ServiceRequestService(reqRepo, anaRepo, new TestDoubles.InMemoryServiceJobRepository());
 
             Workflow = new ProblemUnderstandingWorkflowService(
                 WorkflowService,

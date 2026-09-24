@@ -154,6 +154,15 @@ builder.Services.AddHttpClient<ValidationSafetyAgent>((sp, client) =>
     client.Timeout = TimeSpan.FromSeconds(options.TimeoutSeconds > 0 ? options.TimeoutSeconds : 45);
 });
 
+// Provider Matching Microservice Client
+builder.Services.AddHttpClient<AssistLK.Application.Services.Providers.IProviderMatchingService, AssistLK.Application.Services.Providers.ProviderMatchingService>(client =>
+{
+    client.BaseAddress = new Uri("http://127.0.0.1:8000");
+    client.Timeout = TimeSpan.FromSeconds(90);
+});
+builder.Services.AddScoped<AssistLK.Application.Services.Providers.IProviderMatchingCoordinator, AssistLK.Application.Services.Providers.ProviderMatchingCoordinator>();
+builder.Services.AddHostedService<AssistLK.Api.Features.Providers.ProviderMatchingBackgroundWorker>();
+
 builder.Services.AddScoped<ExternalProblemUnderstandingAgentAdapter>();
 
 // Agent Registry (Scoped, Lifetime-safe)
@@ -336,7 +345,15 @@ if(app.Environment.IsDevelopment())
 }
 
 
+var uploadsPath = Path.Combine(app.Environment.WebRootPath ?? Path.Combine(Directory.GetCurrentDirectory(), "wwwroot"), "uploads", "certificates");
+if (!Directory.Exists(uploadsPath))
+{
+    Directory.CreateDirectory(uploadsPath);
+}
+
 app.UseHttpsRedirection();
+
+app.UseStaticFiles();
 
 app.UseCors("AssistLKClients");
 

@@ -94,7 +94,7 @@ public class LocalhostPythonSmokeIntegrationTests
         var analyses = new List<ProblemAnalysis>();
         var reqRepo = new SmokeServiceRequestRepository(requests, analyses);
         var anaRepo = new SmokeProblemAnalysisRepository(analyses);
-        var requestService = new ServiceRequestService(reqRepo, anaRepo);
+        var requestService = new ServiceRequestService(reqRepo, anaRepo, new TestDoubles.InMemoryServiceJobRepository());
 
         var workflow = new ProblemUnderstandingWorkflowService(
             workflowService,

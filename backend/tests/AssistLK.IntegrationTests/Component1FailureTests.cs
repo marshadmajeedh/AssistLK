@@ -46,7 +46,7 @@ public class Component1FailureTests
         var analyses = new List<ProblemAnalysis>();
         var reqRepo = new InMemoryServiceRequestRepository(requests, analyses);
         var anaRepo = new InMemoryProblemAnalysisRepository(analyses);
-        var requestService = new ServiceRequestService(reqRepo, anaRepo);
+        var requestService = new ServiceRequestService(reqRepo, anaRepo, new TestDoubles.InMemoryServiceJobRepository());
 
         // A faulty agent returning invalid confidence > 1.0
         var faultyAgent = new FaultyAgent(new ProblemUnderstandingOutput
@@ -127,7 +127,7 @@ public class Component1FailureTests
         var analyses = new List<ProblemAnalysis>();
         var reqRepo = new InMemoryServiceRequestRepository(requests, analyses);
         var anaRepo = new InMemoryProblemAnalysisRepository(analyses);
-        var requestService = new ServiceRequestService(reqRepo, anaRepo);
+        var requestService = new ServiceRequestService(reqRepo, anaRepo, new TestDoubles.InMemoryServiceJobRepository());
 
         var faultyAgent = new FaultyAgent(new ProblemUnderstandingOutput
         {
@@ -195,7 +195,7 @@ public class Component1FailureTests
         var analyses = new List<ProblemAnalysis>();
         var reqRepo = new InMemoryServiceRequestRepository(requests, analyses);
         var anaRepo = new InMemoryProblemAnalysisRepository(analyses);
-        var requestService = new ServiceRequestService(reqRepo, anaRepo);
+        var requestService = new ServiceRequestService(reqRepo, anaRepo, new TestDoubles.InMemoryServiceJobRepository());
 
         var registry = new AgentRegistry();
         registry.Register(new ExternalProblemUnderstandingAgentAdapter(
@@ -246,7 +246,7 @@ public class Component1FailureTests
         var analyses = new List<ProblemAnalysis>();
         var reqRepo = new InMemoryServiceRequestRepository(requests, analyses);
         var anaRepo = new InMemoryProblemAnalysisRepository(analyses);
-        var requestService = new ServiceRequestService(reqRepo, anaRepo);
+        var requestService = new ServiceRequestService(reqRepo, anaRepo, new TestDoubles.InMemoryServiceJobRepository());
 
         var throwingAgent = new ThrowingAgent(new InvalidOperationException("External AI service crashed"));
         var registry = new AgentRegistry();
@@ -315,7 +315,7 @@ public class Component1FailureTests
         var analyses = new List<ProblemAnalysis>();
         var reqRepo = new InMemoryServiceRequestRepository(requests, analyses);
         var anaRepo = new InMemoryProblemAnalysisRepository(analyses);
-        var requestService = new ServiceRequestService(reqRepo, anaRepo);
+        var requestService = new ServiceRequestService(reqRepo, anaRepo, new TestDoubles.InMemoryServiceJobRepository());
 
         var throwingAgent = new ThrowingAgent(new TimeoutException("Agent timeout"));
         var registry = new AgentRegistry();
@@ -379,7 +379,7 @@ public class Component1FailureTests
         var analyses = new List<ProblemAnalysis>();
         var reqRepo = new InMemoryServiceRequestRepository(requests, analyses);
         var anaRepo = new InMemoryProblemAnalysisRepository(analyses);
-        var requestService = new ServiceRequestService(reqRepo, anaRepo);
+        var requestService = new ServiceRequestService(reqRepo, anaRepo, new TestDoubles.InMemoryServiceJobRepository());
 
         var cancellingAgent = new CancellingAgent();
         var registry = new AgentRegistry();
@@ -448,7 +448,7 @@ public class Component1FailureTests
         var analyses = new List<ProblemAnalysis>();
         var reqRepo = new InMemoryServiceRequestRepository(requests, analyses);
         var anaRepo = new InMemoryProblemAnalysisRepository(analyses);
-        var requestService = new ServiceRequestService(reqRepo, anaRepo);
+        var requestService = new ServiceRequestService(reqRepo, anaRepo, new TestDoubles.InMemoryServiceJobRepository());
 
         using var cts = new CancellationTokenSource();
 
@@ -528,7 +528,7 @@ public class Component1FailureTests
         var analyses = new List<ProblemAnalysis>();
         var reqRepo = new InMemoryServiceRequestRepository(requests, analyses);
         var anaRepo = new InMemoryProblemAnalysisRepository(analyses);
-        var requestService = new ServiceRequestService(reqRepo, anaRepo);
+        var requestService = new ServiceRequestService(reqRepo, anaRepo, new TestDoubles.InMemoryServiceJobRepository());
 
         var validOutput = new ProblemUnderstandingOutput
         {
@@ -605,7 +605,7 @@ public class Component1FailureTests
         var analyses = new List<ProblemAnalysis>();
         var reqRepo = new InMemoryServiceRequestRepository(requests, analyses);
         var anaRepo = new InMemoryProblemAnalysisRepository(analyses);
-        var requestService = new ServiceRequestService(reqRepo, anaRepo);
+        var requestService = new ServiceRequestService(reqRepo, anaRepo, new TestDoubles.InMemoryServiceJobRepository());
 
         using var cts = new CancellationTokenSource();
         var agent = new MidExecutionCancellingAgent(cts);
@@ -676,7 +676,7 @@ public class Component1FailureTests
         var analyses = new List<ProblemAnalysis>();
         var reqRepo = new InMemoryServiceRequestRepository(requests, analyses);
         var anaRepo = new InMemoryProblemAnalysisRepository(analyses);
-        var requestService = new ServiceRequestService(reqRepo, anaRepo);
+        var requestService = new ServiceRequestService(reqRepo, anaRepo, new TestDoubles.InMemoryServiceJobRepository());
 
         using var cts = new CancellationTokenSource();
         var agent = new MidExecutionCancellingAgent(cts);
@@ -747,7 +747,7 @@ public class Component1FailureTests
         var analyses = new List<ProblemAnalysis>();
         var reqRepo = new InMemoryServiceRequestRepository(requests, analyses);
         var anaRepo = new InMemoryProblemAnalysisRepository(analyses);
-        var requestService = new ServiceRequestService(reqRepo, anaRepo);
+        var requestService = new ServiceRequestService(reqRepo, anaRepo, new TestDoubles.InMemoryServiceJobRepository());
 
         var clarificationOutput = new ProblemUnderstandingOutput
         {
@@ -883,7 +883,7 @@ public class Component1FailureTests
         public FaultyRecoveryServiceRequestService(
             IServiceRequestRepository serviceRequestRepository,
             IProblemAnalysisRepository problemAnalysisRepository)
-            : base(serviceRequestRepository, problemAnalysisRepository)
+            : base(serviceRequestRepository, problemAnalysisRepository, new TestDoubles.InMemoryServiceJobRepository())
         {
         }
 

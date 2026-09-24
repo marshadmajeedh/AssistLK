@@ -21,7 +21,7 @@ public class VisualEvidencePersistenceTests
         public Fixture()
         {
             Db.Add(Request); Db.SaveChanges();
-            Service = new(new ServiceRequestRepository(Db), new ProblemAnalysisRepository(Db));
+            Service = new(new ServiceRequestRepository(Db), new ProblemAnalysisRepository(Db), new TestDoubles.InMemoryServiceJobRepository());
         }
         public Guid[] Photos(int count = 3)
         {

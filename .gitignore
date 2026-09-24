@@ -2,10 +2,14 @@
 .env
 .env.*
 !.env.example
+*.env
+.env.local
 *.key
 *.pem
 secrets.json
+**/secrets.json
 appsettings.Development.json
+**/appsettings.Development.json
 
 # ---------------- .NET ----------------
 **/bin/

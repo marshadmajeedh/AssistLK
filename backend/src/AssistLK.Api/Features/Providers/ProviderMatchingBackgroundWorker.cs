@@ -67,17 +67,25 @@ public class ProviderMatchingBackgroundWorker : BackgroundService
 
         var readyIds = readyRequests.Select(r => r.Id).ToList();
 
-        // 1. Exclude requests that already have an active/pending/completed execution
-        var activeOrCompletedSrIds = await dbContext.MatchingExecutions
+        // 1. Exclude requests that already have an accepted candidate
+        var acceptedSrIds = await dbContext.MatchedCandidates
+            .Where(m => readyIds.Contains(m.MatchingExecution.ServiceRequestId) &&
+                        m.Status == MatchedCandidateStatus.Accepted)
+            .Select(m => m.MatchingExecution.ServiceRequestId)
+            .Distinct()
+            .ToListAsync(stoppingToken);
+
+        // 2. Exclude requests that already have an active/pending/dispatched execution
+        var activeSrIds = await dbContext.MatchingExecutions
             .Where(e => readyIds.Contains(e.ServiceRequestId) &&
                        (e.Status == MatchingExecutionStatus.Running
                      || e.Status == MatchingExecutionStatus.PendingApproval
-                     || e.Status == MatchingExecutionStatus.Completed))
+                     || (e.Status == MatchingExecutionStatus.Completed && e.Candidates.Any(c => c.Status == MatchedCandidateStatus.Recommended))))
             .Select(e => e.ServiceRequestId)
             .Distinct()
             .ToListAsync(stoppingToken);
 
-        // 2. Exclude requests that recently failed (within the last 2 minutes) to avoid spamming the AI engine
+        // 3. Exclude requests that recently failed (within the last 2 minutes) to avoid spamming the AI engine
         var recentlyFailedSrIds = await dbContext.MatchingExecutions
             .Where(e => readyIds.Contains(e.ServiceRequestId) &&
                        e.Status == MatchingExecutionStatus.Failed &&
@@ -87,7 +95,7 @@ public class ProviderMatchingBackgroundWorker : BackgroundService
             .Distinct()
             .ToListAsync(stoppingToken);
 
-        var excludedIds = activeOrCompletedSrIds.Concat(recentlyFailedSrIds).ToHashSet();
+        var excludedIds = acceptedSrIds.Concat(activeSrIds).Concat(recentlyFailedSrIds).ToHashSet();
         var toMatchIds = readyIds.Where(id => !excludedIds.Contains(id)).ToList();
 
         if (toMatchIds.Count == 0)

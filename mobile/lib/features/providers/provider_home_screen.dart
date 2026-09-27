@@ -192,7 +192,7 @@ class _ProviderHomeScreenState extends State<ProviderHomeScreen> {
   }
 }
 
-class _ProviderHomeView extends StatelessWidget {
+class _ProviderHomeView extends StatefulWidget {
   final bool hasAcceptedActiveMatch;
   final VoidCallback onAcceptMatch;
   final VoidCallback onDeclineMatch;
@@ -202,6 +202,47 @@ class _ProviderHomeView extends StatelessWidget {
     required this.onAcceptMatch,
     required this.onDeclineMatch,
   });
+
+  @override
+  State<_ProviderHomeView> createState() => _ProviderHomeViewState();
+}
+
+class _ProviderHomeViewState extends State<_ProviderHomeView> {
+  final MapController _mapController = MapController();
+  String? _lastFittedJobId;
+
+  void _fitMapToBounds(latlong.LatLng providerLoc, latlong.LatLng customerLoc) {
+    try {
+      final bounds = LatLngBounds.fromPoints([providerLoc, customerLoc]);
+      _mapController.fitCamera(
+        CameraFit.bounds(
+          bounds: bounds,
+          padding: const EdgeInsets.only(
+            top: 70,
+            left: 50,
+            right: 50,
+            bottom: 240,
+          ),
+        ),
+      );
+    } catch (e) {
+      debugPrint('Map auto-fit error: $e');
+    }
+  }
+
+  void _centerOnLocation(latlong.LatLng loc) {
+    try {
+      _mapController.move(loc, 14.0);
+    } catch (e) {
+      debugPrint('Center map error: $e');
+    }
+  }
+
+  @override
+  void dispose() {
+    _mapController.dispose();
+    super.dispose();
+  }
 
   Color _getCategoryColor(String category) {
     switch (category.trim().toLowerCase()) {
@@ -526,7 +567,12 @@ class _ProviderHomeView extends StatelessWidget {
           IconButton(
             icon: const Icon(Icons.logout),
             tooltip: 'Log Out',
-            onPressed: () => auth.logout(),
+            onPressed: () async {
+              await dashboard.onLogout();
+              if (context.mounted) {
+                await auth.logout();
+              }
+            },
           ),
         ],
       ),
@@ -691,7 +737,12 @@ class _ProviderHomeView extends StatelessWidget {
                     'Log Out',
                     style: TextStyle(fontSize: 15),
                   ),
-                  onPressed: () => auth.logout(),
+                  onPressed: () async {
+                    await dashboard.onLogout();
+                    if (context.mounted) {
+                      await auth.logout();
+                    }
+                  },
                 ),
               ),
             ],
@@ -713,7 +764,12 @@ class _ProviderHomeView extends StatelessWidget {
           IconButton(
             icon: const Icon(Icons.logout),
             tooltip: 'Log Out',
-            onPressed: () => auth.logout(),
+            onPressed: () async {
+              await dashboard.onLogout();
+              if (context.mounted) {
+                await auth.logout();
+              }
+            },
           ),
         ],
       ),
@@ -857,7 +913,12 @@ class _ProviderHomeView extends StatelessWidget {
                     'Log Out',
                     style: TextStyle(fontSize: 15),
                   ),
-                  onPressed: () => auth.logout(),
+                  onPressed: () async {
+                    await dashboard.onLogout();
+                    if (context.mounted) {
+                      await auth.logout();
+                    }
+                  },
                 ),
               ),
             ],
@@ -877,409 +938,636 @@ class _ProviderHomeView extends StatelessWidget {
       dashboard.longitude,
     );
 
+    final num? cLat = dashboard.activeJobMatch?['customerLatitude'] as num?;
+    final num? cLng = dashboard.activeJobMatch?['customerLongitude'] as num?;
+    final customerLocation = (cLat != null && cLng != null)
+        ? latlong.LatLng(cLat.toDouble(), cLng.toDouble())
+        : null;
+
+    final jobId = dashboard.activeJobMatch?['jobId']?.toString();
+    if (jobId != null && customerLocation != null && _lastFittedJobId != jobId) {
+      _lastFittedJobId = jobId;
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        _fitMapToBounds(centerLocation, customerLocation);
+      });
+    } else if (jobId == null && _lastFittedJobId != null) {
+      _lastFittedJobId = null;
+    }
+
     return Scaffold(
-      appBar: AppBar(
-        title: const Text('Provider Workspace'),
-        actions: [
-          IconButton(
-            icon: const Icon(Icons.settings_outlined),
-            tooltip: 'Workspace Settings',
-            onPressed: () => _openSettingsDialog(context, dashboard),
-          ),
-          IconButton(
-            icon: const Icon(Icons.refresh),
-            tooltip: 'Refresh Status',
-            onPressed: () => dashboard.fetchProfile(),
-          ),
-          IconButton(
-            icon: const Icon(Icons.logout),
-            tooltip: 'Logout',
-            onPressed: () async {
-              await auth.logout();
-            },
-          ),
-        ],
-      ),
       body: dashboard.isLoading
           ? const Center(child: CircularProgressIndicator())
-          : Column(
+          : Stack(
+              fit: StackFit.expand,
               children: [
-                // Identity Header Card
-                Padding(
-                  padding: const EdgeInsets.fromLTRB(
-                    AppSpacing.md,
-                    AppSpacing.sm,
-                    AppSpacing.md,
-                    0,
+                // 1. Edge-to-Edge Full Canvas Map
+                FlutterMap(
+                  mapController: _mapController,
+                  options: MapOptions(
+                    initialCenter: centerLocation,
+                    initialZoom: 13.0,
                   ),
-                  child: Card(
-                    elevation: 2,
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(12),
+                  children: [
+                    TileLayer(
+                      urlTemplate:
+                          'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
+                      userAgentPackageName: 'com.example.mobile',
                     ),
-                    child: Padding(
-                      padding: const EdgeInsets.all(AppSpacing.md),
-                      child: Column(
-                        children: [
-                          Row(
+                    // Semi-transparent dynamic coverage radius
+                    CircleLayer(
+                      circles: [
+                        CircleMarker(
+                          point: centerLocation,
+                          radius: dashboard.operatingRadiusKm * 1000,
+                          useRadiusInMeter: true,
+                          color: (dashboard.isOnline
+                                  ? Colors.blueAccent
+                                  : Colors.grey)
+                              .withValues(alpha: 0.12),
+                          borderColor: (dashboard.isOnline
+                                  ? Colors.blueAccent
+                                  : Colors.grey)
+                              .withValues(alpha: 0.6),
+                          borderStrokeWidth: 2,
+                        ),
+                      ],
+                    ),
+                    // Route Polyline to customer if available
+                    if (dashboard.routePoints.isNotEmpty)
+                      PolylineLayer(
+                        polylines: [
+                          Polyline(
+                            points: dashboard.routePoints,
+                            strokeWidth: 4.5,
+                            color: Colors.blueAccent,
+                          ),
+                        ],
+                      ),
+                    // Location Markers (Technician & Customer)
+                    MarkerLayer(
+                      markers: [
+                        // Provider location marker
+                        Marker(
+                          point: centerLocation,
+                          width: 46,
+                          height: 46,
+                          child: Stack(
+                            alignment: Alignment.center,
                             children: [
-                              CircleAvatar(
-                                radius: 22,
-                                backgroundColor: _getCategoryColor(
-                                  dashboard.category,
-                                ).withValues(alpha: 0.15),
+                              Container(
+                                width: 38,
+                                height: 38,
+                                decoration: BoxDecoration(
+                                  color: dashboard.isOnline
+                                      ? _getCategoryColor(dashboard.category)
+                                      : Colors.grey.shade700,
+                                  shape: BoxShape.circle,
+                                  boxShadow: const [
+                                    BoxShadow(
+                                      color: Colors.black26,
+                                      blurRadius: 6,
+                                      offset: Offset(0, 3),
+                                    ),
+                                  ],
+                                  border: Border.all(
+                                    color: Colors.white,
+                                    width: 2.5,
+                                  ),
+                                ),
                                 child: Icon(
                                   _getCategoryIcon(dashboard.category),
-                                  color: _getCategoryColor(dashboard.category),
-                                  size: 24,
+                                  color: Colors.white,
+                                  size: 19,
                                 ),
                               ),
-                              const SizedBox(width: 12),
-                              Expanded(
-                                child: Column(
-                                  crossAxisAlignment: CrossAxisAlignment.start,
-                                  children: [
-                                    Text(
-                                      dashboard.fullName.isNotEmpty
-                                          ? dashboard.fullName
-                                          : 'Technician',
-                                      style: const TextStyle(
-                                        fontWeight: FontWeight.bold,
-                                        fontSize: 16,
+                              if (dashboard.isOnline)
+                                Positioned(
+                                  top: 2,
+                                  right: 2,
+                                  child: Container(
+                                    width: 11,
+                                    height: 11,
+                                    decoration: BoxDecoration(
+                                      color: Colors.greenAccent.shade400,
+                                      shape: BoxShape.circle,
+                                      border: Border.all(
+                                        color: Colors.white,
+                                        width: 1.5,
                                       ),
-                                      maxLines: 1,
-                                      overflow: TextOverflow.ellipsis,
                                     ),
-                                    if (dashboard.businessName.isNotEmpty)
-                                      Text(
-                                        dashboard.businessName,
-                                        style: TextStyle(
-                                          color: Colors.grey.shade700,
-                                          fontSize: 13,
-                                        ),
-                                        maxLines: 1,
-                                        overflow: TextOverflow.ellipsis,
-                                      ),
-                                  ],
-                                ),
-                              ),
-                              OutlinedButton.icon(
-                                style: OutlinedButton.styleFrom(
-                                  padding: const EdgeInsets.symmetric(
-                                    horizontal: 10,
-                                    vertical: 6,
                                   ),
-                                  visualDensity: VisualDensity.compact,
                                 ),
-                                icon: const Icon(Icons.edit, size: 14),
-                                label: const Text(
-                                  'Edit Profile',
-                                  style: TextStyle(fontSize: 12),
-                                ),
-                                onPressed: () =>
-                                    _openEditProfileModal(context, dashboard),
-                              ),
                             ],
                           ),
-                          const SizedBox(height: 10),
-                          Row(
-                            children: [
-                              // Trade Category badge
-                              Container(
-                                padding: const EdgeInsets.symmetric(
-                                  horizontal: 8,
-                                  vertical: 4,
-                                ),
-                                decoration: BoxDecoration(
-                                  color: _getCategoryColor(
-                                    dashboard.category,
-                                  ).withValues(alpha: 0.12),
-                                  borderRadius: BorderRadius.circular(6),
-                                  border: Border.all(
-                                    color: _getCategoryColor(
-                                      dashboard.category,
-                                    ).withValues(alpha: 0.4),
-                                  ),
-                                ),
-                                child: Row(
-                                  mainAxisSize: MainAxisSize.min,
-                                  children: [
-                                    Icon(
-                                      _getCategoryIcon(dashboard.category),
-                                      size: 14,
-                                      color: _getCategoryColor(
-                                        dashboard.category,
-                                      ),
-                                    ),
-                                    const SizedBox(width: 4),
-                                    Text(
-                                      dashboard.category,
-                                      style: TextStyle(
-                                        fontSize: 12,
-                                        fontWeight: FontWeight.w600,
-                                        color: _getCategoryColor(
-                                          dashboard.category,
-                                        ),
-                                      ),
-                                    ),
-                                  ],
-                                ),
-                              ),
-                              const SizedBox(width: 8),
-                              // Verified Chip with Star Rating
-                              Container(
-                                padding: const EdgeInsets.symmetric(
-                                  horizontal: 8,
-                                  vertical: 4,
-                                ),
-                                decoration: BoxDecoration(
-                                  color: Colors.green.shade50,
-                                  borderRadius: BorderRadius.circular(6),
-                                  border: Border.all(
-                                    color: Colors.green.shade300,
-                                  ),
-                                ),
-                                child: Row(
-                                  mainAxisSize: MainAxisSize.min,
-                                  children: [
-                                    const Icon(
-                                      Icons.verified,
-                                      size: 14,
-                                      color: Colors.green,
-                                    ),
-                                    const SizedBox(width: 4),
-                                    Text(
-                                      'Verified Technician ★ ${dashboard.rating.toStringAsFixed(1)}',
-                                      style: TextStyle(
-                                        fontSize: 12,
-                                        fontWeight: FontWeight.bold,
-                                        color: Colors.green.shade800,
-                                      ),
-                                    ),
-                                  ],
-                                ),
-                              ),
-                            ],
-                          ),
-                        ],
-                      ),
-                    ),
-                  ),
-                ),
-
-                // Duty Status & Operating Radius card
-                Padding(
-                  padding: const EdgeInsets.fromLTRB(
-                    AppSpacing.md,
-                    AppSpacing.xs,
-                    AppSpacing.md,
-                    AppSpacing.xs,
-                  ),
-                  child: Card(
-                    elevation: 2,
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(12),
-                    ),
-                    child: Padding(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: AppSpacing.md,
-                        vertical: AppSpacing.sm,
-                      ),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Row(
-                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                            children: [
-                              Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  const Text(
-                                    'Duty Status',
-                                    style: TextStyle(
-                                      fontWeight: FontWeight.bold,
-                                      fontSize: 14,
-                                    ),
-                                  ),
-                                  const SizedBox(height: 2),
-                                  Text(
-                                    dashboard.isOnline
-                                        ? '🟢 ONLINE (Receiving Jobs)'
-                                        : '⚫ OFFLINE (Off Duty)',
-                                    style: TextStyle(
-                                      color: dashboard.isOnline
-                                          ? Colors.green.shade700
-                                          : Colors.grey.shade600,
-                                      fontWeight: FontWeight.bold,
-                                      fontSize: 13,
-                                    ),
+                        ),
+                        // Customer location marker
+                        if (customerLocation != null)
+                          Marker(
+                            point: customerLocation,
+                            width: 46,
+                            height: 46,
+                            child: Container(
+                              decoration: BoxDecoration(
+                                color: Colors.green.shade600,
+                                shape: BoxShape.circle,
+                                boxShadow: const [
+                                  BoxShadow(
+                                    color: Colors.black26,
+                                    blurRadius: 6,
+                                    offset: Offset(0, 3),
                                   ),
                                 ],
-                              ),
-                              Switch(
-                                value: dashboard.isOnline,
-                                activeThumbColor: Colors.green,
-                                onChanged: (value) =>
-                                    dashboard.toggleOnlineStatus(value),
-                              ),
-                            ],
-                          ),
-                          const Divider(height: 12),
-                          Row(
-                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                            children: [
-                              Text(
-                                'Operating Radius: ${dashboard.operatingRadiusKm.toInt()} km',
-                                style: const TextStyle(
-                                  fontWeight: FontWeight.w600,
-                                  fontSize: 13,
+                                border: Border.all(
+                                  color: Colors.white,
+                                  width: 2.5,
                                 ),
                               ),
-                            ],
-                          ),
-                          Slider(
-                            value: dashboard.operatingRadiusKm.clamp(1.0, 50.0),
-                            min: 1,
-                            max: 50,
-                            divisions: 49,
-                            label: '${dashboard.operatingRadiusKm.toInt()} km',
-                            onChanged: dashboard.setOperatingRadius,
-                            onChangeEnd: dashboard.onRadiusChangeEnd,
-                          ),
-                          if (dashboard.error != null)
-                            Padding(
-                              padding: const EdgeInsets.only(bottom: 4),
-                              child: Text(
-                                dashboard.error!,
-                                style: const TextStyle(
-                                  color: Colors.red,
-                                  fontSize: 11,
-                                ),
+                              child: const Icon(
+                                Icons.person_pin,
+                                color: Colors.white,
+                                size: 24,
                               ),
                             ),
-                        ],
-                      ),
+                          ),
+                      ],
                     ),
+                  ],
+                ),
+
+                // 2. Floating Map Camera Action Buttons
+                Positioned(
+                  top: 92,
+                  right: 16,
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      if (customerLocation != null) ...[
+                        FloatingActionButton.small(
+                          heroTag: 'fit_both_btn',
+                          tooltip: 'Fit Both on Map',
+                          backgroundColor: Colors.white,
+                          foregroundColor: Colors.blueAccent,
+                          elevation: 3,
+                          onPressed: () => _fitMapToBounds(
+                            centerLocation,
+                            customerLocation,
+                          ),
+                          child: const Icon(Icons.zoom_out_map),
+                        ),
+                        const SizedBox(height: 8),
+                        FloatingActionButton.small(
+                          heroTag: 'customer_loc_btn',
+                          tooltip: 'Customer Location',
+                          backgroundColor: Colors.white,
+                          foregroundColor: Colors.green,
+                          elevation: 3,
+                          onPressed: () =>
+                              _centerOnLocation(customerLocation),
+                          child: const Icon(Icons.person_pin_circle),
+                        ),
+                        const SizedBox(height: 8),
+                      ],
+                      FloatingActionButton.small(
+                        heroTag: 'my_loc_btn',
+                        tooltip: 'My Location',
+                        backgroundColor: Colors.white,
+                        foregroundColor: Colors.redAccent,
+                        elevation: 3,
+                        onPressed: () =>
+                            _centerOnLocation(centerLocation),
+                        child: const Icon(Icons.my_location),
+                      ),
+                    ],
                   ),
                 ),
 
-                // Map & Incoming Alerts Section
-                Expanded(
-                  child: Stack(
-                    children: [
-                      FlutterMap(
-                        options: MapOptions(
-                          initialCenter: centerLocation,
-                          initialZoom: 13.0,
-                        ),
-                        children: [
-                          TileLayer(
-                            urlTemplate:
-                                'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
-                            userAgentPackageName: 'com.example.mobile',
+                // 3. Top Floating Island Header (Profile & Quick Actions)
+                SafeArea(
+                  child: Align(
+                    alignment: Alignment.topCenter,
+                    child: Padding(
+                      padding: const EdgeInsets.fromLTRB(16, 8, 16, 0),
+                      child: ConstrainedBox(
+                        constraints: const BoxConstraints(maxWidth: 680),
+                        child: Card(
+                          elevation: 4,
+                          shadowColor: Colors.black26,
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(16),
                           ),
-                          CircleLayer(
-                            circles: [
-                              CircleMarker(
-                                point: centerLocation,
-                                radius: dashboard.operatingRadiusKm * 1000,
-                                useRadiusInMeter: true,
-                                color: Colors.blue.withValues(alpha: 0.18),
-                                borderColor: Colors.blueAccent,
-                                borderStrokeWidth: 2,
-                              ),
-                            ],
-                          ),
-                          MarkerLayer(
-                            markers: [
-                              Marker(
-                                point: centerLocation,
-                                width: 40,
-                                height: 40,
-                                child: const Icon(
-                                  Icons.location_on,
-                                  color: Colors.red,
-                                  size: 40,
-                                ),
-                              ),
-                              if (dashboard.activeJobMatch != null &&
-                                  dashboard
-                                          .activeJobMatch!['customerLatitude'] !=
-                                      null &&
-                                  dashboard
-                                          .activeJobMatch!['customerLongitude'] !=
-                                      null)
-                                Marker(
-                                  point: latlong.LatLng(
-                                    (dashboard.activeJobMatch!['customerLatitude']
-                                            as num)
-                                        .toDouble(),
-                                    (dashboard.activeJobMatch!['customerLongitude']
-                                            as num)
-                                        .toDouble(),
-                                  ),
-                                  width: 40,
-                                  height: 40,
-                                  child: const Icon(
-                                    Icons.location_on,
-                                    color: Colors.green,
-                                    size: 40,
+                          color: Colors.white.withValues(alpha: 0.96),
+                          child: Padding(
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 14,
+                              vertical: 10,
+                            ),
+                            child: Row(
+                              children: [
+                                CircleAvatar(
+                                  radius: 20,
+                                  backgroundColor: _getCategoryColor(
+                                    dashboard.category,
+                                  ).withValues(alpha: 0.15),
+                                  child: Icon(
+                                    _getCategoryIcon(dashboard.category),
+                                    color: _getCategoryColor(dashboard.category),
+                                    size: 22,
                                   ),
                                 ),
-                            ],
-                          ),
-                          if (dashboard.routePoints.isNotEmpty)
-                            PolylineLayer(
-                              polylines: [
-                                Polyline(
-                                  points: dashboard.routePoints,
-                                  strokeWidth: 4.0,
-                                  color: Colors.blueAccent,
+                                const SizedBox(width: 10),
+                                Expanded(
+                                  child: Column(
+                                    crossAxisAlignment: CrossAxisAlignment.start,
+                                    mainAxisSize: MainAxisSize.min,
+                                    children: [
+                                      Row(
+                                        children: [
+                                          Flexible(
+                                            child: Text(
+                                              dashboard.fullName.isNotEmpty
+                                                  ? dashboard.fullName
+                                                  : 'Technician',
+                                              style: const TextStyle(
+                                                fontWeight: FontWeight.bold,
+                                                fontSize: 15,
+                                              ),
+                                              overflow: TextOverflow.ellipsis,
+                                            ),
+                                          ),
+                                          const SizedBox(width: 6),
+                                          Container(
+                                            padding: const EdgeInsets.symmetric(
+                                              horizontal: 6,
+                                              vertical: 2,
+                                            ),
+                                            decoration: BoxDecoration(
+                                              color: Colors.green.shade50,
+                                              borderRadius:
+                                                  BorderRadius.circular(6),
+                                              border: Border.all(
+                                                color: Colors.green.shade200,
+                                              ),
+                                            ),
+                                            child: Row(
+                                              mainAxisSize: MainAxisSize.min,
+                                              children: [
+                                                const Icon(
+                                                  Icons.star,
+                                                  size: 12,
+                                                  color: Colors.amber,
+                                                ),
+                                                const SizedBox(width: 2),
+                                                Text(
+                                                  dashboard.rating
+                                                      .toStringAsFixed(1),
+                                                  style: TextStyle(
+                                                    fontSize: 11,
+                                                    fontWeight: FontWeight.bold,
+                                                    color:
+                                                        Colors.green.shade900,
+                                                  ),
+                                                ),
+                                              ],
+                                            ),
+                                          ),
+                                        ],
+                                      ),
+                                      const SizedBox(height: 2),
+                                      Row(
+                                        children: [
+                                          Text(
+                                            dashboard.category,
+                                            style: TextStyle(
+                                              fontSize: 11,
+                                              fontWeight: FontWeight.w600,
+                                              color: _getCategoryColor(
+                                                dashboard.category,
+                                              ),
+                                            ),
+                                          ),
+                                          if (dashboard
+                                              .businessName.isNotEmpty) ...[
+                                            Text(
+                                              ' • ',
+                                              style: TextStyle(
+                                                fontSize: 11,
+                                                color: Colors.grey.shade500,
+                                              ),
+                                            ),
+                                            Flexible(
+                                              child: Text(
+                                                dashboard.businessName,
+                                                style: TextStyle(
+                                                  fontSize: 11,
+                                                  color: Colors.grey.shade600,
+                                                ),
+                                                overflow: TextOverflow.ellipsis,
+                                              ),
+                                            ),
+                                          ],
+                                        ],
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                                IconButton(
+                                  icon: const Icon(Icons.edit_outlined,
+                                      size: 19),
+                                  tooltip: 'Edit Profile',
+                                  visualDensity: VisualDensity.compact,
+                                  onPressed: () => _openEditProfileModal(
+                                    context,
+                                    dashboard,
+                                  ),
+                                ),
+                                IconButton(
+                                  icon: const Icon(Icons.tune_outlined,
+                                      size: 19),
+                                  tooltip: 'Alert & Audio Settings',
+                                  visualDensity: VisualDensity.compact,
+                                  onPressed: () => _openSettingsDialog(
+                                    context,
+                                    dashboard,
+                                  ),
+                                ),
+                                IconButton(
+                                  icon: const Icon(Icons.refresh, size: 19),
+                                  tooltip: 'Refresh Status',
+                                  visualDensity: VisualDensity.compact,
+                                  onPressed: () => dashboard.fetchProfile(),
+                                ),
+                                IconButton(
+                                  icon: const Icon(Icons.logout,
+                                      size: 19, color: Colors.redAccent),
+                                  tooltip: 'Log Out',
+                                  visualDensity: VisualDensity.compact,
+                                  onPressed: () async {
+                                    await dashboard.onLogout();
+                                    if (context.mounted) {
+                                      await auth.logout();
+                                    }
+                                  },
                                 ),
                               ],
                             ),
-                        ],
-                      ),
-
-                      // Dynamic Job Alert Card overlay
-                      if (dashboard.isOnline &&
-                          dashboard.activeJobMatch != null &&
-                          !hasAcceptedActiveMatch)
-                        Positioned(
-                          bottom: AppSpacing.md,
-                          left: AppSpacing.md,
-                          right: AppSpacing.md,
-                          child: JobAlertCard(
-                            category:
-                                dashboard.activeJobMatch!['category']
-                                    ?.toString() ??
-                                'Service Request',
-                            distance:
-                                dashboard.liveDistanceKm != null
-                                    ? dashboard.liveDistanceKm!.toStringAsFixed(1)
-                                    : '${dashboard.activeJobMatch!['distanceKm']}',
-                            urgency:
-                                dashboard.activeJobMatch!['urgency']
-                                    ?.toString() ??
-                                'Standard',
-                            description: dashboard
-                                .activeJobMatch!['description']
-                                ?.toString(),
-                            aiRationale: (dashboard
-                                        .activeJobMatch!['detectedProblem'] ??
-                                    dashboard
-                                        .activeJobMatch!['aiRationale'] ??
-                                    dashboard
-                                        .activeJobMatch!['rationale'])
-                                ?.toString(),
-                            isOutOfRange: dashboard.liveDistanceKm != null &&
-                                dashboard.liveDistanceKm! >
-                                    dashboard.operatingRadiusKm,
-                            onAccept: onAcceptMatch,
-                            onDecline: onDeclineMatch,
                           ),
                         ),
-                    ],
+                      ),
+                    ),
+                  ),
+                ),
+
+                // 4. Bottom Floating Operations Cockpit or Incoming Job Alert
+                Positioned(
+                  bottom: 16,
+                  left: 16,
+                  right: 16,
+                  child: Center(
+                    child: ConstrainedBox(
+                      constraints: const BoxConstraints(maxWidth: 580),
+                      child: (dashboard.isOnline &&
+                              dashboard.activeJobMatch != null &&
+                              !widget.hasAcceptedActiveMatch)
+                          // Active Incoming Job Alert Card
+                          ? JobAlertCard(
+                              category: dashboard
+                                      .activeJobMatch!['category']
+                                      ?.toString() ??
+                                  'Service Request',
+                              distance: dashboard.liveDistanceKm != null
+                                  ? '${dashboard.liveDistanceKm!.toStringAsFixed(1)} km'
+                                  : (dashboard.activeJobMatch!['distanceKm'] !=
+                                          null
+                                      ? '${dashboard.activeJobMatch!['distanceKm']} km'
+                                      : 'Nearby'),
+                              urgency: dashboard
+                                      .activeJobMatch!['urgency']
+                                      ?.toString() ??
+                                  'Standard',
+                              description: dashboard
+                                  .activeJobMatch!['description']
+                                  ?.toString(),
+                              aiRationale: (dashboard
+                                          .activeJobMatch!['detectedProblem'] ??
+                                      dashboard
+                                          .activeJobMatch!['aiRationale'] ??
+                                      dashboard
+                                          .activeJobMatch!['rationale'])
+                                  ?.toString(),
+                              isOutOfRange: dashboard.liveDistanceKm != null &&
+                                  dashboard.liveDistanceKm! >
+                                      dashboard.operatingRadiusKm,
+                              onAccept: widget.onAcceptMatch,
+                              onDecline: widget.onDeclineMatch,
+                            )
+                          // Default Duty Operations Cockpit Card
+                          : Card(
+                              elevation: 6,
+                              shadowColor: Colors.black26,
+                              shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(18),
+                              ),
+                              color: Colors.white,
+                              child: Padding(
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 16,
+                                  vertical: 14,
+                                ),
+                                child: Column(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    // Status Header & Tactile Switch
+                                    Row(
+                                      children: [
+                                        Container(
+                                          width: 12,
+                                          height: 12,
+                                          decoration: BoxDecoration(
+                                            color: dashboard.isOnline
+                                                ? Colors.green
+                                                : Colors.grey.shade400,
+                                            shape: BoxShape.circle,
+                                            boxShadow: dashboard.isOnline
+                                                ? [
+                                                    BoxShadow(
+                                                      color: Colors.green
+                                                          .withValues(
+                                                              alpha: 0.5),
+                                                      blurRadius: 6,
+                                                      spreadRadius: 2,
+                                                    )
+                                                  ]
+                                                : null,
+                                          ),
+                                        ),
+                                        const SizedBox(width: 10),
+                                        Expanded(
+                                          child: Column(
+                                            crossAxisAlignment:
+                                                CrossAxisAlignment.start,
+                                            children: [
+                                              Text(
+                                                dashboard.isOnline
+                                                    ? "YOU'RE ONLINE"
+                                                    : "YOU'RE OFFLINE",
+                                                style: TextStyle(
+                                                  fontWeight: FontWeight.w900,
+                                                  fontSize: 14,
+                                                  letterSpacing: 0.5,
+                                                  color: dashboard.isOnline
+                                                      ? Colors.green.shade800
+                                                      : Colors.grey.shade700,
+                                                ),
+                                              ),
+                                              Text(
+                                                dashboard.isOnline
+                                                    ? 'Receiving dispatches within ${dashboard.operatingRadiusKm.toInt()} km'
+                                                    : 'Go online to start receiving customer service requests',
+                                                style: TextStyle(
+                                                  fontSize: 12,
+                                                  color: Colors.grey.shade600,
+                                                ),
+                                                maxLines: 1,
+                                                overflow: TextOverflow.ellipsis,
+                                              ),
+                                            ],
+                                          ),
+                                        ),
+                                        Transform.scale(
+                                          scale: 0.9,
+                                          child: Switch(
+                                            value: dashboard.isOnline,
+                                            activeThumbColor: Colors.green,
+                                            activeTrackColor:
+                                                Colors.green.shade100,
+                                            onChanged: (val) => dashboard
+                                                .toggleOnlineStatus(val),
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                    const Divider(height: 16),
+                                    // Coverage Radius & Quick Presets
+                                    Row(
+                                      mainAxisAlignment:
+                                          MainAxisAlignment.spaceBetween,
+                                      children: [
+                                        Row(
+                                          children: [
+                                            Icon(
+                                              Icons.radar,
+                                              size: 16,
+                                              color: Colors.blue.shade700,
+                                            ),
+                                            const SizedBox(width: 6),
+                                            Text(
+                                              'Coverage: ${dashboard.operatingRadiusKm.toInt()} km radius',
+                                              style: const TextStyle(
+                                                fontWeight: FontWeight.bold,
+                                                fontSize: 13,
+                                              ),
+                                            ),
+                                          ],
+                                        ),
+                                        // Quick Presets
+                                        Row(
+                                          mainAxisSize: MainAxisSize.min,
+                                          children: [5, 10, 20, 30].map((preset) {
+                                            final isSelected = dashboard
+                                                    .operatingRadiusKm
+                                                    .toInt() ==
+                                                preset;
+                                            return Padding(
+                                              padding: const EdgeInsets.only(
+                                                  left: 4),
+                                              child: InkWell(
+                                                borderRadius:
+                                                    BorderRadius.circular(6),
+                                                onTap: () {
+                                                  dashboard.setOperatingRadius(
+                                                    preset.toDouble(),
+                                                  );
+                                                  dashboard.onRadiusChangeEnd(
+                                                    preset.toDouble(),
+                                                  );
+                                                },
+                                                child: Container(
+                                                  padding:
+                                                      const EdgeInsets.symmetric(
+                                                    horizontal: 7,
+                                                    vertical: 2,
+                                                  ),
+                                                  decoration: BoxDecoration(
+                                                    color: isSelected
+                                                        ? Colors.blue.shade700
+                                                        : Colors.grey.shade100,
+                                                    borderRadius:
+                                                        BorderRadius.circular(
+                                                            6),
+                                                    border: Border.all(
+                                                      color: isSelected
+                                                          ? Colors.blue.shade700
+                                                          : Colors
+                                                              .grey.shade300,
+                                                    ),
+                                                  ),
+                                                  child: Text(
+                                                    '${preset}k',
+                                                    style: TextStyle(
+                                                      fontSize: 11,
+                                                      fontWeight:
+                                                          FontWeight.bold,
+                                                      color: isSelected
+                                                          ? Colors.white
+                                                          : Colors
+                                                              .grey.shade700,
+                                                    ),
+                                                  ),
+                                                ),
+                                              ),
+                                            );
+                                          }).toList(),
+                                        ),
+                                      ],
+                                    ),
+                                    SliderTheme(
+                                      data: SliderTheme.of(context).copyWith(
+                                        trackHeight: 3,
+                                        thumbShape:
+                                            const RoundSliderThumbShape(
+                                          enabledThumbRadius: 7,
+                                        ),
+                                      ),
+                                      child: Slider(
+                                        value: dashboard.operatingRadiusKm
+                                            .clamp(1.0, 50.0),
+                                        min: 1,
+                                        max: 50,
+                                        divisions: 49,
+                                        label:
+                                            '${dashboard.operatingRadiusKm.toInt()} km',
+                                        onChanged: dashboard.setOperatingRadius,
+                                        onChangeEnd:
+                                            dashboard.onRadiusChangeEnd,
+                                      ),
+                                    ),
+                                    if (dashboard.error != null)
+                                      Padding(
+                                        padding:
+                                            const EdgeInsets.only(bottom: 2),
+                                        child: Text(
+                                          dashboard.error!,
+                                          style: const TextStyle(
+                                            color: Colors.red,
+                                            fontSize: 11,
+                                          ),
+                                        ),
+                                      ),
+                                  ],
+                                ),
+                              ),
+                            ),
+                    ),
                   ),
                 ),
               ],

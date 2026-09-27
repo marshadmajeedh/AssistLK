@@ -31,19 +31,22 @@ public class ProvidersController : ControllerBase
     private readonly ILogger<ProvidersController> _logger;
     private readonly IPasswordHasher<User> _passwordHasher;
     private readonly IWebHostEnvironment _environment;
+    private readonly IServiceScopeFactory _scopeFactory;
 
     public ProvidersController(
         AssistLKDbContext dbContext,
         IServiceRequestRepository serviceRequestRepository,
         ILogger<ProvidersController> logger,
         IPasswordHasher<User> passwordHasher,
-        IWebHostEnvironment environment)
+        IWebHostEnvironment environment,
+        IServiceScopeFactory scopeFactory)
     {
         _dbContext = dbContext;
         _serviceRequestRepository = serviceRequestRepository;
         _logger = logger;
         _passwordHasher = passwordHasher;
         _environment = environment;
+        _scopeFactory = scopeFactory;
     }
 
     /// <summary>
@@ -435,8 +438,39 @@ public class ProvidersController : ControllerBase
 
         candidate.Status = MatchedCandidateStatus.Declined;
         candidate.UpdatedAt = DateTime.UtcNow;
+
+        var execution = candidate.MatchingExecution;
+        if (execution != null)
+        {
+            execution.Status = MatchingExecutionStatus.Failed;
+            execution.CompletedAt = DateTime.UtcNow;
+        }
+
         await _dbContext.SaveChangesAsync(cancellationToken);
-        return Ok(new { message = "Match declined successfully.", candidateId = candidate.Id, status = candidate.Status.ToString() });
+
+        var serviceRequestId = execution?.ServiceRequestId;
+        if (serviceRequestId.HasValue)
+        {
+            var srId = serviceRequestId.Value;
+            _logger.LogInformation("Provider {ProviderId} declined dispatch. Triggering cascade re-matching for ServiceRequest {ServiceRequestId}.", profile.Id, srId);
+
+            _ = Task.Run(async () =>
+            {
+                try
+                {
+                    using var scope = _scopeFactory.CreateScope();
+                    var coordinator = scope.ServiceProvider.GetRequiredService<AssistLK.Application.Services.Providers.IProviderMatchingCoordinator>();
+                    var result = await coordinator.ExecuteMatchForRequestAsync(srId);
+                    _logger.LogInformation("Cascade re-matching for ServiceRequest {ServiceRequestId} concluded with status: {Status} (Success={Success}).", srId, result.Status, result.Success);
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogError(ex, "Cascade re-matching failed in background for ServiceRequest {ServiceRequestId}.", srId);
+                }
+            });
+        }
+
+        return Ok(new { message = "Match declined successfully. Searching for next eligible provider.", candidateId = candidate.Id, status = candidate.Status.ToString() });
     }
 
     [HttpPut("availability")]

@@ -35,20 +35,38 @@ public class ProviderMatchingCoordinator : IProviderMatchingCoordinator
         Guid serviceRequestId,
         CancellationToken cancellationToken = default)
     {
-        // 1. Guard against duplicate / concurrent runs for this request
+        // 1. Guard against duplicate / concurrent runs or requests already accepted
+        var alreadyAccepted = await _dbContext.MatchedCandidates
+            .AnyAsync(m => m.MatchingExecution.ServiceRequestId == serviceRequestId 
+                        && m.Status == MatchedCandidateStatus.Accepted,
+                      cancellationToken);
+
+        if (alreadyAccepted)
+        {
+            _logger.LogInformation("ServiceRequest {ServiceRequestId} already has an accepted provider match.", serviceRequestId);
+            return new MatchingExecutionResult
+            {
+                Success = true,
+                Status = "AlreadyAccepted",
+                Message = "This service request has already been accepted by a provider."
+            };
+        }
+
         var existingActive = await _dbContext.MatchingExecutions
             .AnyAsync(e => e.ServiceRequestId == serviceRequestId 
-                        && (e.Status == MatchingExecutionStatus.Running || e.Status == MatchingExecutionStatus.PendingApproval),
+                        && (e.Status == MatchingExecutionStatus.Running 
+                            || e.Status == MatchingExecutionStatus.PendingApproval
+                            || (e.Status == MatchingExecutionStatus.Completed && e.Candidates.Any(c => c.Status == MatchedCandidateStatus.Recommended))),
                       cancellationToken);
 
         if (existingActive)
         {
-            _logger.LogInformation("Matching for ServiceRequest {ServiceRequestId} is already in progress or awaiting approval.", serviceRequestId);
+            _logger.LogInformation("Matching for ServiceRequest {ServiceRequestId} is already in progress, awaiting approval, or dispatched to a provider.", serviceRequestId);
             return new MatchingExecutionResult
             {
                 Success = true,
                 Status = "AlreadyActive",
-                Message = "An active matching execution is already in progress or pending approval."
+                Message = "An active matching execution is already in progress or dispatched to a provider."
             };
         }
 
@@ -68,7 +86,15 @@ public class ProviderMatchingCoordinator : IProviderMatchingCoordinator
         int urgencyScore = sr.Urgency == ServiceRequestUrgency.Unknown ? 2 : (int)sr.Urgency;
         var objective = $"Category: {sr.Category}, Urgency: {urgencyScore}, Problem: {sr.ProblemSummary}, Location: {sr.LocationText}";
 
-        // 3. Fetch live active, verified providers directly from database matching request category
+        // 3. Find all providers who have previously declined this request
+        var declinedProviderIds = await _dbContext.MatchedCandidates
+            .Where(m => m.MatchingExecution.ServiceRequestId == serviceRequestId 
+                     && m.Status == MatchedCandidateStatus.Declined)
+            .Select(m => m.ProviderId)
+            .Distinct()
+            .ToListAsync(cancellationToken);
+
+        // 4. Fetch live active, verified providers directly from database matching request category
         var targetCat = (sr.Category ?? string.Empty).Trim().ToLowerInvariant();
         bool isVehicle = targetCat.Contains("vehicle");
         bool isPlumbing = targetCat.Contains("plumb");
@@ -79,6 +105,12 @@ public class ProviderMatchingCoordinator : IProviderMatchingCoordinator
             .Include(p => p.Locations)
             .Include(p => p.Skills)
             .Where(p => p.IsOnline && p.VerificationStatus == ProviderVerificationStatus.Verified);
+
+        // Exclude providers who already declined this request
+        if (declinedProviderIds.Count > 0)
+        {
+            eligibleQuery = eligibleQuery.Where(p => !declinedProviderIds.Contains(p.Id));
+        }
 
         if (isVehicle)
         {
@@ -119,6 +151,33 @@ public class ProviderMatchingCoordinator : IProviderMatchingCoordinator
                 Skills = p.Skills.Select(s => s.SkillName.ToLower()).ToList()
             })
             .ToListAsync(cancellationToken);
+
+        if (eligibleProviders.Count == 0)
+        {
+            var noProviderMsg = declinedProviderIds.Count > 0
+                ? "All eligible providers have declined this request."
+                : "No eligible providers found within their operational radius.";
+
+            _logger.LogInformation("No eligible providers found for ServiceRequest {ServiceRequestId}: {Message}", serviceRequestId, noProviderMsg);
+
+            var failedExecution = new MatchingExecution
+            {
+                ServiceRequestId = serviceRequestId,
+                Status = MatchingExecutionStatus.Failed,
+                StartedAt = DateTime.UtcNow,
+                CompletedAt = DateTime.UtcNow
+            };
+            _dbContext.MatchingExecutions.Add(failedExecution);
+            await _dbContext.SaveChangesAsync(cancellationToken);
+
+            return new MatchingExecutionResult
+            {
+                Success = false,
+                Status = "No_Eligible_Providers",
+                Message = noProviderMsg,
+                MatchingExecutionId = failedExecution.Id
+            };
+        }
 
         var execution = new MatchingExecution
         {

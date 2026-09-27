@@ -102,11 +102,11 @@ class ProviderDashboardProvider extends ChangeNotifier {
       notifyListeners();
 
       if (isVerified) {
+        _isOnline = true;
+        _saveIsOnline(true);
         unawaited(_checkPermissionsAndFetchLocation());
-        if (_isOnline) {
-          fetchLatestDispatchedJob();
-          _startPolling();
-        }
+        fetchLatestDispatchedJob();
+        _startPolling();
       } else {
         _stopPolling();
         _clearJobState();
@@ -216,9 +216,10 @@ class ProviderDashboardProvider extends ChangeNotifier {
           });
 
       _error = null;
+      _updateLiveDistance();
       notifyListeners();
 
-      if (_isOnline && isVerified) {
+      if (isVerified) {
         _syncAvailability();
       }
     } catch (e) {
@@ -239,6 +240,9 @@ class ProviderDashboardProvider extends ChangeNotifier {
           cLng.toDouble(),
         );
         _liveDistanceKm = distanceInMeters / 1000.0;
+      } else {
+        final num? staticDist = activeJobMatch!['distanceKm'] as num?;
+        _liveDistanceKm = staticDist?.toDouble();
       }
     } else {
       _liveDistanceKm = null;
@@ -455,6 +459,25 @@ class ProviderDashboardProvider extends ChangeNotifier {
     } catch (e) {
       debugPrint('Failed to decline match: $e');
     }
+  }
+
+  Future<void> onLogout() async {
+    _stopPolling();
+    _positionStreamSubscription?.cancel();
+    _positionStreamSubscription = null;
+    _isOnline = false;
+    await _saveIsOnline(false);
+    try {
+      await providerService.updateAvailability(
+        isOnline: false,
+        latitude: _latitude,
+        longitude: _longitude,
+        operatingRadiusKm: _operatingRadiusKm,
+      );
+    } catch (e) {
+      debugPrint('Failed to sync offline status on logout: $e');
+    }
+    _clearJobState();
   }
 
   @override

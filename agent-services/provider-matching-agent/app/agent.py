@@ -75,8 +75,8 @@ def match_and_score_providers(state: MatchingState) -> Dict[str, Any]:
             except Exception:
                 pass
 
-        # Fallback to tools.py only if no live candidates were passed
-        if not providers:
+        # Fallback to tools.py only if eligible_providers was not supplied at all
+        if providers is None:
             try:
                 search_res = SearchEligibleProviders.invoke({
                     "urgency": urgency,

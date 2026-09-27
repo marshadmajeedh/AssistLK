@@ -12,16 +12,19 @@ import 'package:mobile/features/service_requests/widgets/problem_photos.dart';
 import 'package:mobile/shared/theme/app_theme.dart';
 
 import 'mocks/fake_problem_photos.dart';
+import 'mocks/mock_location_geocoding_service.dart';
 
 void main() {
   late PhotoApi api;
   late FakePhotoPicker picker;
   late ServiceRequestProvider requests;
   late PhotoAuth auth;
+  late MockLocationGeocodingService geocoding;
   setUp(() {
     api = PhotoApi();
     picker = FakePhotoPicker();
     auth = PhotoAuth();
+    geocoding = MockLocationGeocodingService();
     requests = ServiceRequestProvider(serviceRequestService: api);
   });
   tearDown(() {
@@ -69,6 +72,10 @@ void main() {
       'Colombo',
     );
     await tap(tester, 'Next: Review');
+    if (find.text('Use This Location').evaluate().isNotEmpty) {
+      await tap(tester, 'Use This Location');
+      await tap(tester, 'Next: Review');
+    }
   }
 
   for (final camera in [true, false]) {
@@ -76,7 +83,10 @@ void main() {
       '${camera ? 'camera' : 'gallery'} choice adds optional thumbnail through fake picker',
       (tester) async {
         await tester.pumpWidget(
-          app(CreateServiceRequestScreen(imagePicker: picker)),
+          app(CreateServiceRequestScreen(
+            imagePicker: picker,
+            geocodingService: geocoding,
+          )),
         );
         await tester.pumpAndSettle();
         expect(find.text('Problem Photos (Optional)'), findsOneWidget);
@@ -93,7 +103,10 @@ void main() {
     tester,
   ) async {
     await tester.pumpWidget(
-      app(CreateServiceRequestScreen(imagePicker: picker)),
+      app(CreateServiceRequestScreen(
+            imagePicker: picker,
+            geocodingService: geocoding,
+          )),
     );
     await tester.pumpAndSettle();
     await tap(tester, 'Add Photo');
@@ -107,7 +120,10 @@ void main() {
     'three photos disable Add and selected removal does not call backend',
     (tester) async {
       await tester.pumpWidget(
-        app(CreateServiceRequestScreen(imagePicker: picker)),
+        app(CreateServiceRequestScreen(
+            imagePicker: picker,
+            geocodingService: geocoding,
+          )),
       );
       await tester.pumpAndSettle();
       for (var i = 1; i <= 3; i++) {
@@ -133,7 +149,10 @@ void main() {
     'photos survive wizard forward and back navigation and appear in Review',
     (tester) async {
       await tester.pumpWidget(
-        app(CreateServiceRequestScreen(imagePicker: picker)),
+        app(CreateServiceRequestScreen(
+            imagePicker: picker,
+            geocodingService: geocoding,
+          )),
       );
       await tester.pumpAndSettle();
       await select(tester, 1);
@@ -152,7 +171,10 @@ void main() {
     (tester) async {
       api.failures.add('photo2.png');
       await tester.pumpWidget(
-        app(CreateServiceRequestScreen(imagePicker: picker)),
+        app(CreateServiceRequestScreen(
+            imagePicker: picker,
+            geocodingService: geocoding,
+          )),
       );
       await tester.pumpAndSettle();
       await select(tester, 1);
@@ -174,7 +196,10 @@ void main() {
     (tester) async {
       api.failures.add('photo1.png');
       await tester.pumpWidget(
-        app(CreateServiceRequestScreen(imagePicker: picker)),
+        app(CreateServiceRequestScreen(
+            imagePicker: picker,
+            geocodingService: geocoding,
+          )),
       );
       await tester.pumpAndSettle();
       await select(tester, 1);
@@ -316,7 +341,10 @@ void main() {
         addTearDown(tester.view.resetPhysicalSize);
         addTearDown(tester.view.resetDevicePixelRatio);
         await tester.pumpWidget(
-          app(CreateServiceRequestScreen(imagePicker: picker), scale: 1.8),
+          app(CreateServiceRequestScreen(
+            imagePicker: picker,
+            geocodingService: geocoding,
+          ), scale: 1.8),
         );
         await tester.pumpAndSettle();
         expect(tester.takeException(), isNull);

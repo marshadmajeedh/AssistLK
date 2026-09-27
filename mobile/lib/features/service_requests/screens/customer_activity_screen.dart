@@ -9,7 +9,7 @@ import '../../../../shared/widgets/empty_state_card.dart';
 import '../../../../shared/widgets/section_header.dart';
 import '../providers/service_request_provider.dart';
 import '../widgets/service_request_card.dart';
-import 'create_service_request_screen.dart';
+import '../navigation/open_create_service_request.dart';
 import 'service_request_detail_screen.dart';
 
 class CustomerActivityScreen extends StatelessWidget {
@@ -18,11 +18,7 @@ class CustomerActivityScreen extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final provider = context.watch<ServiceRequestProvider>();
-    void create() => Navigator.of(context).push(
-      MaterialPageRoute<void>(
-        builder: (_) => const CreateServiceRequestScreen(),
-      ),
-    );
+    void create() => openCreateServiceRequest(context);
     Future<void> refresh() async {
       if (!provider.isLoading) await provider.loadMyRequests();
     }

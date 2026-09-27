@@ -1,3 +1,4 @@
+import '../../customer/providers/customer_location_provider.dart';
 import '../../auth/providers/auth_provider.dart';
 import '../providers/problem_photos_controller.dart';
 import '../services/problem_image_picker.dart';
@@ -74,11 +75,15 @@ class _CreateServiceRequestScreenState
     _photos.addListener(_photoChanged);
     _photos.recover();
     _selectedPreference = widget.initialCategoryPreference;
+    final customerLocation = context.read<CustomerLocationProvider?>();
     _location = LocationSelectionController(
       initialSuggestion: widget.initialLocationSuggestion,
-      gps: widget.locationService ?? GeolocatorLocationService(),
+      gps: widget.locationService ??
+          customerLocation?.gps ??
+          GeolocatorLocationService(),
       geocoding:
           widget.geocodingService ??
+          customerLocation?.geocoding ??
           LocationGeocodingService(
             apiClient: context
                 .read<ServiceRequestProvider>()
@@ -244,8 +249,13 @@ class _CreateServiceRequestScreenState
     });
   }
 
-  void _nextFromLocation() {
+  Future<void> _nextFromLocation() async {
+    if (_location.busy) return;
     if (!_locationFormKey.currentState!.validate()) {
+      return;
+    }
+    if (!_location.hasConfirmedCoordinates) {
+      await _location.resolveAddress();
       return;
     }
     setState(() {
@@ -267,7 +277,12 @@ class _CreateServiceRequestScreenState
   }
 
   Future<void> _submit() async {
-    if (_photos.busy || !_photos.active || _location.validate() != null) return;
+    if (_photos.busy ||
+        !_photos.active ||
+        !_location.hasConfirmedCoordinates ||
+        _location.validate() != null) {
+      return;
+    }
     final provider = context.read<ServiceRequestProvider>();
     final canonicalHint = CanonicalServiceCategory.toCanonicalCategoryHint(
       _selectedPreference,
@@ -353,7 +368,8 @@ class _CreateServiceRequestScreenState
     );
     final next = AppButton(
       text: _currentStep == 1 ? 'Next: Review' : 'Submit Request',
-      isLoading: _currentStep == 2 && (provider.isLoading || _photos.busy),
+      isLoading: (_currentStep == 1 && _location.busy) ||
+          (_currentStep == 2 && (provider.isLoading || _photos.busy)),
       onPressed: _currentStep == 1 ? _nextFromLocation : _submit,
     );
     return LayoutBuilder(
@@ -632,15 +648,19 @@ class _CreateServiceRequestScreenState
                 const SizedBox(height: AppSpacing.xs),
                 Row(
                   children: [
-                    const Icon(
-                      Icons.my_location_rounded,
+                    Icon(
+                      _location.fromGps
+                          ? Icons.my_location_rounded
+                          : Icons.check_circle_rounded,
                       size: 14,
                       color: AppColors.success,
                     ),
                     const SizedBox(width: AppSpacing.xs),
                     Flexible(
                       child: Text(
-                        'GPS location captured',
+                        _location.fromGps
+                            ? 'GPS location captured'
+                            : 'Coordinates resolved & confirmed',
                         style: AppTextStyles.small.copyWith(
                           color: AppColors.success,
                           fontWeight: FontWeight.w600,

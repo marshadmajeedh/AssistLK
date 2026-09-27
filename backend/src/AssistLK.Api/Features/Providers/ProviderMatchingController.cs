@@ -18,147 +18,193 @@ public record ResumeMatchRequest(string Action);
 public class ProviderMatchingController : ControllerBase
 {
     private readonly IProviderMatchingService _matchingService;
+    private readonly IProviderMatchingCoordinator _matchingCoordinator;
     private readonly IServiceRequestService _serviceRequestService;
+    private readonly IServiceRequestRepository _serviceRequestRepository;
     private readonly IAgentWorkflowDbContext _dbContext;
     private readonly ILogger<ProviderMatchingController> _logger;
 
     public ProviderMatchingController(
         IProviderMatchingService matchingService,
+        IProviderMatchingCoordinator matchingCoordinator,
         IServiceRequestService serviceRequestService,
+        IServiceRequestRepository serviceRequestRepository,
         IAgentWorkflowDbContext dbContext,
         ILogger<ProviderMatchingController> logger)
     {
         _matchingService = matchingService;
+        _matchingCoordinator = matchingCoordinator;
         _serviceRequestService = serviceRequestService;
+        _serviceRequestRepository = serviceRequestRepository;
         _dbContext = dbContext;
         _logger = logger;
+    }
+
+    [NonAction]
+    public async Task<MatchingExecutionResult> ExecuteMatchForRequestAsync(Guid serviceRequestId, CancellationToken cancellationToken)
+    {
+        return await _matchingCoordinator.ExecuteMatchForRequestAsync(serviceRequestId, cancellationToken);
     }
 
     [HttpPost("{serviceRequestId:guid}/start")]
     public async Task<IActionResult> StartMatching(Guid serviceRequestId, CancellationToken cancellationToken)
     {
-        var sr = await _serviceRequestService.GetReadyForMatchingAsync(serviceRequestId, cancellationToken);
-        if (sr == null)
+        var result = await ExecuteMatchForRequestAsync(serviceRequestId, cancellationToken);
+        if (result.Status == "NotReady")
         {
             return NotFound("Service Request not found or not ready for matching.");
         }
 
-        int urgencyScore = sr.Urgency == ServiceRequestUrgency.Unknown ? 2 : (int)sr.Urgency;
-        var objective = $"Category: {sr.Category}, Urgency: {urgencyScore}, Problem: {sr.ProblemSummary}, Location: {sr.LocationText}";
+        if (result.Status == "Failed")
+        {
+            return StatusCode(503, result.Message ?? "AI Matching Engine is currently unavailable.");
+        }
 
-        // 1. Fetch live active, verified providers directly from PostgreSQL
-        var eligibleProviders = await _dbContext.ProviderProfiles
-            .Include(p => p.Locations)
-            .Include(p => p.Skills)
-            .Where(p => p.IsOnline && p.VerificationStatus == ProviderVerificationStatus.Verified)
-            .Select(p => new ProviderCandidateDto
-            {
-                ProviderId = p.Id.ToString(),
-                Name = p.BusinessName,
-                Rating = (double)p.Rating,
-                Latitude = (double)(p.Locations.Select(l => l.Latitude).FirstOrDefault()),
-                Longitude = (double)(p.Locations.Select(l => l.Longitude).FirstOrDefault()),
-                OperatingRadiusKm = (double)(p.Locations.Select(l => l.OperatingRadiusKm).FirstOrDefault()),
-                Verified = true,
-                Skills = p.Skills.Select(s => s.SkillName.ToLower()).ToList()
-            })
+        return Ok(new
+        {
+            threadId = result.ThreadId,
+            status = result.Status,
+            message = result.Message,
+            tokensConsumed = result.TokensConsumed
+        });
+    }
+
+    [HttpPost("sync-ready")]
+    public async Task<IActionResult> SyncReadyRequests(CancellationToken cancellationToken)
+    {
+        var readyRequests = await _serviceRequestRepository.GetByStatusAsync(
+            ServiceRequestStatus.ReadyForMatching, 
+            cancellationToken);
+
+        if (readyRequests.Count == 0)
+        {
+            return Ok(new { message = "No requests in ReadyForMatching status.", totalDispatched = 0, results = Array.Empty<object>() });
+        }
+
+        var readyIds = readyRequests.Select(r => r.Id).ToList();
+
+        var activeOrCompletedSrIds = await _dbContext.MatchingExecutions
+            .Where(e => readyIds.Contains(e.ServiceRequestId) &&
+                       (e.Status == MatchingExecutionStatus.Running 
+                     || e.Status == MatchingExecutionStatus.PendingApproval 
+                     || e.Status == MatchingExecutionStatus.Completed))
+            .Select(e => e.ServiceRequestId)
+            .Distinct()
             .ToListAsync(cancellationToken);
 
-        var execution = new MatchingExecution
+        var toMatchIds = readyIds.Except(activeOrCompletedSrIds).ToList();
+        var results = new List<object>();
+
+        foreach (var id in toMatchIds)
         {
-            ServiceRequestId = serviceRequestId,
-            Status = MatchingExecutionStatus.Running,
-            StartedAt = DateTime.UtcNow
-        };
-
-        _dbContext.MatchingExecutions.Add(execution);
-        await _dbContext.SaveChangesAsync(cancellationToken);
-
-        try
-        {
-            // 2. Dispatch real DB records and customer coordinates to Python
-            var matchRequest = new MatchStartRequest
-               {
-                   Objective = objective,
-                   Urgency = urgencyScore,
-                   CustomerLatitude = (double)(sr.Latitude ?? 6.9270m),
-                   CustomerLongitude = (double)(sr.Longitude ?? 79.8610m),
-                   EligibleProviders = eligibleProviders
-                };
-
-            var matchResponse = await _matchingService.StartMatchingAsync(matchRequest);
-
-            execution.ThreadId = matchResponse.ThreadId;
-
-            if (matchResponse.Status == "No_Eligible_Providers" || matchResponse.RecommendedProvider == null)
+            var matchResult = await ExecuteMatchForRequestAsync(id, cancellationToken);
+            results.Add(new
             {
-                execution.Status = MatchingExecutionStatus.Failed;
-                execution.CompletedAt = DateTime.UtcNow;
-                await _dbContext.SaveChangesAsync(cancellationToken);
-
-                var emptyMessage = !string.IsNullOrWhiteSpace(matchResponse.Message)
-                    ? matchResponse.Message
-                    : "No eligible providers found within their operational radius.";
-
-                return Ok(new
-                {
-                    threadId = matchResponse.ThreadId,
-                    status = matchResponse.Status,
-                    message = emptyMessage,
-                    tokensConsumed = matchResponse.TokensConsumed
-                });
-            }
-
-            execution.Status = MatchingExecutionStatus.PendingApproval;
-
-            var rp = matchResponse.RecommendedProvider;
-
-            if (!Guid.TryParse(rp.Id, out var providerGuid))
-            {
-                providerGuid = eligibleProviders.Count > 0 
-                    ? Guid.Parse(eligibleProviders[0].ProviderId) 
-                    : Guid.NewGuid();
-            }
-
-            var candidate = new MatchedCandidate
-            {
-                MatchingExecutionId = execution.Id,
-                ProviderId = providerGuid,
-                Score = rp.Score,
-                Rank = rp.Rank,
-                DistanceKm = rp.DistanceKm,
-                MatchRationale = rp.MatchRationale,
-                Status = MatchedCandidateStatus.Recommended
-            };
-            _dbContext.MatchedCandidates.Add(candidate);
-
-            await _dbContext.SaveChangesAsync(cancellationToken);
-
-            return Ok(new 
-            { 
-                threadId = matchResponse.ThreadId, 
-                status = matchResponse.Status,
-                tokensConsumed = matchResponse.TokensConsumed
+                serviceRequestId = id,
+                status = matchResult.Status,
+                threadId = matchResult.ThreadId,
+                message = matchResult.Message
             });
         }
-        catch (ApplicationException ex)
-        {
-            _logger.LogError(ex, "Matching engine unavailable.");
-            execution.Status = MatchingExecutionStatus.Failed;
-            execution.CompletedAt = DateTime.UtcNow;
-            await _dbContext.SaveChangesAsync(cancellationToken);
 
-            return StatusCode(503, "AI Matching Engine is currently unavailable.");
-        }
-        catch (Exception ex)
+        return Ok(new
         {
-            _logger.LogError(ex, "Unexpected error during match start.");
-            execution.Status = MatchingExecutionStatus.Failed;
-            execution.CompletedAt = DateTime.UtcNow;
-            await _dbContext.SaveChangesAsync(cancellationToken);
+            message = $"Processed {toMatchIds.Count} ready request(s).",
+            totalDispatched = toMatchIds.Count,
+            results = results
+        });
+    }
 
-            return StatusCode(500, "An internal error occurred.");
+    [HttpGet("pending")]
+    public async Task<IActionResult> GetPendingApprovals(CancellationToken cancellationToken)
+    {
+        // 1. Purge/clean-up: update any old orphaned PendingApproval runs without valid candidates to Failed
+        var orphaned = await _dbContext.MatchingExecutions
+            .Include(e => e.Candidates)
+            .Where(e => e.Status == MatchingExecutionStatus.PendingApproval 
+                     && !e.Candidates.Any(c => c.ProviderId != Guid.Empty))
+            .ToListAsync(cancellationToken);
+
+        if (orphaned.Count > 0)
+        {
+            foreach (var o in orphaned)
+            {
+                o.Status = MatchingExecutionStatus.Failed;
+                o.CompletedAt = DateTime.UtcNow;
+            }
+            await _dbContext.SaveChangesAsync(cancellationToken);
         }
+
+        // 2. Fetch pending executions that strictly have at least one matched candidate
+        var pendingExecutions = await _dbContext.MatchingExecutions
+            .Include(e => e.Candidates)
+                .ThenInclude(c => c.Provider)
+                    .ThenInclude(p => p.User)
+            .Where(e => e.Status == MatchingExecutionStatus.PendingApproval 
+                     && e.Candidates.Any(c => c.ProviderId != Guid.Empty))
+            .OrderByDescending(e => e.StartedAt)
+            .ToListAsync(cancellationToken);
+
+        if (pendingExecutions.Count == 0)
+        {
+            return Ok(new List<object>());
+        }
+
+        var results = new List<object>();
+
+        foreach (var e in pendingExecutions)
+        {
+            var topCandidate = e.Candidates
+                .Where(c => c.ProviderId != Guid.Empty)
+                .OrderBy(c => c.Rank)
+                .FirstOrDefault();
+
+            if (topCandidate == null)
+            {
+                continue;
+            }
+            
+            // Try to fetch ServiceRequest safely
+            AssistLK.Application.ServiceRequests.DTOs.ServiceRequestResponse? sr = null;
+            try
+            {
+                sr = await _serviceRequestService.GetByIdForAdminAsync(e.ServiceRequestId, cancellationToken);
+            }
+            catch
+            {
+                // Ignore if not found, we will map it gracefully
+            }
+            
+            var techName = !string.IsNullOrWhiteSpace(topCandidate.Provider?.User?.FullName)
+                ? topCandidate.Provider.User.FullName
+                : (!string.IsNullOrWhiteSpace(topCandidate.Provider?.BusinessName)
+                    ? topCandidate.Provider.BusinessName
+                    : "Assigned Specialist");
+
+            results.Add(new
+            {
+                threadId = e.ThreadId,
+                serviceRequest = new 
+                {
+                    problemSummary = sr?.LatestAnalysis?.DetectedProblem ?? sr?.Description ?? "Service Request",
+                    tradeCategory = sr?.Category ?? "General",
+                    urgency = sr?.Urgency.ToString() ?? "Medium"
+                },
+                candidate = new 
+                {
+                    technicianName = techName,
+                    businessName = topCandidate.Provider?.BusinessName ?? techName,
+                    rating = topCandidate.Provider?.Rating ?? 5.0m,
+                    distanceKm = topCandidate.DistanceKm
+                },
+                aiRationale = !string.IsNullOrWhiteSpace(topCandidate.MatchRationale)
+                    ? topCandidate.MatchRationale
+                    : "Recommended candidate qualified based on skills and proximity.",
+                tokenUsage = (object?)null
+            });
+        }
+
+        return Ok(results);
     }
 
     [HttpPost("{threadId}/resume")]
@@ -179,11 +225,21 @@ public class ProviderMatchingController : ControllerBase
         {
             var response = await _matchingService.ResumeMatchingAsync(threadId, request.Action, adminId);
 
-            execution.Status = request.Action.Equals("Approve", StringComparison.OrdinalIgnoreCase)
+            var isApproved = request.Action.Equals("Approve", StringComparison.OrdinalIgnoreCase);
+
+            execution.Status = isApproved
                 ? MatchingExecutionStatus.Completed
                 : MatchingExecutionStatus.Failed;
 
             execution.CompletedAt = DateTime.UtcNow;
+
+            if (!isApproved && execution.Candidates != null)
+            {
+                foreach (var candidate in execution.Candidates)
+                {
+                    candidate.Status = MatchedCandidateStatus.Declined;
+                }
+            }
 
             await _dbContext.SaveChangesAsync(cancellationToken);
 

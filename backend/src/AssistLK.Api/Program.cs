@@ -138,6 +138,9 @@ builder.Services.AddHttpClient<AssistLK.Application.Services.Providers.IProvider
     client.BaseAddress = new Uri("http://127.0.0.1:8000");
     client.Timeout = TimeSpan.FromSeconds(90);
 });
+builder.Services.AddScoped<AssistLK.Application.Services.Providers.IProviderMatchingCoordinator, AssistLK.Application.Services.Providers.ProviderMatchingCoordinator>();
+builder.Services.AddHostedService<AssistLK.Api.Features.Providers.ProviderMatchingBackgroundWorker>();
+
 
 builder.Services.AddScoped<ExternalProblemUnderstandingAgentAdapter>();
 
@@ -335,7 +338,15 @@ if(app.Environment.IsDevelopment())
 }
 
 
+var uploadsPath = Path.Combine(app.Environment.WebRootPath ?? Path.Combine(Directory.GetCurrentDirectory(), "wwwroot"), "uploads", "certificates");
+if (!Directory.Exists(uploadsPath))
+{
+    Directory.CreateDirectory(uploadsPath);
+}
+
 app.UseHttpsRedirection();
+
+app.UseStaticFiles();
 
 app.UseCors("AssistLKClients");
 

@@ -6,68 +6,17 @@ import '../../../shared/theme/app_radius.dart';
 import '../../../shared/theme/app_spacing.dart';
 import '../../../shared/theme/app_text_styles.dart';
 import '../../../shared/widgets/app_image_asset.dart';
+import '../../providers/provider_registration_screen.dart';
 import 'customer_register_screen.dart';
 
 class AccountTypeSelectionScreen extends StatelessWidget {
   const AccountTypeSelectionScreen({super.key});
 
   void _onProviderSelected(BuildContext context) {
-    // Check if a dedicated provider registration screen exists in the codebase.
-    // As of Component 1, provider registration is owned by Component 2 and not yet present.
-    // Present a polished, neutral notice without exposing internal terminology.
-    showModalBottomSheet<void>(
-      context: context,
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(
-          top: Radius.circular(AppRadius.large),
-        ),
+    Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (_) => const ProviderRegistrationScreen(),
       ),
-      builder: (BuildContext sheetContext) {
-        return SafeArea(
-          child: Padding(
-            padding: const EdgeInsets.all(AppSpacing.lg),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                Row(
-                  children: [
-                    Container(
-                      padding: const EdgeInsets.all(AppSpacing.sm),
-                      decoration: BoxDecoration(
-                        color: AppColors.secondarySurface,
-                        borderRadius: BorderRadius.circular(AppRadius.medium),
-                      ),
-                      child: const Icon(
-                        Icons.handyman_outlined,
-                        color: AppColors.secondary,
-                        size: 24,
-                      ),
-                    ),
-                    const SizedBox(width: AppSpacing.md),
-                    const Expanded(
-                      child: Text(
-                        'Provider Registration',
-                        style: AppTextStyles.cardHeading,
-                      ),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: AppSpacing.md),
-                const Text(
-                  'Provider registration is being prepared.\n\nProvider onboarding will be available soon.',
-                  style: AppTextStyles.body,
-                ),
-                const SizedBox(height: AppSpacing.lg),
-                ElevatedButton(
-                  onPressed: () => Navigator.of(sheetContext).pop(),
-                  child: const Text('Understood'),
-                ),
-              ],
-            ),
-          ),
-        );
-      },
     );
   }
 

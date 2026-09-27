@@ -19,7 +19,7 @@ const options = {
   urgency: ["Unknown", "Low", "Medium", "High", "Critical"],
 };
 
-export default function AdminServiceRequestListPage() {
+export default function AdminServiceRequestListPage({ layoutMode = "auto" }) {
   const [filters, setFilters] = useState(emptyFilters);
   const [attempt, setAttempt] = useState(0);
   const [list, setList] = useState({ loading: true, data: [], error: "" });
@@ -27,7 +27,31 @@ export default function AdminServiceRequestListPage() {
   const [detail, setDetail] = useState({ data: null, error: "", loading: true });
   const detailHeading = useRef(null);
   const opener = useRef(null);
-  const active = Object.values(filters).some(Boolean);
+  const containerRef = useRef(null);
+  const [containerWidth, setContainerWidth] = useState(null);
+
+  useEffect(() => {
+    const el = containerRef.current;
+    if (!el || typeof ResizeObserver === "undefined") return;
+
+    const ro = new ResizeObserver((entries) => {
+      for (const entry of entries) {
+        if (entry.contentBoxSize) {
+          const size = Array.isArray(entry.contentBoxSize) ? entry.contentBoxSize[0] : entry.contentBoxSize;
+          setContainerWidth(size.inlineSize);
+        } else if (entry.contentRect) {
+          setContainerWidth(entry.contentRect.width);
+        }
+      }
+    });
+
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, []);
+
+  const isCompact = layoutMode === "card" || (layoutMode === "auto" && containerWidth !== null && containerWidth < 1080);
+  const isFilterActive = (val) => typeof val === "string" && val.trim().length > 0 && val.trim().toLowerCase() !== "all";
+  const active = Object.values(filters).some(isFilterActive);
 
   useEffect(() => {
     let ignore = false;
@@ -61,15 +85,15 @@ export default function AdminServiceRequestListPage() {
     setSelection({ id });
   }
 
-  return <div className="request-monitoring" style={{ ...typography.body, color: colors.textPrimary,
+  return <div ref={containerRef} className={`request-monitoring ${isCompact ? "is-compact" : "is-table"}`} style={{ ...typography.body, color: colors.textPrimary,
     "--monitoring-border": colors.border, "--monitoring-muted": colors.textSecondary,
     "--monitoring-background": colors.background, "--monitoring-focus": colors.primary, "--monitoring-gap": `${spacing.md}px` }}>
     <section className="page-hero">
       <div className="page-hero-content">
         <div>
           <div className="page-kicker">Admin Monitoring</div>
-          <h1 className="page-hero-title">Inspect every request without leaving the operational workflow.</h1>
-          <p className="page-hero-copy">Filter platform requests, review the latest analysis state, and open a read-only monitoring view for detailed inspection.</p>
+          <h1 className="page-hero-title">Service Request Monitoring</h1>
+          <p className="page-hero-copy">Inspect every request without leaving the operational workflow. Filter platform requests, review the latest analysis state, and open a read-only monitoring view for detailed inspection.</p>
         </div>
         <div className="page-hero-meta">
           <div className="page-stat">
@@ -83,7 +107,12 @@ export default function AdminServiceRequestListPage() {
       <div className="monitoring-filters">
         {Object.entries(options).map(([key, values]) => <label key={key} htmlFor={`filter-${key}`}>
           {key[0].toUpperCase() + key.slice(1)}
-          <select id={`filter-${key}`} style={inputStyles} value={filters[key]} onChange={(event) => changeFilters({ ...filters, [key]: event.target.value })}>
+          <select
+            id={`filter-${key}`}
+            style={inputStyles}
+            value={filters[key] && filters[key].toLowerCase() !== "all" ? filters[key] : ""}
+            onChange={(event) => changeFilters({ ...filters, [key]: event.target.value })}
+          >
             <option value="">All</option>
             {values.map((value) => <option key={value} value={value}>{value}</option>)}
           </select>
@@ -97,19 +126,86 @@ export default function AdminServiceRequestListPage() {
     </div> : list.data.length === 0 ? <AppCard className="section-card">
       <p>No service requests found.</p>
       {active && <p className="monitoring-muted">No requests match the selected filters.</p>}
-    </AppCard> : <AppCard className="table-shell">
+    </AppCard> : isCompact ? <div className="monitoring-cards-shell">
+      <div className="monitoring-results-bar">
+        <span className="monitoring-results-count" role="status">
+          {list.data.length} service request{list.data.length === 1 ? "" : "s"}
+        </span>
+      </div>
+      <div className="monitoring-cards-grid" role="region" aria-label="Service requests cards">
+        {list.data.map((request) => <article
+          key={request.serviceRequestId}
+          className="admin-request-card"
+          data-testid="admin-request-card"
+          aria-labelledby={`card-title-${request.serviceRequestId}`}
+        >
+          <div className="card-header-row">
+            <span
+              id={`card-title-${request.serviceRequestId}`}
+              className="card-request-id"
+              title={request.serviceRequestId}
+              aria-label={request.serviceRequestId}
+            >
+              SR-{request.serviceRequestId.replaceAll("-", "").slice(0, 8).toUpperCase()}
+            </span>
+            <div className="card-status-badge">
+              <StatusBadge status={request.status} />
+            </div>
+          </div>
+          <div className="card-meta-grid">
+            <div className="card-meta-item">
+              <span className="card-meta-label">Category</span>
+              <span className="card-meta-value">{request.category || "Unclassified"}</span>
+            </div>
+            <div className="card-meta-item">
+              <span className="card-meta-label">Urgency</span>
+              <div className="card-meta-value"><UrgencyBadge urgency={request.urgency} /></div>
+            </div>
+            <div className="card-meta-item">
+              <span className="card-meta-label">Confidence</span>
+              <span className="card-meta-value">{formatConfidence(request.latestAnalysis)}</span>
+            </div>
+          </div>
+          <div className="card-location-row">
+            <span className="card-meta-label">Location</span>
+            <div className="card-location-content">
+              <RequestLocation locationText={request.locationText} locationSource={request.locationSource} />
+            </div>
+          </div>
+          <div className="card-footer-row">
+            <div className="card-created-col">
+              <span className="card-meta-label">Created</span>
+              <span className="card-meta-value card-created-value">{formatDate(request.createdAt)}</span>
+            </div>
+            <div className="card-action-col">
+              <AppButton variant="outline" onClick={(event) => openDetails(request.serviceRequestId, event)}>View Details</AppButton>
+            </div>
+          </div>
+        </article>)}
+      </div>
+    </div> : <AppCard className="table-shell">
       <table className="monitoring-table">
         <caption>{list.data.length} service request{list.data.length === 1 ? "" : "s"}</caption>
-        <thead><tr>{["Request", "Category", "Urgency", "Status", "Location", "Confidence", "Created", "Action"].map((label) => <th key={label} scope="col">{label}</th>)}</tr></thead>
+        <colgroup>
+          <col className="col-request" />
+          <col className="col-category" />
+          <col className="col-urgency" />
+          <col className="col-status" />
+          <col className="col-location" />
+          <col className="col-confidence" />
+          <col className="col-created" />
+          <col className="col-action" />
+        </colgroup>
+        <thead><tr>{["Request", "Category", "Urgency", "Status", "Location", "Confidence", "Created", "Action"].map((label) => <th key={label} scope="col" className={`th-${label.toLowerCase()}`}>{label}</th>)}</tr></thead>
         <tbody>{list.data.map((request) => <tr key={request.serviceRequestId}>
-          <td data-label="Request">SR-{request.serviceRequestId.replaceAll("-", "").slice(0, 8).toUpperCase()}</td>
-          <td data-label="Category">{request.category || "Unclassified"}</td>
-          <td data-label="Urgency"><UrgencyBadge urgency={request.urgency} /></td>
-          <td data-label="Status"><StatusBadge status={request.status} /></td>
-          <td data-label="Location"><RequestLocation locationText={request.locationText} locationSource={request.locationSource} /></td>
-          <td data-label="Confidence">{formatConfidence(request.latestAnalysis)}</td>
-          <td data-label="Created">{formatDate(request.createdAt)}</td>
-          <td data-label="Action"><AppButton variant="outline" onClick={(event) => openDetails(request.serviceRequestId, event)}>View Details</AppButton></td>
+          <td data-label="Request" className="cell-request"><span className="request-id" title={request.serviceRequestId} aria-label={request.serviceRequestId}>SR-{request.serviceRequestId.replaceAll("-", "").slice(0, 8).toUpperCase()}</span></td>
+          <td data-label="Category" className="cell-category">{request.category || "Unclassified"}</td>
+          <td data-label="Urgency" className="cell-urgency"><UrgencyBadge urgency={request.urgency} /></td>
+          <td data-label="Status" className="cell-status"><StatusBadge status={request.status} /></td>
+          <td data-label="Location" className="cell-location"><RequestLocation locationText={request.locationText} locationSource={request.locationSource} /></td>
+          <td data-label="Confidence" className="cell-confidence">{formatConfidence(request.latestAnalysis)}</td>
+          <td data-label="Created" className="cell-created">{formatDate(request.createdAt)}</td>
+          <td data-label="Action" className="cell-action"><AppButton variant="outline" onClick={(event) => openDetails(request.serviceRequestId, event)}>View Details</AppButton></td>
         </tr>)}</tbody>
       </table>
     </AppCard>}

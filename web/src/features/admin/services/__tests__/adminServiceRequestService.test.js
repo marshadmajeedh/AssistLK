@@ -19,7 +19,45 @@ describe("Admin service request API", () => {
       params: { status: "Created", category: "Vehicle Repair", urgency: "High" },
     });
   });
-  it.each(["", "   ", null, undefined])("omits empty filters (%s)", async (value) => {
+  it("omits 'All' filter values and does not serialize them as domain filters", async () => {
+    apiClient.get.mockResolvedValue({ data: [] });
+    await service.getAll({ status: "All", category: "All", urgency: "All" });
+    expect(apiClient.get).toHaveBeenCalledWith("/api/admin/service-requests", { params: {} });
+  });
+  it("omits case-insensitive 'all' values", async () => {
+    apiClient.get.mockResolvedValue({ data: [] });
+    await service.getAll({ status: "all", category: "ALL", urgency: "All" });
+    expect(apiClient.get).toHaveBeenCalledWith("/api/admin/service-requests", { params: {} });
+  });
+  it("serializes status=Created when category and urgency are 'All'", async () => {
+    apiClient.get.mockResolvedValue({ data: [] });
+    await service.getAll({ status: "Created", category: "All", urgency: "All" });
+    expect(apiClient.get).toHaveBeenCalledWith("/api/admin/service-requests", {
+      params: { status: "Created" },
+    });
+  });
+  it("serializes category when status and urgency are 'All'", async () => {
+    apiClient.get.mockResolvedValue({ data: [] });
+    await service.getAll({ status: "All", category: "Plumbing", urgency: "All" });
+    expect(apiClient.get).toHaveBeenCalledWith("/api/admin/service-requests", {
+      params: { category: "Plumbing" },
+    });
+  });
+  it("serializes urgency when status and category are 'All'", async () => {
+    apiClient.get.mockResolvedValue({ data: [] });
+    await service.getAll({ status: "All", category: "All", urgency: "High" });
+    expect(apiClient.get).toHaveBeenCalledWith("/api/admin/service-requests", {
+      params: { urgency: "High" },
+    });
+  });
+  it("serializes combined valid filters", async () => {
+    apiClient.get.mockResolvedValue({ data: [] });
+    await service.getAll({ status: "Created", category: "Plumbing", urgency: "High" });
+    expect(apiClient.get).toHaveBeenCalledWith("/api/admin/service-requests", {
+      params: { status: "Created", category: "Plumbing", urgency: "High" },
+    });
+  });
+  it.each(["", "   ", null, undefined, "All", "all", "ALL"])("omits empty or 'All' filters (%s)", async (value) => {
     apiClient.get.mockResolvedValue({ data: [] });
     await service.getAll({ status: value, category: value, urgency: value });
     expect(apiClient.get).toHaveBeenCalledWith("/api/admin/service-requests", { params: {} });

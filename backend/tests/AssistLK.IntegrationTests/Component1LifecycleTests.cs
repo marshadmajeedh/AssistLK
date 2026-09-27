@@ -313,6 +313,8 @@ public class Component1LifecycleTests
             Description = "Car engine won't start",
             LocationText = "Colombo",
             LocationSource = source,
+            Latitude = 6.9271m,
+            Longitude = 79.8612m,
             Category = "Vehicle Repair",
             Urgency = ServiceRequestUrgency.High,
             Status = ServiceRequestStatus.Analyzed
@@ -447,7 +449,7 @@ public class Component1LifecycleTests
     }
 
     [Fact]
-    public async Task MarkReadyForMatchingAsync_AllowsOptionalCoordinates_WhenLocationTextIsPresent()
+    public async Task MarkReadyForMatchingAsync_ThrowsWhenCoordinatesAreMissing()
     {
         var (service, requests, analyses) = CreateTestContext();
         var id = Guid.NewGuid();
@@ -458,8 +460,79 @@ public class Component1LifecycleTests
             CustomerId = customerId,
             Description = "Car engine won't start",
             LocationText = "Kandy, Central Province",
-            Latitude = null,  // Coordinates are optional
-            Longitude = null, // Coordinates are optional
+            Latitude = null,  // Missing coordinates
+            Longitude = null, // Missing coordinates
+            Category = "Vehicle Repair",
+            Urgency = ServiceRequestUrgency.High,
+            Status = ServiceRequestStatus.Analyzed
+        });
+
+        analyses.Add(new ProblemAnalysis
+        {
+            Id = Guid.NewGuid(),
+            ServiceRequestId = id,
+            DetectedProblem = "Battery discharged",
+            Confidence = 0.8m,
+            AgentName = "ProblemUnderstandingAgent"
+        });
+
+        var ex = await Assert.ThrowsAsync<ConflictException>(() =>
+            service.MarkReadyForMatchingAsync(id, customerId));
+        Assert.Contains("coordinates", ex.Message, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Theory]
+    [InlineData(-91, 0)]
+    [InlineData(91, 0)]
+    [InlineData(0, -181)]
+    [InlineData(0, 181)]
+    public async Task MarkReadyForMatchingAsync_ThrowsWhenCoordinatesOutOfRange(decimal lat, decimal lon)
+    {
+        var (service, requests, analyses) = CreateTestContext();
+        var id = Guid.NewGuid();
+        var customerId = Guid.NewGuid();
+        requests.Add(new ServiceRequest
+        {
+            Id = id,
+            CustomerId = customerId,
+            Description = "Car engine won't start",
+            LocationText = "Kandy, Central Province",
+            Latitude = lat,
+            Longitude = lon,
+            Category = "Vehicle Repair",
+            Urgency = ServiceRequestUrgency.High,
+            Status = ServiceRequestStatus.Analyzed
+        });
+
+        analyses.Add(new ProblemAnalysis
+        {
+            Id = Guid.NewGuid(),
+            ServiceRequestId = id,
+            DetectedProblem = "Battery discharged",
+            Confidence = 0.8m,
+            AgentName = "ProblemUnderstandingAgent"
+        });
+
+        var ex = await Assert.ThrowsAsync<ConflictException>(() =>
+            service.MarkReadyForMatchingAsync(id, customerId));
+        Assert.Contains("coordinates", ex.Message, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public async Task MarkReadyForMatchingAsync_Succeeds_WhenValidCoordinatesArePresent()
+    {
+        var (service, requests, analyses) = CreateTestContext();
+        var id = Guid.NewGuid();
+        var customerId = Guid.NewGuid();
+        requests.Add(new ServiceRequest
+        {
+            Id = id,
+            CustomerId = customerId,
+            Description = "Car engine won't start",
+            LocationText = "Kandy, Central Province",
+            Latitude = 7.2906m,
+            Longitude = 80.6337m,
+            LocationSource = LocationSource.OpenStreetMap,
             Category = "Vehicle Repair",
             Urgency = ServiceRequestUrgency.High,
             Status = ServiceRequestStatus.Analyzed
@@ -477,9 +550,48 @@ public class Component1LifecycleTests
         var response = await service.MarkReadyForMatchingAsync(id, customerId);
 
         Assert.Equal(ServiceRequestStatus.ReadyForMatching, response.Status);
+        Assert.Equal(7.2906m, response.Latitude);
+        Assert.Equal(80.6337m, response.Longitude);
+        Assert.Equal(LocationSource.OpenStreetMap, response.LocationSource);
+        Assert.Equal("Kandy, Central Province", response.LocationText);
+    }
+
+    [Fact]
+    public async Task UpdateAsync_ChangingAddress_CannotRetainStaleCoordinates()
+    {
+        var (service, requests, _) = CreateTestContext();
+        var id = Guid.NewGuid();
+        var customerId = Guid.NewGuid();
+        requests.Add(new ServiceRequest
+        {
+            Id = id,
+            CustomerId = customerId,
+            Description = "Initial plumbing issue",
+            LocationText = "Kandy",
+            Latitude = 7.2906m,
+            Longitude = 80.6337m,
+            LocationSource = LocationSource.OpenStreetMap,
+            Category = "Plumbing",
+            Urgency = ServiceRequestUrgency.Medium,
+            Status = ServiceRequestStatus.Created
+        });
+
+        // Customer changes address text to Galle, but supplies old Kandy coordinates
+        var update = new UpdateServiceRequestRequest
+        {
+            Description = "Initial plumbing issue",
+            LocationText = "Galle",
+            Latitude = 7.2906m,
+            Longitude = 80.6337m,
+            LocationSource = LocationSource.OpenStreetMap
+        };
+
+        var response = await service.UpdateAsync(customerId, id, update);
+
+        Assert.Equal("Galle", response.LocationText);
         Assert.Null(response.Latitude);
         Assert.Null(response.Longitude);
-        Assert.Equal("Kandy, Central Province", response.LocationText);
+        Assert.Equal(LocationSource.Manual, response.LocationSource);
     }
 
     [Fact]

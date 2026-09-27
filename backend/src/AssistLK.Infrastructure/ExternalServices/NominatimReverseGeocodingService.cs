@@ -18,7 +18,8 @@ public sealed class NominatimReverseGeocodingService(HttpClient client,
         var url = options.NominatimBaseUrl.TrimEnd('/') + "/reverse?lat=" +
             latitude.ToString("G29", CultureInfo.InvariantCulture) + "&lon=" +
             longitude.ToString("G29", CultureInfo.InvariantCulture) + "&format=jsonv2&addressdetails=1";
-        return await coordinator.ExecuteAsync(url, async () =>
+        var cacheKey = $"reverse:{latitude.ToString("G29", CultureInfo.InvariantCulture)}:{longitude.ToString("G29", CultureInfo.InvariantCulture)}";
+        return await coordinator.ExecuteAsync(cacheKey, async () =>
         {
             try
             {
@@ -51,6 +52,86 @@ public sealed class NominatimReverseGeocodingService(HttpClient client,
                         ? id.GetInt64().ToString(CultureInfo.InvariantCulture) : Text(root, "place_id"),
                     // Nominatim locates a nearby OSM object, not an accuracy guarantee.
                     "Approximate");
+            }
+            catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested)
+            { throw new LocationGeocodingUnavailableException(); }
+            catch (Exception ex) when (ex is HttpRequestException or JsonException or InvalidOperationException or FormatException)
+            { throw new LocationGeocodingUnavailableException(); }
+        }, cancellationToken);
+    }
+
+    public async Task<IReadOnlyList<ForwardGeocodeCandidate>> ForwardGeocodeAsync(
+        string address, CancellationToken cancellationToken = default)
+    {
+        if (string.IsNullOrWhiteSpace(address))
+            throw new ArgumentException("Address is required.");
+        var trimmed = address.Trim();
+        if (trimmed.Length > 255)
+            throw new ArgumentException("Address exceeds maximum length.");
+        if (trimmed.Any(char.IsControl))
+            throw new ArgumentException("Address contains invalid control characters.");
+
+        var url = options.NominatimBaseUrl.TrimEnd('/') + "/search?q=" +
+            Uri.EscapeDataString(trimmed) + "&format=jsonv2&addressdetails=1&limit=3";
+        var cacheKey = $"forward:{trimmed.ToLowerInvariant()}";
+
+        return await coordinator.ExecuteAsync(cacheKey, async () =>
+        {
+            try
+            {
+                using var request = new HttpRequestMessage(HttpMethod.Get, url);
+                request.Headers.UserAgent.ParseAdd(options.UserAgent);
+                using var response = await client.SendAsync(request, cancellationToken);
+                if (response.StatusCode == HttpStatusCode.NotFound)
+                    return (IReadOnlyList<ForwardGeocodeCandidate>)Array.Empty<ForwardGeocodeCandidate>();
+                if (!response.IsSuccessStatusCode)
+                    throw new LocationGeocodingUnavailableException();
+
+                using var document = JsonDocument.Parse(await response.Content.ReadAsStringAsync(cancellationToken));
+                var root = document.RootElement;
+                if (root.ValueKind == JsonValueKind.Object && root.TryGetProperty("error", out _))
+                    return (IReadOnlyList<ForwardGeocodeCandidate>)Array.Empty<ForwardGeocodeCandidate>();
+                if (root.ValueKind != JsonValueKind.Array)
+                    throw new JsonException();
+
+                var candidates = new List<ForwardGeocodeCandidate>();
+                foreach (var item in root.EnumerateArray())
+                {
+                    if (item.ValueKind != JsonValueKind.Object) continue;
+                    var formatted = Text(item, "display_name");
+                    if (formatted == null) continue;
+
+                    decimal lat = 0m, lon = 0m;
+                    bool hasLat = false, hasLon = false;
+                    if (item.TryGetProperty("lat", out var latProp))
+                    {
+                        if (latProp.ValueKind == JsonValueKind.String &&
+                            decimal.TryParse(latProp.GetString(), NumberStyles.Float, CultureInfo.InvariantCulture, out lat))
+                            hasLat = true;
+                        else if (latProp.ValueKind == JsonValueKind.Number && latProp.TryGetDecimal(out lat))
+                            hasLat = true;
+                    }
+                    if (item.TryGetProperty("lon", out var lonProp))
+                    {
+                        if (lonProp.ValueKind == JsonValueKind.String &&
+                            decimal.TryParse(lonProp.GetString(), NumberStyles.Float, CultureInfo.InvariantCulture, out lon))
+                            hasLon = true;
+                        else if (lonProp.ValueKind == JsonValueKind.Number && lonProp.TryGetDecimal(out lon))
+                            hasLon = true;
+                    }
+
+                    if (!hasLat || !hasLon) continue;
+                    if (lat is < -90 or > 90 || lon is < -180 or > 180) continue;
+
+                    var placeId = item.TryGetProperty("place_id", out var id) && id.ValueKind == JsonValueKind.Number
+                        ? id.GetInt64().ToString(CultureInfo.InvariantCulture)
+                        : Text(item, "place_id");
+
+                    candidates.Add(new ForwardGeocodeCandidate(formatted, lat, lon, placeId, "OpenStreetMap"));
+                    if (candidates.Count >= 3) break;
+                }
+
+                return (IReadOnlyList<ForwardGeocodeCandidate>)candidates;
             }
             catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested)
             { throw new LocationGeocodingUnavailableException(); }

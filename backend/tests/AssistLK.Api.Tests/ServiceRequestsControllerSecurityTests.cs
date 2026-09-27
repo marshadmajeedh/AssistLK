@@ -638,6 +638,8 @@ public class ServiceRequestsControllerSecurityTests : IClassFixture<AssistLKApiT
                 CustomerId = customerId,
                 Description = "Water pipe burst in kitchen",
                 LocationText = "Colombo 05",
+                Latitude = 6.89m,
+                Longitude = 79.87m,
                 Category = "Plumbing",
                 Urgency = ServiceRequestUrgency.High,
                 Status = ServiceRequestStatus.Analyzed

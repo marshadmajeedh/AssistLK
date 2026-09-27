@@ -29,4 +29,25 @@ public class LocationController(ILocationGeocodingService geocoding) : Controlle
             return StatusCode(503, new ErrorResponse { StatusCode = 503, Message = ex.Message });
         }
     }
+
+    [HttpPost("forward-geocode")]
+    public async Task<ActionResult<IReadOnlyList<ForwardGeocodeCandidate>>> ForwardGeocode(
+        ForwardGeocodeRequest request, CancellationToken cancellationToken)
+    {
+        Response.Headers.CacheControl = "no-store";
+        if (request == null || string.IsNullOrWhiteSpace(request.Address) || request.Address.Trim().Length > 255 || request.Address.Any(char.IsControl))
+        {
+            return BadRequest(new ErrorResponse { StatusCode = 400, Message = "A valid service address is required." });
+        }
+
+        try
+        {
+            var results = await geocoding.ForwardGeocodeAsync(request.Address.Trim(), cancellationToken);
+            return Ok(results);
+        }
+        catch (LocationGeocodingUnavailableException ex)
+        {
+            return StatusCode(503, new ErrorResponse { StatusCode = 503, Message = ex.Message });
+        }
+    }
 }

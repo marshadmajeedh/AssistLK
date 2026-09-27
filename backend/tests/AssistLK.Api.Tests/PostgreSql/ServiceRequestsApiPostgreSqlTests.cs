@@ -114,7 +114,9 @@ public class ServiceRequestsApiPostgreSqlTests : IClassFixture<PostgreSqlAssistL
         var createResponse = await client.PostAsJsonAsync("api/service-requests", new CreateServiceRequestRequest
         {
             Description = "Kitchen pipe is leaking under sink and flooding floor",
-            LocationText = "Colombo 03"
+            LocationText = "Colombo 03",
+            Latitude = 6.905m,
+            Longitude = 79.86m
         });
         Assert.Equal(HttpStatusCode.Created, createResponse.StatusCode);
         var created = await createResponse.Content.ReadFromJsonAsync<ServiceRequestResponse>(_jsonOptions);

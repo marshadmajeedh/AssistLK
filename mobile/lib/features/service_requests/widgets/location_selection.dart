@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 
+import '../../../../shared/theme/app_colors.dart';
+import '../../../../shared/theme/app_radius.dart';
 import '../../../../shared/theme/app_spacing.dart';
 import '../../../../shared/theme/app_text_styles.dart';
 import '../../../../shared/widgets/app_card.dart';
@@ -100,6 +102,95 @@ class LocationSelection extends StatelessWidget {
               ),
             ),
           ],
+          if (c.candidates.isNotEmpty) ...[
+            AppCard(
+              key: const Key('forward_candidates_card'),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    c.candidates.length == 1
+                        ? 'Resolved service location'
+                        : 'Matching locations (${c.candidates.length})',
+                    style: AppTextStyles.cardHeading,
+                  ),
+                  const SizedBox(height: AppSpacing.xs),
+                  Text(
+                    c.candidates.length == 1
+                        ? 'Confirm this location to set your service coordinates:'
+                        : 'Select the address that matches your service location:',
+                    style: AppTextStyles.small,
+                  ),
+                  const SizedBox(height: AppSpacing.sm),
+                  for (final candidate in c.candidates) ...[
+                    InkWell(
+                      key: Key('candidate_tile_${candidate.placeId ?? candidate.displayAddress.hashCode}'),
+                      onTap: () => c.selectCandidate(candidate),
+                      borderRadius: BorderRadius.circular(AppRadius.medium),
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(
+                          vertical: AppSpacing.xs,
+                          horizontal: AppSpacing.xs,
+                        ),
+                        decoration: BoxDecoration(
+                          color: c.selectedCandidate == candidate
+                              ? AppColors.primarySurface
+                              : Colors.transparent,
+                          borderRadius: BorderRadius.circular(AppRadius.medium),
+                          border: Border.all(
+                            color: c.selectedCandidate == candidate
+                                ? AppColors.primary
+                                : AppColors.border,
+                          ),
+                        ),
+                        child: Row(
+                          children: [
+                            Icon(
+                              c.selectedCandidate == candidate
+                                  ? Icons.radio_button_checked
+                                  : Icons.radio_button_unchecked,
+                              color: c.selectedCandidate == candidate
+                                  ? AppColors.primary
+                                  : AppColors.textSecondary,
+                              size: 20,
+                            ),
+                            const SizedBox(width: AppSpacing.sm),
+                            Expanded(
+                              child: Text(
+                                candidate.displayAddress,
+                                style: AppTextStyles.body,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: AppSpacing.xs),
+                  ],
+                  const SizedBox(height: AppSpacing.sm),
+                  const LocationAttribution(),
+                  const SizedBox(height: AppSpacing.md),
+                  AppButton(
+                    key: const Key('use_forward_location_button'),
+                    text: 'Use This Location',
+                    onPressed: c.selectedCandidate != null &&
+                            c.selectedCandidate!.displayAddress.length <= 255
+                        ? () => c.confirmCandidate()
+                        : null,
+                  ),
+                  const SizedBox(height: AppSpacing.sm),
+                  SizedBox(
+                    width: double.infinity,
+                    child: OutlinedButton(
+                      key: const Key('cancel_forward_candidates_button'),
+                      onPressed: c.dismissCandidates,
+                      child: const Text('Cancel / Keep Editing'),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
           if (c.message != null)
             Padding(
               padding: const EdgeInsets.symmetric(vertical: AppSpacing.sm),
@@ -112,9 +203,49 @@ class LocationSelection extends StatelessWidget {
             hint: 'Enter the service address or a nearby landmark',
             validator: (_) => c.validate(),
           ),
+          if (!c.hasConfirmedCoordinates &&
+              c.text.text.trim().isNotEmpty &&
+              c.candidates.isEmpty &&
+              c.preview == null &&
+              !c.busy) ...[
+            const SizedBox(height: AppSpacing.xs),
+            Align(
+              alignment: Alignment.centerRight,
+              child: TextButton.icon(
+                key: const Key('resolve_address_button'),
+                onPressed: c.resolveAddress,
+                icon: const Icon(Icons.travel_explore_rounded, size: 18),
+                label: const Text('Resolve Address'),
+              ),
+            ),
+          ],
+          if (c.hasConfirmedCoordinates) ...[
+            const SizedBox(height: AppSpacing.xs),
+            Row(
+              children: [
+                const Icon(
+                  Icons.check_circle_rounded,
+                  size: 16,
+                  color: AppColors.success,
+                ),
+                const SizedBox(width: AppSpacing.xs),
+                Expanded(
+                  child: Text(
+                    c.source == LocationSource.openStreetMap && !c.fromGps
+                        ? 'Address resolved & coordinates confirmed'
+                        : 'GPS location captured',
+                    style: AppTextStyles.small.copyWith(
+                      color: AppColors.success,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ],
           if (c.source == LocationSource.openStreetMap)
             const LocationAttribution(),
-          if (c.hasGps) ...[
+          if (c.hasGps && c.fromGps) ...[
             const SizedBox(height: AppSpacing.sm + AppSpacing.xs),
             if (c.preview == null)
               const Text('GPS location captured', style: AppTextStyles.small),
@@ -156,7 +287,7 @@ class LocationSelection extends StatelessWidget {
     },
   );
   Widget _buildActions(BuildContext context, LocationSelectionController c) {
-    final label = editing || c.hasGps
+    final label = editing || (c.hasGps && c.fromGps)
         ? 'Refresh Location'
         : 'Use Current Location';
     double textWidth(String value) {

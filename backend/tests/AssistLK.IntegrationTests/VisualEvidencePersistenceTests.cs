@@ -16,7 +16,7 @@ public class VisualEvidencePersistenceTests
     {
         public readonly AssistLKDbContext Db = new(new DbContextOptionsBuilder<AssistLKDbContext>()
             .UseInMemoryDatabase(Guid.NewGuid().ToString()).Options);
-        public readonly ServiceRequest Request = new() { CustomerId = Guid.NewGuid(), Description = "Possible sink leak", LocationText = "Colombo" };
+        public readonly ServiceRequest Request = new() { CustomerId = Guid.NewGuid(), Description = "Possible sink leak", LocationText = "Colombo", Latitude = 6.9271m, Longitude = 79.8612m };
         public readonly ServiceRequestService Service;
         public Fixture()
         {

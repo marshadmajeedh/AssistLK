@@ -1,3 +1,5 @@
+import '../../customer/providers/customer_location_provider.dart';
+import '../models/location_source.dart';
 import '../providers/location_selection_controller.dart';
 import '../services/location_geocoding_service.dart';
 import '../widgets/location_selection.dart';
@@ -47,10 +49,14 @@ class _EditServiceRequestScreenState extends State<EditServiceRequestScreen> {
       text: widget.request.description,
     );
     _selectedPreference = widget.request.categoryHint;
+    final customerLocation = context.read<CustomerLocationProvider?>();
     _location = LocationSelectionController(
-      gps: widget.locationService ?? GeolocatorLocationService(),
+      gps: widget.locationService ??
+          customerLocation?.gps ??
+          GeolocatorLocationService(),
       geocoding:
           widget.geocodingService ??
+          customerLocation?.geocoding ??
           LocationGeocodingService(
             apiClient: context
                 .read<ServiceRequestProvider>()
@@ -61,6 +67,8 @@ class _EditServiceRequestScreenState extends State<EditServiceRequestScreen> {
       latitude: widget.request.latitude,
       longitude: widget.request.longitude,
       source: widget.request.locationSource,
+      fromForwardGeocode:
+          widget.request.locationSource == LocationSource.openStreetMap,
     );
   }
 
@@ -158,7 +166,14 @@ class _EditServiceRequestScreenState extends State<EditServiceRequestScreen> {
   }
 
   Future<void> _submit() async {
+    if (_location.busy) return;
     if (!_formKey.currentState!.validate()) {
+      return;
+    }
+    final locationChanged =
+        _location.text.text.trim() != widget.request.locationText.trim();
+    if (locationChanged && !_location.hasConfirmedCoordinates) {
+      await _location.resolveAddress();
       return;
     }
 

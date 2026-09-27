@@ -1,4 +1,5 @@
 import 'package:mobile/app/customer_bottom_navigation.dart';
+import 'mocks/mock_location_geocoding_service.dart';
 import 'package:mobile/features/service_requests/widgets/service_request_category_asset.dart';
 import 'dart:async';
 
@@ -68,7 +69,10 @@ void main() {
     await tester.pumpWidget(
       ChangeNotifierProvider<AuthProvider>.value(
         value: auth,
-        child: AssistLKApp(serviceRequestService: requests),
+        child: AssistLKApp(
+          serviceRequestService: requests,
+          geocodingService: MockLocationGeocodingService(),
+        ),
       ),
     );
     await tester.pump();
@@ -215,6 +219,8 @@ void main() {
         find.widgetWithText(TextFormField, 'Location / Address'),
         'Colombo 03',
       );
+      await tapText(tester, 'Next: Review');
+      await tapText(tester, 'Use This Location');
       await tapText(tester, 'Next: Review');
       await tapText(tester, 'Submit Request');
       expect(requests.submitted!.categoryHint, entry.value);

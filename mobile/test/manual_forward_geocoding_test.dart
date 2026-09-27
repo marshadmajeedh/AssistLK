@@ -12,6 +12,7 @@ import 'package:mobile/features/service_requests/providers/service_request_provi
 import 'package:mobile/features/service_requests/screens/create_service_request_screen.dart';
 import 'package:mobile/features/service_requests/screens/edit_service_request_screen.dart';
 import 'package:mobile/features/service_requests/services/location_geocoding_service.dart';
+import 'package:mobile/shared/theme/app_spacing.dart';
 import 'package:mobile/shared/theme/app_theme.dart';
 
 import 'mocks/mock_location_geocoding_service.dart';
@@ -461,5 +462,205 @@ void main() {
         expect(updatedDto.locationSource, LocationSource.openStreetMap);
       },
     );
+  });
+
+  group('Manual Location Field Layout and Spacing Polish', () {
+    testWidgets(
+      'manual address field remains visible, has clear vertical separation, and does not overlap candidate card',
+      (tester) async {
+        tester.view.physicalSize = const Size(412, 900);
+        tester.view.devicePixelRatio = 1;
+        addTearDown(tester.view.resetPhysicalSize);
+        addTearDown(tester.view.resetDevicePixelRatio);
+
+        final service = MockServiceRequestService();
+        geocoding.forwardReply = (addr) async => [
+          const ForwardGeocodeCandidate(
+            displayAddress: 'Candidate 1, Colombo',
+            latitude: 6.91,
+            longitude: 79.85,
+            placeId: 'cand-1',
+          ),
+          const ForwardGeocodeCandidate(
+            displayAddress: 'Candidate 2, Colombo',
+            latitude: 6.92,
+            longitude: 79.86,
+            placeId: 'cand-2',
+          ),
+        ];
+
+        await tester.pumpWidget(
+          screen(
+            CreateServiceRequestScreen(
+              locationService: gps,
+              geocodingService: geocoding,
+            ),
+            service,
+          ),
+        );
+
+        // Step 0: Fill problem description
+        await tester.enterText(
+          find.widgetWithText(TextFormField, 'Problem Description'),
+          'Water leakage in apartment kitchen',
+        );
+        await tester.ensureVisible(find.text('Next: Location'));
+        await tester.tap(find.text('Next: Location'));
+        await tester.pumpAndSettle();
+
+        // Step 1: Type manual address
+        final addressFieldFinder = find.widgetWithText(TextFormField, 'Location / Address');
+        expect(addressFieldFinder, findsOneWidget);
+        await tester.enterText(addressFieldFinder, 'colombo');
+        await tester.pumpAndSettle();
+
+        // Resolve address
+        final resolveBtn = find.byKey(const Key('resolve_address_button'));
+        expect(resolveBtn, findsOneWidget);
+        await tester.tap(resolveBtn);
+        await tester.pumpAndSettle();
+
+        // Verify Candidate Card and Address Field are both visible
+        final candidateCardFinder = find.byKey(const Key('forward_candidates_card'));
+        expect(candidateCardFinder, findsOneWidget);
+        expect(addressFieldFinder, findsOneWidget);
+
+        // Geometry checks: candidate card is above address field with clear gap
+        final candidateCardRect = tester.getRect(candidateCardFinder);
+        final addressFieldRect = tester.getRect(addressFieldFinder);
+
+        expect(candidateCardRect.bottom, lessThanOrEqualTo(addressFieldRect.top));
+        final gap = addressFieldRect.top - candidateCardRect.bottom;
+        expect(gap, greaterThanOrEqualTo(AppSpacing.md));
+
+        // Candidate selection works
+        await tester.tap(find.byKey(const Key('candidate_tile_cand-2')));
+        await tester.pumpAndSettle();
+
+        // Explicit "Use This Location" tap confirms
+        await tester.tap(find.byKey(const Key('use_forward_location_button')));
+        await tester.pumpAndSettle();
+
+        expect(find.byKey(const Key('forward_candidates_card')), findsNothing);
+        expect(find.text('Address resolved & coordinates confirmed'), findsOneWidget);
+        expect(tester.takeException(), isNull);
+      },
+    );
+
+    testWidgets(
+      'Cancel / Keep Editing dismisses candidates and restores address field state',
+      (tester) async {
+        tester.view.physicalSize = const Size(412, 900);
+        tester.view.devicePixelRatio = 1;
+        addTearDown(tester.view.resetPhysicalSize);
+        addTearDown(tester.view.resetDevicePixelRatio);
+
+        final service = MockServiceRequestService();
+        geocoding.forwardReply = (addr) async => [
+          const ForwardGeocodeCandidate(
+            displayAddress: 'Candidate 1, Colombo',
+            latitude: 6.91,
+            longitude: 79.85,
+            placeId: 'cand-1',
+          ),
+        ];
+
+        await tester.pumpWidget(
+          screen(
+            CreateServiceRequestScreen(
+              locationService: gps,
+              geocodingService: geocoding,
+            ),
+            service,
+          ),
+        );
+
+        await tester.enterText(
+          find.widgetWithText(TextFormField, 'Problem Description'),
+          'Sink faucet replacement needed',
+        );
+        await tester.ensureVisible(find.text('Next: Location'));
+        await tester.tap(find.text('Next: Location'));
+        await tester.pumpAndSettle();
+
+        await tester.enterText(
+          find.widgetWithText(TextFormField, 'Location / Address'),
+          'colombo 03',
+        );
+        await tester.pumpAndSettle();
+
+        await tester.tap(find.byKey(const Key('resolve_address_button')));
+        await tester.pumpAndSettle();
+
+        expect(find.byKey(const Key('forward_candidates_card')), findsOneWidget);
+
+        // Tap Cancel / Keep Editing
+        await tester.tap(find.byKey(const Key('cancel_forward_candidates_button')));
+        await tester.pumpAndSettle();
+
+        // Candidates card dismissed, address field still contains text, resolve button back
+        expect(find.byKey(const Key('forward_candidates_card')), findsNothing);
+        expect(find.text('colombo 03'), findsOneWidget);
+        expect(find.byKey(const Key('resolve_address_button')), findsOneWidget);
+        expect(tester.takeException(), isNull);
+      },
+    );
+
+    for (final width in [320.0, 412.0]) {
+      for (final scale in [1.0, 2.0]) {
+        testWidgets(
+          'Location selection with candidate card renders cleanly at $width scale $scale',
+          (tester) async {
+            tester.view.physicalSize = Size(width, 1000);
+            tester.view.devicePixelRatio = 1;
+            tester.platformDispatcher.textScaleFactorTestValue = scale;
+            addTearDown(tester.view.resetPhysicalSize);
+            addTearDown(tester.view.resetDevicePixelRatio);
+            addTearDown(tester.platformDispatcher.clearTextScaleFactorTestValue);
+
+            final service = MockServiceRequestService();
+            geocoding.forwardReply = (addr) async => [
+              const ForwardGeocodeCandidate(
+                displayAddress: 'Very Long Candidate Address 123, Sector 4, Colombo 00700, Western Province, Sri Lanka',
+                latitude: 6.91,
+                longitude: 79.85,
+                placeId: 'long-cand',
+              ),
+            ];
+
+            await tester.pumpWidget(
+              screen(
+                CreateServiceRequestScreen(
+                  locationService: gps,
+                  geocodingService: geocoding,
+                ),
+                service,
+              ),
+            );
+
+            await tester.enterText(
+              find.widgetWithText(TextFormField, 'Problem Description'),
+              'General maintenance required',
+            );
+            await tester.ensureVisible(find.text('Next: Location'));
+            await tester.tap(find.text('Next: Location'));
+            await tester.pumpAndSettle();
+
+            await tester.enterText(
+              find.widgetWithText(TextFormField, 'Location / Address'),
+              'colombo',
+            );
+            await tester.pumpAndSettle();
+
+            await tester.tap(find.byKey(const Key('resolve_address_button')));
+            await tester.pumpAndSettle();
+
+            expect(find.byKey(const Key('forward_candidates_card')), findsOneWidget);
+            expect(find.widgetWithText(TextFormField, 'Location / Address'), findsOneWidget);
+            expect(tester.takeException(), isNull);
+          },
+        );
+      }
+    }
   });
 }

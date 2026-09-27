@@ -190,13 +190,15 @@ class LocationSelection extends StatelessWidget {
                 ],
               ),
             ),
+            const SizedBox(height: AppSpacing.md),
           ],
           if (c.message != null)
             Padding(
               padding: const EdgeInsets.symmetric(vertical: AppSpacing.sm),
               child: Text(c.message!, style: AppTextStyles.body),
             ),
-          const SizedBox(height: AppSpacing.sm),
+          if (c.candidates.isEmpty)
+            const SizedBox(height: AppSpacing.sm),
           AppTextField(
             controller: c.text,
             label: 'Location / Address',
@@ -220,7 +222,7 @@ class LocationSelection extends StatelessWidget {
             ),
           ],
           if (c.hasConfirmedCoordinates) ...[
-            const SizedBox(height: AppSpacing.xs),
+            const SizedBox(height: AppSpacing.sm),
             Row(
               children: [
                 const Icon(

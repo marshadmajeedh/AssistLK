@@ -15,7 +15,7 @@ import 'package:mobile/shared/theme/app_theme.dart';
 import 'session_foundation_test.dart' show RequestsStub, MemoryStorage, request;
 
 void main() {
-  for (final width in [320.0, 393.0, 700.0]) {
+  for (final width in [320.0, 393.0, 412.0, 700.0]) {
     for (final scale in [1.0, 2.0]) {
       testWidgets(
         'Unclassified detail artwork fits $width at $scale and Analyze works',
@@ -94,13 +94,43 @@ void main() {
       );
     }
   }
-  testWidgets('other detail categories remain without added artwork', (
+
+  const supportedArtwork = {
+    'Unclassified': AppAssets.unclassifiedService,
+    'Plumbing': AppAssets.plumbingService,
+    'Electrical': AppAssets.electricalService,
+    'Vehicle Repair': AppAssets.vehicleService,
+    'Vehicle Assistance': AppAssets.vehicleService,
+    'Appliance Repair': AppAssets.applianceService,
+  };
+
+  for (final entry in supportedArtwork.entries) {
+    testWidgets('detail category ${entry.key} renders expected decorative artwork', (
+      tester,
+    ) async {
+      await tester.pumpWidget(
+        MaterialApp(
+          home: RequestSummaryArtwork(
+            category: entry.key,
+            child: const Text('summary content'),
+          ),
+        ),
+      );
+      expect(find.text('summary content'), findsOneWidget);
+      final art = find.byType(Image);
+      expect(art, findsOneWidget);
+      final image = tester.widget<Image>(art);
+      expect((image.image as AssetImage).assetName, entry.value);
+    });
+  }
+
+  testWidgets('unsupported detail categories remain without added artwork', (
     tester,
   ) async {
     await tester.pumpWidget(
       const MaterialApp(
         home: RequestSummaryArtwork(
-          category: 'Plumbing',
+          category: 'Unexpected Category',
           child: Text('summary'),
         ),
       ),

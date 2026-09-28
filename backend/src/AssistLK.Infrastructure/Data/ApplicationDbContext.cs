@@ -1,9 +1,10 @@
+using AssistLK.Application.Interfaces;
 using AssistLK.Domain.Entities;
 using Microsoft.EntityFrameworkCore;
 
 namespace AssistLK.Infrastructure.Data;
 
-public class ApplicationDbContext : DbContext
+public class ApplicationDbContext : DbContext, IServiceJobsDbContext
 {
     public ApplicationDbContext(DbContextOptions<ApplicationDbContext> options) : base(options) { }
 

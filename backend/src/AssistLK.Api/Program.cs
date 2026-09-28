@@ -16,6 +16,7 @@ using AssistLK.Infrastructure;
 using AssistLK.Infrastructure.Data;
 using dotenv.net;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
+using AssistLK.Api.Hubs;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.IdentityModel.Tokens;
@@ -61,6 +62,15 @@ var jwtAudience =
 // -----------------------------
 
 builder.Services.AddInfrastructure(connectionString);
+builder.Services.AddSingleton(sp =>
+{
+    var options = new AssistLK.Infrastructure.Attachments.SupabaseStorageOptions();
+    sp.GetRequiredService<IConfiguration>().GetSection("Supabase").Bind(options);
+    return options;
+});
+builder.Services.AddHttpClient<
+    AssistLK.Application.Attachments.IProofOfWorkStorage,
+    AssistLK.Infrastructure.Attachments.SupabaseProofOfWorkStorage>();
 builder.Services.AddSingleton<AssistLK.Application.Attachments.IServiceRequestAttachmentStorage>(sp =>
 {
     var options = new AssistLK.Infrastructure.Attachments.AttachmentStorageOptions();
@@ -74,6 +84,11 @@ builder.Services.AddSingleton<AssistLK.Application.Attachments.IServiceRequestAt
 builder.Services.AddDbContext<ApplicationDbContext>(options =>
     options.UseNpgsql(connectionString));
 
+builder.Services.AddScoped<IServiceJobsDbContext>(
+    serviceProvider => serviceProvider.GetRequiredService<ApplicationDbContext>());
+builder.Services.AddScoped<IProviderProfileDbContext>(
+    serviceProvider => serviceProvider.GetRequiredService<AssistLKDbContext>());
+
 builder.Services
     .AddControllers()
     .AddJsonOptions(options =>
@@ -82,6 +97,8 @@ builder.Services
             new JsonStringEnumConverter(
                 allowIntegerValues: false));
     });
+
+builder.Services.AddSignalR();
 
 
 builder.Services.AddScoped<
@@ -95,6 +112,8 @@ builder.Services.AddScoped<
 builder.Services.AddScoped<
     IServiceRequestService,
     ServiceRequestService>();
+
+builder.Services.AddScoped<FeedbackApplicationService>();
 
 builder.Services.AddScoped<
     IJwtTokenService,
@@ -157,7 +176,7 @@ builder.Services.AddHttpClient<ValidationSafetyAgent>((sp, client) =>
 // Provider Matching Microservice Client
 builder.Services.AddHttpClient<AssistLK.Application.Services.Providers.IProviderMatchingService, AssistLK.Application.Services.Providers.ProviderMatchingService>(client =>
 {
-    client.BaseAddress = new Uri("http://127.0.0.1:8000");
+    client.BaseAddress = new Uri("http://127.0.0.1:8002");
     client.Timeout = TimeSpan.FromSeconds(90);
 });
 builder.Services.AddScoped<AssistLK.Application.Services.Providers.IProviderMatchingCoordinator, AssistLK.Application.Services.Providers.ProviderMatchingCoordinator>();
@@ -255,6 +274,23 @@ builder.Services
 
                 ClockSkew = TimeSpan.Zero
             };
+
+        options.Events = new JwtBearerEvents
+        {
+            OnMessageReceived = context =>
+            {
+                var accessToken = context.Request.Query["access_token"];
+                var requestPath = context.HttpContext.Request.Path;
+
+                if (!string.IsNullOrEmpty(accessToken) &&
+                    requestPath.StartsWithSegments("/hubs/tracking"))
+                {
+                    context.Token = accessToken;
+                }
+
+                return Task.CompletedTask;
+            }
+        };
     });
 
 
@@ -367,6 +403,7 @@ app.UseAuthorization();
 // -----------------------------
 
 app.MapControllers();
+app.MapHub<TrackingHub>("/hubs/tracking");
 
 app.MapHealthChecks("/health");
 

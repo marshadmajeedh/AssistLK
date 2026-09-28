@@ -21,4 +21,9 @@ class AppConfig {
 
     return kIsWeb ? 'http://localhost:8000' : 'http://10.0.2.2:8000';
   }
+
+  static String get trackingHubUrl {
+    final apiUrl = apiBaseUrl.replaceFirst(RegExp(r'/api$'), '');
+    return '$apiUrl/hubs/tracking';
+  }
 }

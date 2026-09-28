@@ -6,8 +6,10 @@ import 'package:latlong2/latlong.dart' as latlong;
 import '../auth/providers/auth_provider.dart';
 import '../../shared/theme/app_spacing.dart';
 import 'providers/provider_dashboard_provider.dart';
+import 'quotation_workspace_screen.dart';
 import 'services/provider_service.dart';
 import 'widgets/job_alert_card.dart';
+import 'widgets/provider_rating_card.dart';
 import 'widgets/update_profile_bottom_sheet.dart';
 import 'providers/web_notifications.dart';
 
@@ -45,12 +47,6 @@ class _ProviderHomeScreenState extends State<ProviderHomeScreen> {
       await _dashboardProvider?.providerService.acceptActiveDispatch(
         '/api/providers/active-dispatch/accept',
       );
-      _dashboardProvider?.clearActiveJobMatch();
-      if (mounted) {
-        setState(() {
-          _hasAcceptedActiveMatch = true;
-        });
-      }
     } catch (e) {
       debugPrint('Failed to accept match: $e');
       if (mounted) {
@@ -151,12 +147,28 @@ class _ProviderHomeScreenState extends State<ProviderHomeScreen> {
                     padding: const EdgeInsets.symmetric(vertical: 14),
                   ),
                   onPressed: () {
+                    final activeJob = _dashboardProvider?.activeJobMatch;
+                    final serviceJobId = activeJob?['jobId']?.toString();
+                    final jobStatus =
+                        activeJob?['jobStatus']?.toString() ?? 'Assigned';
+
                     Navigator.of(sheetContext).pop();
-                    if (mounted) {
-                      setState(() {
-                        _hasAcceptedActiveMatch = true;
-                      });
+                    if (!mounted || serviceJobId == null) {
+                      return;
                     }
+
+                    _dashboardProvider?.dismissActiveJob();
+                    setState(() {
+                      _hasAcceptedActiveMatch = true;
+                    });
+                    Navigator.of(context).push(
+                      MaterialPageRoute<void>(
+                        builder: (_) => QuotationWorkspaceScreen(
+                          serviceJobId: serviceJobId,
+                          status: jobStatus,
+                        ),
+                      ),
+                    );
                   },
                   child: const Text('Proceed to Quotation Workspace'),
                 ),
@@ -173,12 +185,24 @@ class _ProviderHomeScreenState extends State<ProviderHomeScreen> {
     await _dashboardProvider?.declineJob();
   }
 
+  Future<void> _onUpdateJobStatus(String newStatus) async {
+    try {
+      await _dashboardProvider?.updateActiveJobStatus(newStatus);
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          backgroundColor: Colors.red,
+          content: Text('Failed to update job status: $e'),
+        ),
+      );
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     if (_dashboardProvider == null) {
-      return const Scaffold(
-        body: Center(child: CircularProgressIndicator()),
-      );
+      return const Scaffold(body: Center(child: CircularProgressIndicator()));
     }
 
     return ChangeNotifierProvider.value(
@@ -187,6 +211,7 @@ class _ProviderHomeScreenState extends State<ProviderHomeScreen> {
         hasAcceptedActiveMatch: _hasAcceptedActiveMatch,
         onAcceptMatch: _onAcceptMatch,
         onDeclineMatch: _onDeclineMatch,
+        onUpdateJobStatus: _onUpdateJobStatus,
       ),
     );
   }
@@ -196,11 +221,13 @@ class _ProviderHomeView extends StatelessWidget {
   final bool hasAcceptedActiveMatch;
   final VoidCallback onAcceptMatch;
   final VoidCallback onDeclineMatch;
+  final Future<void> Function(String) onUpdateJobStatus;
 
   const _ProviderHomeView({
     required this.hasAcceptedActiveMatch,
     required this.onAcceptMatch,
     required this.onDeclineMatch,
+    required this.onUpdateJobStatus,
   });
 
   Color _getCategoryColor(String category) {
@@ -361,8 +388,10 @@ class _ProviderHomeView extends StatelessWidget {
                     ),
                     title: const Text(
                       'AI Voice Alert',
-                      style:
-                          TextStyle(fontSize: 14, fontWeight: FontWeight.bold),
+                      style: TextStyle(
+                        fontSize: 14,
+                        fontWeight: FontWeight.bold,
+                      ),
                     ),
                     subtitle: const Text(
                       'Speaks basic audio notification when a new job arrives',
@@ -418,12 +447,16 @@ class _ProviderHomeView extends StatelessWidget {
                           backgroundColor: Colors.blue.shade700,
                           foregroundColor: Colors.white,
                           padding: const EdgeInsets.symmetric(
-                              horizontal: 10, vertical: 8),
+                            horizontal: 10,
+                            vertical: 8,
+                          ),
                           visualDensity: VisualDensity.compact,
                         ),
                         icon: const Icon(Icons.notifications_active, size: 16),
-                        label: const Text('Enable Notifications',
-                            style: TextStyle(fontSize: 12)),
+                        label: const Text(
+                          'Enable Notifications',
+                          style: TextStyle(fontSize: 12),
+                        ),
                         onPressed: () {
                           requestNotificationPermissions();
                           setDialogState(() {});
@@ -432,12 +465,16 @@ class _ProviderHomeView extends StatelessWidget {
                       OutlinedButton.icon(
                         style: OutlinedButton.styleFrom(
                           padding: const EdgeInsets.symmetric(
-                              horizontal: 10, vertical: 8),
+                            horizontal: 10,
+                            vertical: 8,
+                          ),
                           visualDensity: VisualDensity.compact,
                         ),
                         icon: const Icon(Icons.send, size: 16),
-                        label: const Text('Test Notification',
-                            style: TextStyle(fontSize: 12)),
+                        label: const Text(
+                          'Test Notification',
+                          style: TextStyle(fontSize: 12),
+                        ),
                         onPressed: () {
                           sendTestNotification();
                         },
@@ -455,7 +492,10 @@ class _ProviderHomeView extends StatelessWidget {
                       ),
                       child: Text(
                         'Notifications are blocked by Chrome.\nTo enable: Click the tune/padlock icon on the left of the URL bar -> Site settings -> Notifications -> Set to Allow.',
-                        style: TextStyle(fontSize: 11, color: Colors.red.shade900),
+                        style: TextStyle(
+                          fontSize: 11,
+                          color: Colors.red.shade900,
+                        ),
                       ),
                     ),
                   ],
@@ -687,10 +727,7 @@ class _ProviderHomeView extends StatelessWidget {
                     ),
                   ),
                   icon: const Icon(Icons.logout),
-                  label: const Text(
-                    'Log Out',
-                    style: TextStyle(fontSize: 15),
-                  ),
+                  label: const Text('Log Out', style: TextStyle(fontSize: 15)),
                   onPressed: () => auth.logout(),
                 ),
               ),
@@ -853,10 +890,7 @@ class _ProviderHomeView extends StatelessWidget {
                     ),
                   ),
                   icon: const Icon(Icons.logout),
-                  label: const Text(
-                    'Log Out',
-                    style: TextStyle(fontSize: 15),
-                  ),
+                  label: const Text('Log Out', style: TextStyle(fontSize: 15)),
                   onPressed: () => auth.logout(),
                 ),
               ),
@@ -991,14 +1025,12 @@ class _ProviderHomeView extends StatelessWidget {
                                   vertical: 4,
                                 ),
                                 decoration: BoxDecoration(
-                                  color: _getCategoryColor(
-                                    dashboard.category,
-                                  ).withValues(alpha: 0.12),
+                                  color: _getCategoryColor(dashboard.category)
+                                      .withValues(alpha: 0.12),
                                   borderRadius: BorderRadius.circular(6),
                                   border: Border.all(
-                                    color: _getCategoryColor(
-                                      dashboard.category,
-                                    ).withValues(alpha: 0.4),
+                                    color: _getCategoryColor(dashboard.category)
+                                        .withValues(alpha: 0.4),
                                   ),
                                 ),
                                 child: Row(
@@ -1025,46 +1057,17 @@ class _ProviderHomeView extends StatelessWidget {
                                   ],
                                 ),
                               ),
-                              const SizedBox(width: 8),
-                              // Verified Chip with Star Rating
-                              Container(
-                                padding: const EdgeInsets.symmetric(
-                                  horizontal: 8,
-                                  vertical: 4,
-                                ),
-                                decoration: BoxDecoration(
-                                  color: Colors.green.shade50,
-                                  borderRadius: BorderRadius.circular(6),
-                                  border: Border.all(
-                                    color: Colors.green.shade300,
-                                  ),
-                                ),
-                                child: Row(
-                                  mainAxisSize: MainAxisSize.min,
-                                  children: [
-                                    const Icon(
-                                      Icons.verified,
-                                      size: 14,
-                                      color: Colors.green,
-                                    ),
-                                    const SizedBox(width: 4),
-                                    Text(
-                                      'Verified Technician ★ ${dashboard.rating.toStringAsFixed(1)}',
-                                      style: TextStyle(
-                                        fontSize: 12,
-                                        fontWeight: FontWeight.bold,
-                                        color: Colors.green.shade800,
-                                      ),
-                                    ),
-                                  ],
-                                ),
-                              ),
                             ],
                           ),
                         ],
                       ),
                     ),
                   ),
+                ),
+
+                ProviderRatingCard(
+                  averageRating: dashboard.averageRating,
+                  totalReviews: dashboard.totalReviews,
                 ),
 
                 // Duty Status & Operating Radius card
@@ -1174,8 +1177,7 @@ class _ProviderHomeView extends StatelessWidget {
                         ),
                         children: [
                           TileLayer(
-                            urlTemplate:
-                                'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
+                            urlTemplate: 'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
                             userAgentPackageName: 'com.example.mobile',
                           ),
                           CircleLayer(
@@ -1254,10 +1256,9 @@ class _ProviderHomeView extends StatelessWidget {
                                 dashboard.activeJobMatch!['category']
                                     ?.toString() ??
                                 'Service Request',
-                            distance:
-                                dashboard.liveDistanceKm != null
-                                    ? dashboard.liveDistanceKm!.toStringAsFixed(1)
-                                    : '${dashboard.activeJobMatch!['distanceKm']}',
+                            distance: dashboard.liveDistanceKm != null
+                                ? dashboard.liveDistanceKm!.toStringAsFixed(1)
+                                : '${dashboard.activeJobMatch!['distanceKm']}',
                             urgency:
                                 dashboard.activeJobMatch!['urgency']
                                     ?.toString() ??
@@ -1265,14 +1266,24 @@ class _ProviderHomeView extends StatelessWidget {
                             description: dashboard
                                 .activeJobMatch!['description']
                                 ?.toString(),
-                            aiRationale: (dashboard
-                                        .activeJobMatch!['detectedProblem'] ??
-                                    dashboard
-                                        .activeJobMatch!['aiRationale'] ??
-                                    dashboard
-                                        .activeJobMatch!['rationale'])
-                                ?.toString(),
-                            isOutOfRange: dashboard.liveDistanceKm != null &&
+                            aiRationale:
+                                (dashboard.activeJobMatch!['detectedProblem'] ??
+                                        dashboard
+                                            .activeJobMatch!['aiRationale'] ??
+                                        dashboard.activeJobMatch!['rationale'])
+                                    ?.toString(),
+                            isAccepted:
+                                hasAcceptedActiveMatch ||
+                                dashboard.activeJobMatch!['matchStatus'] ==
+                                    'Accepted',
+                            jobStatus:
+                                dashboard.activeJobMatch!['jobStatus']
+                                    ?.toString() ??
+                                'Assigned',
+                            onStart: () => onUpdateJobStatus('InProgress'),
+                            onComplete: () => onUpdateJobStatus('Completed'),
+                            isOutOfRange:
+                                dashboard.liveDistanceKm != null &&
                                 dashboard.liveDistanceKm! >
                                     dashboard.operatingRadiusKm,
                             onAccept: onAcceptMatch,

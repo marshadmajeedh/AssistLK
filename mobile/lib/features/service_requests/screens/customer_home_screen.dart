@@ -11,6 +11,7 @@ import '../../../../shared/widgets/app_image_asset.dart';
 import '../../../../shared/widgets/section_header.dart';
 import '../../auth/providers/auth_provider.dart';
 import '../../customer/widgets/home_location_banner.dart';
+import '../../tracking/customer_job_tracking_screen.dart';
 import '../navigation/open_create_service_request.dart';
 import '../providers/service_request_provider.dart';
 import '../widgets/service_category_shortcuts.dart';
@@ -23,6 +24,9 @@ class CustomerHomeScreen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    const testJobId = '2a26a3bf-5694-4cc5-8e17-ecb4b03bf2d1';
+    const testDestinationLatitude = 6.9271;
+    const testDestinationLongitude = 79.8612;
     final user = context.watch<AuthProvider>().user;
     final requests = context.watch<ServiceRequestProvider>();
     final sorted = requests.requests.toList()
@@ -60,6 +64,22 @@ class CustomerHomeScreen extends StatelessWidget {
             AppButton(
               text: 'Create Service Request',
               onPressed: () => openCreateServiceRequest(context),
+            ),
+            // TODO: Remove after Component 4 navigation is finalized
+            OutlinedButton.icon(
+              icon: const Icon(Icons.location_on),
+              label: const Text('View Live Tracking'),
+              onPressed: () {
+                Navigator.of(context).push(
+                  MaterialPageRoute<void>(
+                    builder: (_) => const CustomerJobTrackingScreen(
+                      jobId: testJobId,
+                      destinationLatitude: testDestinationLatitude,
+                      destinationLongitude: testDestinationLongitude,
+                    ),
+                  ),
+                );
+              },
             ),
             const SizedBox(height: AppSpacing.lg),
             const SectionHeader(title: 'Explore services'),

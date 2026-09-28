@@ -30,6 +30,7 @@ export default function ServiceTrackingPage() {
   const [complaints, setComplaints] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
+  const [pendingAction, setPendingAction] = useState("");
   const [attempt, setAttempt] = useState(0);
 
   useEffect(() => {
@@ -65,6 +66,44 @@ export default function ServiceTrackingPage() {
     setAttempt((value) => value + 1);
   };
 
+  const refreshComplaints = () => {
+    setAttempt((value) => value + 1);
+  };
+
+  const handleAction = async (complaint, action) => {
+    const ticketId = complaint.ticketId || complaint.id;
+    const actionKey = `${ticketId}:${action}`;
+    setPendingAction(actionKey);
+    setError("");
+
+    try {
+      const statusByAction = {
+        Approve: "Approved",
+        Reject: "Rejected",
+        Resolve: "Resolved",
+      };
+      await serviceTrackingService.updateComplaintStatus(ticketId, {
+        status: statusByAction[action],
+        notes: `${action}d by administrator`,
+      });
+
+      refreshComplaints();
+    } catch (error) {
+      console.error("Failed to process complaint action", {
+        action,
+        ticketId,
+        error,
+      });
+      setError(
+        error.response?.data?.message ||
+          error.message ||
+          "Failed to process action. Please try again.",
+      );
+    } finally {
+      setPendingAction("");
+    }
+  };
+
   return (
     <div className="app-page" style={{ ...typography.body, color: colors.textPrimary }}>
       <section className="page-hero">
@@ -98,7 +137,7 @@ export default function ServiceTrackingPage() {
               <caption>Customer complaints from tracked service jobs</caption>
               <thead>
                 <tr>
-                  {["Subject", "Type", "Status", "Description", "Created"].map((label) => (
+                  {["Ticket ID", "Job ID", "Customer", "Type", "Description", "AI Sentiment", "Status", "Created", "Actions"].map((label) => (
                     <th scope="col" key={label}>{label}</th>
                   ))}
                 </tr>
@@ -106,11 +145,33 @@ export default function ServiceTrackingPage() {
               <tbody>
                 {complaints.map((complaint) => (
                   <tr key={complaint.id}>
-                    <td data-label="Subject">{complaint.subject || "—"}</td>
+                    <td data-label="Ticket ID">{complaint.ticketId || complaint.id || "—"}</td>
+                    <td data-label="Job ID">{complaint.jobId || complaint.serviceJobId || "—"}</td>
+                    <td data-label="Customer">{complaint.customerName || complaint.customerId || "—"}</td>
                     <td data-label="Type">{complaint.type || "—"}</td>
+                    <td data-label="Description">{complaint.customerComment || complaint.description || "—"}</td>
+                    <td data-label="AI Sentiment">{complaint.aiSentiment || "—"}</td>
                     <td data-label="Status"><StatusBadge status={complaint.status} /></td>
-                    <td data-label="Description">{complaint.description || "—"}</td>
                     <td data-label="Created">{formatCreatedDate(complaint.createdAt)}</td>
+                    <td data-label="Actions">
+                      {complaint.isSuspicious && complaint.serviceJobId ? (
+                        <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+                          {["Approve", "Reject", "Resolve"].map((action) => {
+                            const actionKey = `${complaint.id}:${action}`;
+                            return (
+                              <AppButton
+                                key={action}
+                                variant={action === "Approve" ? "secondary" : "outline"}
+                                disabled={Boolean(pendingAction)}
+                                onClick={() => handleAction(complaint, action)}
+                              >
+                                {pendingAction === actionKey ? "Processing..." : action}
+                              </AppButton>
+                            );
+                          })}
+                        </div>
+                      ) : "—"}
+                    </td>
                   </tr>
                 ))}
               </tbody>

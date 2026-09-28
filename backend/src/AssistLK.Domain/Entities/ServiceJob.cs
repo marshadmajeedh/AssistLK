@@ -18,6 +18,7 @@ public class ServiceJob
     public Guid Id { get; set; } = Guid.NewGuid();
     public Guid? ServiceRequestId { get; set; }
     public Guid? BookingId { get; set; }
+    public Guid? ProviderId { get; set; }
     public ServiceJobStatus Status { get; set; } = ServiceJobStatus.Assigned;
     public DateTime? StartedAt { get; set; }
     public DateTime? CompletedAt { get; set; }
@@ -69,6 +70,8 @@ public class Complaint
     public string Type { get; set; } = string.Empty;
     public string Subject { get; set; } = string.Empty;
     public string Description { get; set; } = string.Empty;
+    public string? CustomerComment { get; set; }
+    public string? AiSentiment { get; set; }
     public string Status { get; set; } = "Open";
     public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
 }

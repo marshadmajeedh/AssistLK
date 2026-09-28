@@ -131,7 +131,7 @@ export default function AdminDashboardPage() {
     {/* Component 4: Service Tracking & AI Safety Operations Section */}
     <section aria-labelledby="dashboard-tracking-heading">
       <div className="dashboard-section-header">
-        <h2 id="dashboard-tracking-heading" style={typography.sectionHeading}>Component 4: Service Tracking & Safety Operations</h2>
+        <h2 id="dashboard-tracking-heading" style={typography.sectionHeading}>Service Tracking & Safety Operations</h2>
         <AppButton variant="outline" onClick={() => navigate("/service-tracking")}>View Complaints</AppButton>
       </div>
       <CollectionState result={trackingSummary} loadingMessage="Loading safety & tracking metrics..." retryLabel="Retry Safety Metrics">
@@ -142,17 +142,21 @@ export default function AdminDashboardPage() {
             <caption>Latest {Math.min(5, trackingSummary.data.length)} complaints</caption>
             <thead>
               <tr>
-                {["Subject", "Type", "Status", "Description", "Created"].map((label) => <th scope="col" key={label}>{label}</th>)}
+                {["Ticket ID", "Job ID", "Customer", "Type", "Description", "AI Sentiment", "Status", "Created", "Actions"].map((label) => <th scope="col" key={label}>{label}</th>)}
               </tr>
             </thead>
             <tbody>
               {trackingSummary.data.slice(0, 5).map((complaint) => (
                 <tr key={complaint.id}>
-                  <td data-label="Subject">{complaint.subject || "—"}</td>
+                  <td data-label="Ticket ID">{complaint.ticketId || complaint.id || "—"}</td>
+                  <td data-label="Job ID">{complaint.jobId || complaint.serviceJobId || "—"}</td>
+                  <td data-label="Customer">{complaint.customerName || complaint.customerId || "—"}</td>
                   <td data-label="Type">{complaint.type || "—"}</td>
+                  <td data-label="Description">{complaint.customerComment || complaint.description || "—"}</td>
+                  <td data-label="AI Sentiment">{complaint.aiSentiment || "—"}</td>
                   <td data-label="Status"><StatusBadge status={complaint.status} /></td>
-                  <td data-label="Description">{complaint.description || "—"}</td>
                   <td data-label="Created">{complaint.createdAt ? new Date(complaint.createdAt).toLocaleString() : "—"}</td>
+                  <td data-label="Actions">—</td>
                 </tr>
               ))}
             </tbody>

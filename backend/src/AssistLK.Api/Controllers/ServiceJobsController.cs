@@ -1,10 +1,18 @@
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Storage;
 using System.Text.Json;
 using System.Text.Json.Serialization;
+using System.Security.Claims;
+using AssistLK.Application.Attachments;
+using AssistLK.Application.Interfaces;
+using AssistLK.Application.Services;
 using AssistLK.Infrastructure.Data;
 using AssistLK.Domain.Entities;
 using AssistLK.Domain.Enums;
+using AssistLK.Api.Hubs;
+using Microsoft.AspNetCore.SignalR;
 
 namespace AssistLK.Api.Controllers
 {
@@ -12,32 +20,70 @@ namespace AssistLK.Api.Controllers
     [Route("api/service-jobs")]
     public class ServiceJobsController : ControllerBase
     {
-        private readonly ApplicationDbContext _context;
-        private readonly AssistLKDbContext _serviceRequestContext;
+        private readonly ApplicationDbContext _applicationDbContext;
+        private readonly AssistLKDbContext _assistLkDbContext;
         private readonly HttpClient _httpClient;
+        private readonly IProofOfWorkStorage _proofOfWorkStorage;
+        private readonly IHubContext<TrackingHub> _trackingHubContext;
+        private readonly FeedbackApplicationService _feedbackApplicationService;
 
         public ServiceJobsController(
             ApplicationDbContext context,
             AssistLKDbContext serviceRequestContext,
-            HttpClient httpClient)
+            HttpClient httpClient,
+            IProofOfWorkStorage proofOfWorkStorage,
+            IHubContext<TrackingHub> trackingHubContext,
+            FeedbackApplicationService feedbackApplicationService)
         {
-            _context = context;
-            _serviceRequestContext = serviceRequestContext;
+            _applicationDbContext = context;
+            _assistLkDbContext = serviceRequestContext;
             _httpClient = httpClient;
+            _proofOfWorkStorage = proofOfWorkStorage;
+            _trackingHubContext = trackingHubContext;
+            _feedbackApplicationService = feedbackApplicationService;
         }
 
         [HttpPut("{id:guid}/status")]
+        [Authorize]
         public async Task<IActionResult> UpdateJobStatus(Guid id, [FromBody] StatusUpdateRequest request)
         {
             try
             {
-                var job = await _context.ServiceJobs.FindAsync(id);
+                var job = await _applicationDbContext.ServiceJobs.FindAsync(id);
                 if (job == null)
                     return NotFound(new { message = "Job non-existent" });
 
                 if (!Enum.TryParse<ServiceJobStatus>(request.NewStatus, true, out var newStatusEnum))
                 {
                     return BadRequest(new { message = $"Invalid status value: {request.NewStatus}" });
+                }
+
+                var isAdmin = User.IsInRole("Admin");
+                if (!isAdmin)
+                {
+                    if (!User.IsInRole("Provider") ||
+                        (newStatusEnum != ServiceJobStatus.InProgress &&
+                         newStatusEnum != ServiceJobStatus.Completed &&
+                         newStatusEnum != ServiceJobStatus.OnTheWay &&
+                         newStatusEnum != ServiceJobStatus.Arrived))
+                    {
+                        return Forbid();
+                    }
+
+                    var userIdClaim = User.FindFirstValue(ClaimTypes.NameIdentifier);
+                    if (!Guid.TryParse(userIdClaim, out var userId) || !job.ProviderId.HasValue)
+                    {
+                        return Forbid();
+                    }
+
+                    var ownsJob = await _assistLkDbContext.ProviderProfiles
+                        .AnyAsync(
+                            profile => profile.Id == job.ProviderId.Value && profile.UserId == userId);
+
+                    if (!ownsJob)
+                    {
+                        return Forbid();
+                    }
                 }
 
                 var agentPayload = new
@@ -77,12 +123,34 @@ namespace AssistLK.Api.Controllers
                     ChangedAt = DateTime.UtcNow
                 };
 
-                _context.ServiceStatusHistories.Add(historyRecord);
+                _applicationDbContext.ServiceStatusHistories.Add(historyRecord);
+
+                if (newStatusEnum == ServiceJobStatus.Completed)
+                {
+                    var completion = await _applicationDbContext.CompletionRecords
+                        .FirstOrDefaultAsync(record => record.ServiceJobId == id);
+
+                    if (completion == null)
+                    {
+                        completion = new CompletionRecord
+                        {
+                            Id = Guid.NewGuid(),
+                            ServiceJobId = id,
+                            CompletedAt = DateTime.UtcNow
+                        };
+                        _applicationDbContext.CompletionRecords.Add(completion);
+                    }
+
+                    completion.WorkSummary = request.Notes ?? "Work completed";
+                    completion.ProofOfWorkImageUrl = request.ProofOfWorkImageUrl;
+                    completion.AdditionalCost = 0;
+                    completion.CompletedAt = DateTime.UtcNow;
+                }
 
                 ServiceRequest? serviceRequest = null;
                 if (job.ServiceRequestId.HasValue)
                 {
-                    serviceRequest = await _serviceRequestContext.ServiceRequests
+                    serviceRequest = await _assistLkDbContext.ServiceRequests
                         .FindAsync(job.ServiceRequestId.Value);
 
                     if (serviceRequest != null)
@@ -93,11 +161,24 @@ namespace AssistLK.Api.Controllers
                     }
                 }
 
-                await _context.SaveChangesAsync();
+                await _applicationDbContext.SaveChangesAsync();
 
                 if (serviceRequest != null)
                 {
-                    await _serviceRequestContext.SaveChangesAsync();
+                    await _assistLkDbContext.SaveChangesAsync();
+                }
+
+                if (newStatusEnum == ServiceJobStatus.Arrived)
+                {
+                    await _trackingHubContext.Clients
+                        .Group($"Job_{id}")
+                        .SendAsync(
+                            "TrackingStopped",
+                            new
+                            {
+                                JobId = id,
+                                Status = ServiceJobStatus.Arrived.ToString()
+                            });
                 }
 
                 return Ok(new { message = "Status updated successfully", current_status = job.Status.ToString(), ai_validation = agentResult });
@@ -120,16 +201,203 @@ namespace AssistLK.Api.Controllers
             };
         }
 
+        [HttpPut("{id:guid}/complete")]
+        [Authorize]
+        [RequestSizeLimit(10 * 1024 * 1024)]
+        public async Task<IActionResult> CompleteJob(
+            Guid id,
+            [FromForm] CompleteJobForm form,
+            IFormFile? proofOfWorkImage,
+            CancellationToken cancellationToken)
+        {
+            try
+            {
+                var job = await _applicationDbContext.ServiceJobs
+                    .FirstOrDefaultAsync(item => item.Id == id, cancellationToken);
+                if (job == null)
+                {
+                    return NotFound(new { message = "Job non-existent" });
+                }
+
+                if (!await CanCompleteJobAsync(job, cancellationToken))
+                {
+                    return Forbid();
+                }
+
+                if (proofOfWorkImage != null && proofOfWorkImage.Length > 10 * 1024 * 1024)
+                {
+                    return BadRequest(new { message = "Proof of work image must be 10 MB or smaller." });
+                }
+
+                if (proofOfWorkImage != null &&
+                    !new[] { "image/jpeg", "image/png", "image/webp" }
+                        .Contains(proofOfWorkImage.ContentType, StringComparer.OrdinalIgnoreCase))
+                {
+                    return BadRequest(new { message = "Proof of work must be a JPEG, PNG, or WebP image." });
+                }
+
+                var validationResponse = await _httpClient.PostAsJsonAsync(
+                    "http://localhost:8000/agent/validate",
+                    new
+                    {
+                        job_id = id.ToString(),
+                        current_status = job.Status.ToString(),
+                        target_status = ServiceJobStatus.Completed.ToString(),
+                        elapsed_minutes = form.TimeElapsedMinutes,
+                        note = form.Notes ?? string.Empty
+                    },
+                    cancellationToken);
+
+                if (!validationResponse.IsSuccessStatusCode)
+                {
+                    return StatusCode(500, new { message = "AI Validation Service unavailable" });
+                }
+
+                var validationContent = await validationResponse.Content.ReadAsStringAsync(cancellationToken);
+                var validationResult = JsonSerializer.Deserialize<AgentValidationResponse>(
+                    validationContent,
+                    new JsonSerializerOptions { PropertyNameCaseInsensitive = true });
+
+                if (validationResult?.Status == "INVALID")
+                {
+                    return BadRequest(new
+                    {
+                        message = "Status transition blocked by AI Guardrail",
+                        reason = validationResult.Reason
+                    });
+                }
+
+                string? proofOfWorkImageUrl = null;
+                if (proofOfWorkImage != null)
+                {
+                    await using var imageStream = proofOfWorkImage.OpenReadStream();
+                    proofOfWorkImageUrl = await _proofOfWorkStorage.UploadAsync(
+                        imageStream,
+                        proofOfWorkImage.FileName,
+                        proofOfWorkImage.ContentType,
+                        id,
+                        cancellationToken);
+                }
+
+                var oldStatus = job.Status;
+                job.Status = ServiceJobStatus.Completed;
+                _applicationDbContext.ServiceStatusHistories.Add(new ServiceStatusHistory
+                {
+                    Id = Guid.NewGuid(),
+                    ServiceJobId = id,
+                    OldStatus = oldStatus,
+                    NewStatus = ServiceJobStatus.Completed,
+                    Note = $"[AI Validation: {validationResult?.Status}] {form.Notes}",
+                    ChangedAt = DateTime.UtcNow
+                });
+
+                var completion = await _applicationDbContext.CompletionRecords
+                    .FirstOrDefaultAsync(record => record.ServiceJobId == id, cancellationToken);
+                if (completion == null)
+                {
+                    completion = new CompletionRecord
+                    {
+                        Id = Guid.NewGuid(),
+                        ServiceJobId = id
+                    };
+                    _applicationDbContext.CompletionRecords.Add(completion);
+                }
+
+                completion.WorkSummary = string.IsNullOrWhiteSpace(form.Notes)
+                    ? "Work completed"
+                    : form.Notes;
+                completion.ProofOfWorkImageUrl = proofOfWorkImageUrl;
+                completion.AdditionalCost = 0;
+                completion.CompletedAt = DateTime.UtcNow;
+
+                if (job.ServiceRequestId.HasValue)
+                {
+                    var serviceRequest = await _assistLkDbContext.ServiceRequests
+                        .FindAsync(new object[] { job.ServiceRequestId.Value }, cancellationToken);
+                    if (serviceRequest != null)
+                    {
+                        serviceRequest.Status = ServiceRequestStatus.Completed;
+                    }
+                }
+
+                await _applicationDbContext.SaveChangesAsync(cancellationToken);
+                await _assistLkDbContext.SaveChangesAsync(cancellationToken);
+
+                return Ok(new
+                {
+                    message = "Job completed successfully.",
+                    current_status = job.Status.ToString(),
+                    proofOfWorkImageUrl,
+                    ai_validation = validationResult
+                });
+            }
+            catch (Exception ex)
+            {
+                return StatusCode(500, new { message = "An error occurred while completing the job", error = ex.Message });
+            }
+        }
+
+        private async Task<bool> CanCompleteJobAsync(
+            ServiceJob job,
+            CancellationToken cancellationToken)
+        {
+            if (User.IsInRole("Admin"))
+            {
+                return true;
+            }
+
+            if (!User.IsInRole("Provider") || !job.ProviderId.HasValue)
+            {
+                return false;
+            }
+
+            var userIdClaim = User.FindFirstValue(ClaimTypes.NameIdentifier);
+            return Guid.TryParse(userIdClaim, out var userId) &&
+                await _assistLkDbContext.ProviderProfiles.AnyAsync(
+                    profile => profile.Id == job.ProviderId.Value && profile.UserId == userId,
+                    cancellationToken);
+        }
+
         [HttpPost("seed-from-request/{serviceRequestId:guid}")]
+        [Authorize(Roles = "Provider")]
         public async Task<IActionResult> SeedFromRequest(Guid serviceRequestId)
         {
             try
             {
-                var existingJob = await _context.ServiceJobs
+                var userIdClaim = User.FindFirstValue(ClaimTypes.NameIdentifier);
+                if (!Guid.TryParse(userIdClaim, out var userId))
+                {
+                    return Unauthorized(new { message = "Authenticated provider identity is missing or invalid." });
+                }
+
+                var providerId = await _assistLkDbContext.ProviderProfiles
+                    .Where(profile => profile.UserId == userId)
+                    .Select(profile => (Guid?)profile.Id)
+                    .FirstOrDefaultAsync();
+
+                if (!providerId.HasValue)
+                {
+                    return Forbid();
+                }
+
+                var existingJob = await _applicationDbContext.ServiceJobs
                     .FirstOrDefaultAsync(j => j.ServiceRequestId == serviceRequestId);
 
                 if (existingJob != null)
                 {
+                    if (!existingJob.ProviderId.HasValue)
+                    {
+                        existingJob.ProviderId = providerId.Value;
+                        await _applicationDbContext.SaveChangesAsync();
+                    }
+                    else if (existingJob.ProviderId.Value != providerId.Value)
+                    {
+                        return Conflict(new
+                        {
+                            message = "This service request is already assigned to another provider."
+                        });
+                    }
+
                     return Ok(new
                     {
                         Message = "Job tya request sathi adhiich ahe.",
@@ -142,6 +410,7 @@ namespace AssistLK.Api.Controllers
                 {
                     Id = Guid.NewGuid(),
                     ServiceRequestId = serviceRequestId,
+                    ProviderId = providerId.Value,
                     Status = ServiceJobStatus.Assigned,
                     CreatedAt = DateTime.UtcNow
                 };
@@ -156,9 +425,9 @@ namespace AssistLK.Api.Controllers
                     ChangedAt = DateTime.UtcNow
                 };
 
-                _context.ServiceJobs.Add(newJob);
-                _context.ServiceStatusHistories.Add(initialHistory);
-                await _context.SaveChangesAsync();
+                _applicationDbContext.ServiceJobs.Add(newJob);
+                _applicationDbContext.ServiceStatusHistories.Add(initialHistory);
+                await _applicationDbContext.SaveChangesAsync();
 
                 return Ok(new
                 {
@@ -175,34 +444,39 @@ namespace AssistLK.Api.Controllers
         }
 
         [HttpPost("{id:guid}/feedback")]
-        public async Task<IActionResult> SubmitFeedback(Guid id, [FromBody] SubmitFeedbackDto dto)
+        public async Task<IActionResult> SubmitFeedback(
+            Guid id,
+            [FromBody] SubmitFeedbackDto dto,
+            CancellationToken cancellationToken)
         {
             try
             {
-                var job = await _context.ServiceJobs.FindAsync(id);
+                var job = await _applicationDbContext.ServiceJobs
+                    .FindAsync([id], cancellationToken);
                 if (job == null)
                 {
                     return NotFound(new { Message = "ServiceJob sapadla nahi." });
                 }
 
-                var feedbackAlreadyExists = await _context.Feedbacks
-                    .AnyAsync(feedback => feedback.ServiceJobId == id);
-                if (feedbackAlreadyExists)
+                await using var transaction = await _applicationDbContext.Database.BeginTransactionAsync();
+                var applicationConnection = _applicationDbContext.Database.GetDbConnection();
+                if (!ReferenceEquals(_assistLkDbContext.Database.GetDbConnection(), applicationConnection))
                 {
-                    return BadRequest(new
-                    {
-                        message = "Feedback has already been submitted for this service job."
-                    });
+                    _assistLkDbContext.Database.SetDbConnection(applicationConnection);
                 }
+                await _assistLkDbContext.Database.UseTransactionAsync(transaction.GetDbTransaction());
 
                 var sentimentResult = new SentimentResponse { IsNegative = false, Sentiment = "NEUTRAL" };
 
                 try
                 {
-                    var response = await _httpClient.PostAsJsonAsync("http://localhost:8000/agent/analyze-sentiment", new { comment = dto.Comment });
+                    var response = await _httpClient.PostAsJsonAsync(
+                        "http://localhost:8000/agent/analyze-sentiment",
+                        new { comment = dto.Comment },
+                        cancellationToken);
                     if (response.IsSuccessStatusCode)
                     {
-                        var content = await response.Content.ReadAsStringAsync();
+                        var content = await response.Content.ReadAsStringAsync(cancellationToken);
                         var parsed = JsonSerializer.Deserialize<SentimentResponse>(content, new JsonSerializerOptions
                         {
                             PropertyNameCaseInsensitive = true
@@ -218,51 +492,38 @@ namespace AssistLK.Api.Controllers
                     // Fallback to rating validation if sentiment agent is unreachable
                 }
 
-                var feedback = new Feedback
-                {
-                    Id = Guid.NewGuid(),
-                    ServiceJobId = id,
-                    CustomerId = dto.CustomerId,
-                    Rating = dto.Rating,
-                    Comment = dto.Comment,
-                    CreatedAt = DateTime.UtcNow
-                };
+                var result = await _feedbackApplicationService.SubmitAsync(
+                    id,
+                    new SubmitFeedbackCommand(
+                        dto.CustomerId,
+                        dto.Rating,
+                        dto.Comment,
+                        sentimentResult.IsNegative || dto.Rating <= 2,
+                        sentimentResult.Sentiment),
+                    cancellationToken);
 
-                _context.Feedbacks.Add(feedback);
-
-                bool autoEscalated = false;
-                Guid? complaintId = null;
-
-                if (sentimentResult.IsNegative || dto.Rating <= 2)
-                {
-                    var complaint = new Complaint
-                    {
-                        Id = Guid.NewGuid(),
-                        ServiceJobId = id,
-                        CustomerId = dto.CustomerId,
-                        Type = "Negative Feedback Auto-Escalation",
-                        Description = $"AI Sentiment: {sentimentResult.Sentiment}. Comment: {dto.Comment}",
-                        Status = "Open",
-                        CreatedAt = DateTime.UtcNow
-                    };
-
-                    _context.Complaints.Add(complaint);
-                    autoEscalated = true;
-                    complaintId = complaint.Id;
-                }
-
-                await _context.SaveChangesAsync();
+                await transaction.CommitAsync(cancellationToken);
 
                 return Ok(new
                 {
-                    FeedbackId = feedback.Id,
-                    AutoEscalatedToComplaint = autoEscalated,
-                    ComplaintId = complaintId,
-                    Sentiment = sentimentResult.Sentiment,
-                    Message = autoEscalated
-                        ? "Your feedback has been saved, and a support ticket has been automatically created to address your concerns."
-                        : "Thank you for your valuable feedback!"
+                    result.FeedbackId,
+                    result.AutoEscalatedToComplaint,
+                    result.ComplaintId,
+                    result.Sentiment,
+                    result.Message
                 });
+            }
+            catch (ArgumentException ex)
+            {
+                return BadRequest(new { message = ex.Message });
+            }
+            catch (KeyNotFoundException ex)
+            {
+                return NotFound(new { message = ex.Message });
+            }
+            catch (InvalidOperationException ex)
+            {
+                return BadRequest(new { message = ex.Message });
             }
             catch (Exception ex)
             {
@@ -276,7 +537,14 @@ namespace AssistLK.Api.Controllers
         public string NewStatus { get; set; } = string.Empty;
         public double TimeElapsedMinutes { get; set; }
         public string? Notes { get; set; }
+        public string? ProofOfWorkImageUrl { get; set; }
         public string ChangedByUserId { get; set; } = string.Empty;
+    }
+
+    public class CompleteJobForm
+    {
+        public string? Notes { get; set; }
+        public double TimeElapsedMinutes { get; set; }
     }
 
     public class AgentValidationResponse

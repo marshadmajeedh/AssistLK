@@ -5,7 +5,7 @@ using Microsoft.EntityFrameworkCore;
 
 namespace AssistLK.Infrastructure.Data;
 
-public class AssistLKDbContext : DbContext, IAgentWorkflowDbContext
+public class AssistLKDbContext : DbContext, IAgentWorkflowDbContext, IProviderProfileDbContext
 {
     public AssistLKDbContext(
         DbContextOptions<AssistLKDbContext> options)

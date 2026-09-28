@@ -31,10 +31,13 @@ class ProviderDashboardProvider extends ChangeNotifier {
   String? _error;
   bool _isVoiceAlertEnabled = true;
   double? _liveDistanceKm;
+  double _averageRating = 0.0;
+  int _totalReviews = 0;
 
   // Stores the real job dispatched from your Python/C# backend
   Map<String, dynamic>? activeJobMatch;
   String? _lastAnnouncedJobId;
+  String? _dismissedActiveJobId;
   List<latlong.LatLng> routePoints = [];
 
   bool get isProfileLoading => _isProfileLoading;
@@ -56,7 +59,9 @@ class ProviderDashboardProvider extends ChangeNotifier {
   String get fullName => profile?['fullName']?.toString() ?? '';
   String get businessName => profile?['businessName']?.toString() ?? '';
   String get category => profile?['category']?.toString() ?? 'Plumbing';
-  double get rating => (profile?['rating'] as num?)?.toDouble() ?? 5.0;
+  double get averageRating => _averageRating;
+  int get totalReviews => _totalReviews;
+  double get rating => averageRating;
 
   StreamSubscription<Position>? _positionStreamSubscription;
   Timer? _pollingTimer;
@@ -83,6 +88,11 @@ class ProviderDashboardProvider extends ChangeNotifier {
     try {
       final data = await providerService.getProfile();
       profile = data;
+
+      final num? averageRating =
+          data['averageRating'] as num? ?? data['rating'] as num?;
+      _averageRating = averageRating?.toDouble() ?? 0.0;
+      _totalReviews = (data['totalReviews'] as num?)?.toInt() ?? 0;
 
       final num? rad = data['operatingRadiusKm'] as num?;
       if (rad != null && rad > 0) {
@@ -353,10 +363,19 @@ class ProviderDashboardProvider extends ChangeNotifier {
       );
       if (response.statusCode == 200 && response.data != null) {
         final data = Map<String, dynamic>.from(response.data);
+        final jobId = data['jobId']?.toString();
+        if (jobId != null && jobId == _dismissedActiveJobId) {
+          _clearJobState();
+          return;
+        }
+
+        if (jobId != null && jobId != _dismissedActiveJobId) {
+          _dismissedActiveJobId = null;
+        }
+
         activeJobMatch = data;
         _updateLiveDistance();
 
-        final jobId = data['jobId']?.toString();
         if (jobId != null && jobId != _lastAnnouncedJobId) {
           _lastAnnouncedJobId = jobId;
           unawaited(_announceJob(data));
@@ -410,20 +429,19 @@ class ProviderDashboardProvider extends ChangeNotifier {
   Future<void> _announceJob(Map<String, dynamic> data) async {
     try {
       final category = data['category']?.toString() ?? 'Service Request';
-      final distance = _liveDistanceKm?.toStringAsFixed(1) ??
+      final distance =
+          _liveDistanceKm?.toStringAsFixed(1) ??
           data['distanceKm']?.toString() ??
           'unknown';
       final urgency = data['urgency']?.toString() ?? 'Standard';
-      final problemDesc = (data['detectedProblem'] ??
-              data['description'] ??
-              'New service dispatch received.')
-          .toString();
+      final problemDesc =
+          (data['detectedProblem'] ??
+                  data['description'] ??
+                  'New service dispatch received.')
+              .toString();
 
       if (kIsWeb) {
-        showWebNotification(
-          'New $category Job ($distance km)',
-          problemDesc,
-        );
+        showWebNotification('New $category Job ($distance km)', problemDesc);
       }
 
       if (_isVoiceAlertEnabled) {
@@ -445,6 +463,22 @@ class ProviderDashboardProvider extends ChangeNotifier {
 
   void clearActiveJobMatch() {
     _clearJobState();
+  }
+
+  void dismissActiveJob() {
+    _dismissedActiveJobId = activeJobMatch?['jobId']?.toString();
+    _clearJobState();
+  }
+
+  Future<void> updateActiveJobStatus(String newStatus) async {
+    final jobId = activeJobMatch?['jobId']?.toString();
+    if (jobId == null || jobId.isEmpty) {
+      throw StateError('No active service job is available.');
+    }
+
+    await providerService.updateJobStatus(jobId, newStatus);
+    activeJobMatch = {...?activeJobMatch, 'jobStatus': newStatus};
+    notifyListeners();
   }
 
   Future<void> declineJob() async {

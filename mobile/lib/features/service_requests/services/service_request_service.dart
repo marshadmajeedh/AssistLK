@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:typed_data';
 
 import 'package:dio/dio.dart';
+import 'package:image_picker/image_picker.dart';
 
 import '../../../core/api/api_client.dart';
 import '../models/create_service_request_dto.dart';
@@ -224,14 +225,28 @@ class ServiceRequestService {
     String jobId, {
     double timeElapsedMinutes = 0,
     String notes = 'Work completed',
+    XFile? proofOfWorkImage,
   }) async {
+    final formData = FormData.fromMap({
+      'notes': notes,
+      'timeElapsedMinutes': timeElapsedMinutes,
+    });
+
+    if (proofOfWorkImage != null) {
+      formData.files.add(
+        MapEntry(
+          'proofOfWorkImage',
+          MultipartFile.fromBytes(
+            await proofOfWorkImage.readAsBytes(),
+            filename: proofOfWorkImage.name,
+          ),
+        ),
+      );
+    }
+
     final response = await apiClient.client.put(
-      '/service-jobs/$jobId/status',
-      data: {
-        'newStatus': 'Completed',
-        'timeElapsedMinutes': timeElapsedMinutes,
-        'notes': notes,
-      },
+      '/service-jobs/$jobId/complete',
+      data: formData,
     );
 
     return Map<String, dynamic>.from(response.data as Map);

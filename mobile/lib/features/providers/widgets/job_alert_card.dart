@@ -10,8 +10,12 @@ class JobAlertCard extends StatelessWidget {
   final String? description;
   final String? aiRationale;
   final bool isOutOfRange;
+  final bool isAccepted;
+  final String jobStatus;
   final VoidCallback? onAccept;
   final VoidCallback? onDecline;
+  final VoidCallback? onStart;
+  final VoidCallback? onComplete;
 
   const JobAlertCard({
     super.key,
@@ -21,8 +25,12 @@ class JobAlertCard extends StatelessWidget {
     this.description,
     this.aiRationale,
     this.isOutOfRange = false,
+    this.isAccepted = false,
+    this.jobStatus = 'Assigned',
     this.onAccept,
     this.onDecline,
+    this.onStart,
+    this.onComplete,
   });
 
   @override

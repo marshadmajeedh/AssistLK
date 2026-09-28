@@ -28,11 +28,17 @@ namespace AssistLK.Infrastructure.Migrations
                         .ValueGeneratedOnAdd()
                         .HasColumnType("uuid");
 
+                    b.Property<string>("AiSentiment")
+                        .HasColumnType("text");
+
                     b.Property<Guid>("ComplainantId")
                         .HasColumnType("uuid");
 
                     b.Property<DateTime>("CreatedAt")
                         .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("CustomerComment")
+                        .HasColumnType("text");
 
                     b.Property<Guid>("CustomerId")
                         .HasColumnType("uuid");
@@ -136,6 +142,9 @@ namespace AssistLK.Infrastructure.Migrations
 
                     b.Property<DateTime>("CreatedAt")
                         .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid?>("ProviderId")
+                        .HasColumnType("uuid");
 
                     b.Property<Guid?>("ServiceRequestId")
                         .HasColumnType("uuid");

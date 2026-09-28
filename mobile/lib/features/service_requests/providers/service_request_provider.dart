@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:dio/dio.dart';
 import 'package:flutter/foundation.dart';
+import 'package:image_picker/image_picker.dart';
 
 import '../models/create_service_request_dto.dart';
 import '../models/problem_understanding_result_model.dart';
@@ -311,14 +312,22 @@ class ServiceRequestProvider extends ChangeNotifier {
     }
   }
 
-  Future<bool> updateRequestStatusToCompleted(String jobId) async {
+  Future<bool> updateRequestStatusToCompleted(
+    String jobId, {
+    XFile? proofOfWorkImage,
+    String notes = 'Work completed',
+  }) async {
     final generation = _generation;
     if (!_isCurrent(generation)) return false;
     _setLoading(true);
     _error = null;
 
     try {
-      await serviceRequestService.updateRequestStatusToCompleted(jobId);
+      await serviceRequestService.updateRequestStatusToCompleted(
+        jobId,
+        notes: notes,
+        proofOfWorkImage: proofOfWorkImage,
+      );
       if (!_isCurrent(generation)) return false;
 
       final completedRequest = _requests

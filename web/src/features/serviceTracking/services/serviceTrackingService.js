@@ -5,6 +5,14 @@ const serviceTrackingService = {
     const response = await apiClient.get("/api/reports/complaints");
     return response.data;
   },
+  updateJobStatus: async (jobId, payload) => {
+    const response = await apiClient.put(`/api/service-jobs/${jobId}/status`, payload);
+    return response.data;
+  },
+  updateComplaintStatus: async (complaintId, payload) => {
+    const response = await apiClient.put(`/api/reports/complaints/${complaintId}/status`, payload);
+    return response.data;
+  },
 };
 
 export default serviceTrackingService;

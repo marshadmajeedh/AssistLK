@@ -5,5 +5,6 @@ public enum MatchedCandidateStatus
     Recommended = 0,
     Notified = 1,
     Accepted = 2,
-    Declined = 3
+    Declined = 3,
+    Completed = 4
 }

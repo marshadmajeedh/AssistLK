@@ -350,7 +350,19 @@ builder.Services.AddCors(options =>
         policy =>
         {
             policy
-                .SetIsOriginAllowed(_ => true)
+                .SetIsOriginAllowed(origin =>
+                {
+                    if (!Uri.TryCreate(
+                        origin,
+                        UriKind.Absolute,
+                        out var uri))
+                    {
+                        return false;
+                    }
+
+                    return (uri.Scheme == Uri.UriSchemeHttp || uri.Scheme == Uri.UriSchemeHttps)
+                           && (uri.Host == "localhost" || uri.Host == "127.0.0.1");
+                })
                 .AllowAnyHeader()
                 .AllowAnyMethod()
                 .AllowCredentials();
@@ -387,11 +399,11 @@ if (!Directory.Exists(uploadsPath))
     Directory.CreateDirectory(uploadsPath);
 }
 
+app.UseCors("AssistLKClients");
+
 app.UseHttpsRedirection();
 
 app.UseStaticFiles();
-
-app.UseCors("AssistLKClients");
 
 app.UseAuthentication();
 

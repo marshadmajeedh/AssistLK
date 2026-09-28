@@ -40,13 +40,15 @@ class UrgencyChip extends StatelessWidget {
             color: colors.foreground,
           ),
           const SizedBox(width: AppSpacing.xs),
-          Text(
-            urgency.displayName,
-            style: TextStyle(
-              fontSize: 12,
-              fontWeight: FontWeight.w600,
-              color: colors.foreground,
-              height: 1.2,
+          Flexible(
+            child: Text(
+              urgency.displayName,
+              style: TextStyle(
+                fontSize: 12,
+                fontWeight: FontWeight.w600,
+                color: colors.foreground,
+                height: 1.2,
+              ),
             ),
           ),
         ],

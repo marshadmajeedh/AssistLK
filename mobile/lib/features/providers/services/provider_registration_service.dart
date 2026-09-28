@@ -56,16 +56,34 @@ class ProviderRegistrationService {
 
   Future<void> registerProvider(Map<String, dynamic> data) async {
     try {
-      final response = await _dio.post(
+      await _dio.post(
         '/providers/register',
         data: jsonEncode(data),
         options: Options(headers: {'Content-Type': 'application/json'}),
       );
-      if (response.statusCode != 200) {
-        throw Exception('Failed to register provider');
-      }
     } catch (e) {
       debugPrint('Registration error: $e');
+      if (e is DioException && e.response?.data != null) {
+        final resData = e.response!.data;
+        debugPrint('Registration server response: $resData');
+        if (resData is Map) {
+          if (resData['message'] != null) {
+            throw Exception(resData['message']);
+          }
+          if (resData['errors'] != null && resData['errors'] is Map) {
+            final Map errors = resData['errors'] as Map;
+            final errorMessages = <String>[];
+            errors.forEach((key, val) {
+              if (val is List) {
+                errorMessages.add('$key: ${val.join(", ")}');
+              } else {
+                errorMessages.add('$key: $val');
+              }
+            });
+            throw Exception(errorMessages.join('\n'));
+          }
+        }
+      }
       throw Exception('Failed to register provider: $e');
     }
   }

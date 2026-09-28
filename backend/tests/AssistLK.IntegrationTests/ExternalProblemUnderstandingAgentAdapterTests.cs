@@ -786,6 +786,126 @@ public class ExternalProblemUnderstandingAgentAdapterTests
         Assert.Contains("500", result.Message);
     }
 
+    [Fact]
+    public async Task Test24_InternalApiKeyHeader_SentOnMultimodalRequestWithSameHeader()
+    {
+        // Item 24: multimodal image-enhanced requests send the EXACT SAME internal API key header
+        var options = new AgentServicesOptions
+        {
+            InternalApiKey = "multimodal-shared-secret-123"
+        };
+
+        var attachmentId = Guid.NewGuid();
+        var (adapter, handler) = CreateAdapterWithMockHandler(_ =>
+            CreateJsonResponse(new AgentExecutionResponseDto
+            {
+                Success = true,
+                Metadata = new ExecutionMetadataPayloadDto { Provider = "offline" },
+                Result = new ProblemUnderstandingOutputPayloadDto
+                {
+                    Category = "Plumbing",
+                    ProblemSummary = "Pipe leak detected",
+                    Urgency = "High",
+                    Confidence = 0.9m,
+                    VisionStatus = "used",
+                    AttachmentIdsUsed = new List<Guid> { attachmentId },
+                    VisualObservations = new List<AssistLK.Agents.Models.VisualObservation>
+                    {
+                        new() { AttachmentId = attachmentId, Observation = "Water pooling around pipe joint" }
+                    }
+                }
+            }), options);
+
+        var context = CreateTestContext();
+        context.VisualEvidence = new List<VisualEvidencePayloadDto>
+        {
+            new()
+            {
+                AttachmentId = attachmentId,
+                ContentType = "image/jpeg",
+                DataBase64 = Convert.ToBase64String(new byte[] { 0xFF, 0xD8, 0xFF, 0xE0, 0x00, 0x10 }),
+                Width = 80,
+                Height = 40
+            }
+        };
+
+        var result = await adapter.ExecuteAsync(context);
+
+        Assert.True(result.Success, result.Message);
+        Assert.NotNull(handler.LastRequest);
+        Assert.True(handler.LastRequest.Headers.Contains("X-Internal-Api-Key"));
+        var keyVal = handler.LastRequest.Headers.GetValues("X-Internal-Api-Key").First();
+        Assert.Equal("multimodal-shared-secret-123", keyVal);
+        Assert.Null(handler.LastRequest.Headers.Authorization);
+    }
+
+    [Fact]
+    public async Task Test25_InternalApiKeyHeader_SentOnClarificationRequestWithSameHeader()
+    {
+        // Item 25: clarification re-analysis requests send the EXACT SAME internal API key header
+        var options = new AgentServicesOptions
+        {
+            InternalApiKey = "clarification-shared-secret-456"
+        };
+
+        var (adapter, handler) = CreateAdapterWithMockHandler(_ =>
+            CreateJsonResponse(new AgentExecutionResponseDto
+            {
+                Success = true,
+                Result = new ProblemUnderstandingOutputPayloadDto
+                {
+                    Category = "Electrical",
+                    ProblemSummary = "Sparking outlet",
+                    Urgency = "High",
+                    Confidence = 0.95m
+                }
+            }), options);
+
+        var history = new List<ClarificationHistoryItem>
+        {
+            new() { Round = 1, Question = "Is there smoke?", Answer = "Yes, light smoke" }
+        };
+        var context = CreateTestContext(description: "Outlet sparks when plugging in charger", history: history);
+
+        var result = await adapter.ExecuteAsync(context);
+
+        Assert.True(result.Success, result.Message);
+        Assert.NotNull(handler.LastRequest);
+        Assert.True(handler.LastRequest.Headers.Contains("X-Internal-Api-Key"));
+        var keyVal = handler.LastRequest.Headers.GetValues("X-Internal-Api-Key").First();
+        Assert.Equal("clarification-shared-secret-456", keyVal);
+    }
+
+    [Fact]
+    public async Task Test26_InternalApiKeyHeader_StripsAccidentalSurroundingQuotesAndWhitespace()
+    {
+        // Item 26: surrounding quotes and whitespace are safely stripped
+        var options = new AgentServicesOptions
+        {
+            InternalApiKey = "  \"secret-with-quotes-and-spaces\"  "
+        };
+
+        var (adapter, handler) = CreateAdapterWithMockHandler(_ =>
+            CreateJsonResponse(new AgentExecutionResponseDto
+            {
+                Success = true,
+                Result = new ProblemUnderstandingOutputPayloadDto
+                {
+                    Category = "Plumbing",
+                    ProblemSummary = "Cleaned",
+                    Urgency = "Low",
+                    Confidence = 0.7m
+                }
+            }), options);
+
+        await adapter.ExecuteAsync(CreateTestContext());
+
+        Assert.NotNull(handler.LastRequest);
+        Assert.True(handler.LastRequest.Headers.Contains("X-Internal-Api-Key"));
+        var keyVal = handler.LastRequest.Headers.GetValues("X-Internal-Api-Key").First();
+        Assert.Equal("secret-with-quotes-and-spaces", keyVal);
+    }
+
     #endregion
 
     #region Section 15: Agent Services Options Validation

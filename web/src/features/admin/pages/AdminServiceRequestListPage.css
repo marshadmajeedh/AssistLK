@@ -10,31 +10,167 @@
 .monitoring-filters label { font-size: 12px; font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase; }
 .request-monitoring select { margin-top: 8px; }
 .request-monitoring select:focus-visible, .request-monitoring button:focus-visible { outline: 2px solid var(--monitoring-focus); outline-offset: 2px; }
-.monitoring-table { width: 100%; border-collapse: collapse; table-layout: fixed; }
-.monitoring-table caption { text-align: left; padding-bottom: var(--monitoring-gap); color: var(--monitoring-muted); }
-.monitoring-table th, .monitoring-table td { padding: 12px 6px; text-align: left; border-bottom: 1px solid var(--monitoring-border); vertical-align: top; }
-.monitoring-table th { font-size: 12px; }
-.monitoring-table td span { white-space: normal !important; }
-.monitoring-table button { padding: 6px !important; }
+
+/* Section max-width hierarchy: reading width for hero/filters, near-full workspace for results */
+.request-monitoring .page-hero,
+.request-monitoring .section-card,
+.request-monitoring section[aria-labelledby="request-details-heading"] {
+  max-width: 1200px;
+}
+.request-monitoring .table-shell,
+.request-monitoring .monitoring-cards-shell {
+  width: 100%;
+  max-width: 100%;
+}
+
+.table-shell {
+  width: 100%;
+  max-width: 100%;
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+  padding: 20px 24px;
+}
+.monitoring-table {
+  width: 100%;
+  min-width: 1190px;
+  border-collapse: collapse;
+  table-layout: fixed;
+}
+.monitoring-table caption { text-align: left; padding-bottom: var(--monitoring-gap); color: var(--monitoring-muted); font-size: 13px; font-weight: 500; }
+.monitoring-table th, .monitoring-table td {
+  padding: 15px 12px;
+  text-align: left;
+  border-bottom: 1px solid var(--monitoring-border);
+  vertical-align: top;
+}
+.monitoring-table th {
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--monitoring-muted);
+  padding: 14px 12px;
+}
+
+/* Rebalanced column sizing for wide desktop table */
+.monitoring-table .col-request, .monitoring-table .th-request { width: 115px; }
+.monitoring-table .col-category, .monitoring-table .th-category { width: 140px; }
+.monitoring-table .col-urgency, .monitoring-table .th-urgency { width: 100px; }
+.monitoring-table .col-status, .monitoring-table .th-status { width: 175px; }
+.monitoring-table .col-location, .monitoring-table .th-location { width: auto; min-width: 300px; }
+.monitoring-table .col-confidence, .monitoring-table .th-confidence { width: 105px; white-space: nowrap; }
+.monitoring-table .col-created, .monitoring-table .th-created { width: 140px; }
+.monitoring-table .col-action, .monitoring-table .th-action { width: 120px; }
+
+/* Cell styling with clear separation and breathing room */
+.monitoring-table .request-id { font-size: 13px; font-weight: 600; white-space: nowrap; font-variant-numeric: tabular-nums; }
+.monitoring-table .cell-urgency span { white-space: nowrap; display: inline-flex; align-items: center; }
+.monitoring-table .cell-status span { white-space: nowrap; display: inline-flex; align-items: center; max-width: 100%; }
+.monitoring-table .cell-confidence { font-size: 13px; }
+.monitoring-table .cell-created { white-space: normal; line-height: 1.4; font-size: 13px; word-break: normal; }
+.monitoring-table .cell-action button { padding: 6px 14px !important; min-height: 34px !important; font-size: 12px !important; white-space: nowrap; }
+
+/* Table Location Cell: spacious bounded multi-line clamp */
+.cell-location .monitoring-location { min-width: 0; max-width: 100%; }
+.cell-location .monitoring-location-address {
+  margin: 0;
+  display: -webkit-box;
+  -webkit-line-clamp: 3;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  line-height: 1.45;
+  word-break: break-word;
+  overflow-wrap: break-word;
+  white-space: normal;
+  font-size: 13px;
+}
+.cell-location .monitoring-location-attribution {
+  display: inline-block;
+  margin-top: 4px;
+  font-size: 11px;
+  line-height: 1.2;
+  color: var(--monitoring-muted);
+  text-decoration: underline;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 100%;
+}
+.monitoring-location-attribution:focus-visible { outline: 2px solid var(--monitoring-focus); outline-offset: 2px; }
+
+/* Compact Admin Cards Mode */
+.monitoring-cards-shell { display: grid; gap: 12px; width: 100%; }
+.monitoring-results-bar { display: flex; justify-content: space-between; align-items: center; padding: 0 4px; }
+.monitoring-results-count { color: var(--monitoring-muted); font-size: 13px; font-weight: 500; margin: 0; }
+.monitoring-cards-grid { display: grid; grid-template-columns: 1fr; gap: 14px; width: 100%; }
+.admin-request-card {
+  background-color: rgba(255, 253, 249, 0.84);
+  border: 1px solid var(--monitoring-border);
+  border-radius: 18px;
+  padding: 16px 18px;
+  display: grid;
+  gap: 12px;
+  box-shadow: 0 4px 18px rgba(22, 34, 53, 0.04);
+  backdrop-filter: blur(12px);
+  transition: border-color 160ms ease, box-shadow 160ms ease;
+}
+.admin-request-card:hover {
+  border-color: rgba(22, 34, 53, 0.22);
+  box-shadow: 0 6px 22px rgba(22, 34, 53, 0.06);
+}
+.card-header-row { display: flex; justify-content: space-between; align-items: center; gap: 12px; }
+.card-request-id { font-size: 15px; font-weight: 700; letter-spacing: -0.01em; color: inherit; font-variant-numeric: tabular-nums; }
+.card-status-badge { display: inline-flex; align-items: center; }
+.card-status-badge span { white-space: nowrap; }
+.card-meta-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; padding-top: 4px; border-top: 1px solid var(--monitoring-border); }
+.card-meta-item { display: flex; flex-direction: column; gap: 4px; min-width: 0; }
+.card-meta-label { font-size: 11px; font-weight: 700; letter-spacing: 0.05em; text-transform: uppercase; color: var(--monitoring-muted); }
+.card-meta-value { font-size: 13px; font-weight: 600; color: inherit; overflow-wrap: break-word; word-break: break-word; }
+.card-location-row { display: flex; flex-direction: column; gap: 4px; padding-top: 10px; border-top: 1px solid var(--monitoring-border); }
+.card-location-content .monitoring-location-address {
+  margin: 0;
+  font-size: 13px;
+  line-height: 1.45;
+  word-break: break-word;
+  overflow-wrap: break-word;
+  white-space: normal;
+  display: -webkit-box;
+  -webkit-line-clamp: 4;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.card-location-content .monitoring-location-attribution {
+  display: inline-block;
+  margin-top: 3px;
+  font-size: 11px;
+  line-height: 1.2;
+  color: var(--monitoring-muted);
+  text-decoration: underline;
+}
+.card-footer-row { display: flex; justify-content: space-between; align-items: flex-end; gap: 12px; padding-top: 10px; border-top: 1px solid var(--monitoring-border); }
+.card-created-col { display: flex; flex-direction: column; gap: 4px; }
+.card-created-value { font-size: 12px; font-weight: 500; color: var(--monitoring-muted); }
+.card-action-col button { padding: 6px 14px !important; min-height: 34px !important; font-size: 12px !important; white-space: nowrap; }
+
+@container (max-width: 520px) {
+  .card-meta-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .card-meta-grid .card-meta-item:last-child { grid-column: span 2; }
+}
+
+/* Request Details Panel Location (un-clamped full view) */
+.monitoring-sections .monitoring-location-address { margin: 0; white-space: pre-wrap; word-break: break-word; line-height: 1.5; }
+.monitoring-sections .monitoring-location-attribution { display: inline-block; margin-top: 6px; font-size: 12px; color: var(--monitoring-muted); text-decoration: underline; }
+
 .monitoring-detail-header { display: flex; justify-content: space-between; align-items: center; gap: var(--monitoring-gap); margin-bottom: var(--monitoring-gap); }
 .monitoring-sections { display: grid; gap: var(--monitoring-gap); }
 .request-monitoring dl { margin: 0; }
 .request-monitoring dt { font-size: 12px; margin-top: 8px; }
 .request-monitoring dd { margin: 4px 0 0; }
 .monitoring-prose { white-space: pre-wrap; }
-.monitoring-location { min-width: 0; overflow-wrap: anywhere; }
-.monitoring-location-address { margin: 0; white-space: pre-wrap; }
-.monitoring-location-attribution { display: inline-block; margin-top: 6px; font-size: 12px; color: var(--monitoring-muted); text-decoration: underline; }
-.monitoring-location-attribution:focus-visible { outline: 2px solid var(--monitoring-focus); outline-offset: 2px; }
 .monitoring-coordinates { margin-top: var(--monitoring-gap); padding-top: var(--monitoring-gap); border-top: 1px solid var(--monitoring-border); color: var(--monitoring-muted); font-size: 12px; }
 .monitoring-coordinates h4 { margin-bottom: 0; }
 .monitoring-history { padding-left: 24px; margin-bottom: 0; }
 .monitoring-history li { padding: var(--monitoring-gap) 0; border-top: 1px solid var(--monitoring-border); }
 .request-monitoring .page-hero { margin-bottom: 4px; }
-@container (max-width: 900px) {
-  .monitoring-table, .monitoring-table tbody, .monitoring-table tr, .monitoring-table td { display: block; width: auto; }
-  .monitoring-table thead { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); }
-  .monitoring-table tr + tr { margin-top: var(--monitoring-gap); }
-  .monitoring-table td { display: grid; grid-template-columns: 90px minmax(0, 1fr); gap: 8px; }
-  .monitoring-table td::before { content: attr(data-label); color: var(--monitoring-muted); font-size: 12px; }
-}

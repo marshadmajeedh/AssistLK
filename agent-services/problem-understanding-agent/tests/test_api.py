@@ -115,3 +115,80 @@ async def test_internal_authentication_enforcement(
         assert res_valid_alt.status_code == 200
 
     app.dependency_overrides.clear()
+
+
+@pytest.mark.asyncio
+async def test_internal_authentication_multimodal_request_enforcement(
+    secured_settings,
+    valid_plumbing_request_payload,
+):
+    """
+    Verifies that image-enhanced (multimodal) execution requests enforce the
+    exact same authentication: 401 on missing or wrong key, 200 on matching key.
+    """
+    multimodal_payload = dict(valid_plumbing_request_payload)
+    multimodal_payload["input"] = dict(multimodal_payload["input"])
+    multimodal_payload["input"]["visualEvidence"] = [
+        {
+            "attachmentId": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
+            "contentType": "image/jpeg",
+            "dataBase64": "eHh4eHh4eHh4eHg=",
+            "width": 80,
+            "height": 40,
+        }
+    ]
+
+    app.dependency_overrides[get_settings] = lambda: secured_settings
+    transport = ASGITransport(app=app)
+
+    async with AsyncClient(transport=transport, base_url="http://test") as client:
+        # 1. Missing key on multimodal -> 401
+        res_missing = await client.post("/agent/execute", json=multimodal_payload)
+        assert res_missing.status_code == 401
+        assert "Invalid or missing internal service API key" in res_missing.json()["detail"]
+
+        # 2. Wrong key on multimodal -> 401
+        res_wrong = await client.post(
+            "/agent/execute",
+            json=multimodal_payload,
+            headers={"X-Internal-Api-Key": "incorrect-key"},
+        )
+        assert res_wrong.status_code == 401
+
+        # 3. Matching key on multimodal -> 200
+        res_matching = await client.post(
+            "/agent/execute",
+            json=multimodal_payload,
+            headers={"X-Internal-Api-Key": "test-secret-key-12345"},
+        )
+        assert res_matching.status_code == 200
+        assert res_matching.json()["success"] is True
+
+        # 4. Key with surrounding whitespace or quotes -> normalized and accepted
+        res_quoted = await client.post(
+            "/agent/execute",
+            json=multimodal_payload,
+            headers={"X-Internal-Api-Key": '  "test-secret-key-12345"  '},
+        )
+        assert res_quoted.status_code == 200
+
+    app.dependency_overrides.clear()
+
+
+@pytest.mark.asyncio
+async def test_health_endpoint_remains_unauthenticated_under_secured_settings(
+    secured_settings,
+):
+    """
+    Verifies that /health remains unauthenticated and returns 200 OK
+    even when INTERNAL_API_KEY is configured.
+    """
+    app.dependency_overrides[get_settings] = lambda: secured_settings
+    transport = ASGITransport(app=app)
+
+    async with AsyncClient(transport=transport, base_url="http://test") as client:
+        res = await client.get("/health")
+        assert res.status_code == 200
+        assert res.json()["status"] == "healthy"
+
+    app.dependency_overrides.clear()

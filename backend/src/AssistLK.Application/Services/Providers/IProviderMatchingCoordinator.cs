@@ -18,5 +18,6 @@ public interface IProviderMatchingCoordinator
 {
     Task<MatchingExecutionResult> ExecuteMatchForRequestAsync(
         Guid serviceRequestId,
-        CancellationToken cancellationToken = default);
+        CancellationToken cancellationToken = default,
+        bool autoApprove = false);
 }

@@ -26,6 +26,7 @@ public class ProviderMatchingController : ControllerBase
     private readonly IAgentWorkflowDbContext _dbContext;
     private readonly ApplicationDbContext _applicationDbContext;
     private readonly ILogger<ProviderMatchingController> _logger;
+    private readonly IServiceScopeFactory _scopeFactory;
 
     public ProviderMatchingController(
         IProviderMatchingService matchingService,
@@ -34,7 +35,8 @@ public class ProviderMatchingController : ControllerBase
         IServiceRequestRepository serviceRequestRepository,
         IAgentWorkflowDbContext dbContext,
         ApplicationDbContext applicationDbContext,
-        ILogger<ProviderMatchingController> logger)
+        ILogger<ProviderMatchingController> logger,
+        IServiceScopeFactory scopeFactory)
     {
         _matchingService = matchingService;
         _matchingCoordinator = matchingCoordinator;
@@ -43,6 +45,7 @@ public class ProviderMatchingController : ControllerBase
         _dbContext = dbContext;
         _applicationDbContext = applicationDbContext;
         _logger = logger;
+        _scopeFactory = scopeFactory;
     }
 
     [NonAction]
@@ -88,16 +91,24 @@ public class ProviderMatchingController : ControllerBase
 
         var readyIds = readyRequests.Select(r => r.Id).ToList();
 
-        var activeOrCompletedSrIds = await _dbContext.MatchingExecutions
+        var acceptedSrIds = await _dbContext.MatchedCandidates
+            .Where(m => readyIds.Contains(m.MatchingExecution.ServiceRequestId) &&
+                        m.Status == MatchedCandidateStatus.Accepted)
+            .Select(m => m.MatchingExecution.ServiceRequestId)
+            .Distinct()
+            .ToListAsync(cancellationToken);
+
+        var activeSrIds = await _dbContext.MatchingExecutions
             .Where(e => readyIds.Contains(e.ServiceRequestId) &&
                        (e.Status == MatchingExecutionStatus.Running 
                      || e.Status == MatchingExecutionStatus.PendingApproval 
-                     || e.Status == MatchingExecutionStatus.Completed))
+                     || (e.Status == MatchingExecutionStatus.Completed && e.Candidates.Any(c => c.Status == MatchedCandidateStatus.Recommended))))
             .Select(e => e.ServiceRequestId)
             .Distinct()
             .ToListAsync(cancellationToken);
 
-        var toMatchIds = readyIds.Except(activeOrCompletedSrIds).ToList();
+        var excludedIds = acceptedSrIds.Concat(activeSrIds).ToHashSet();
+        var toMatchIds = readyIds.Where(id => !excludedIds.Contains(id)).ToList();
         var results = new List<object>();
 
         foreach (var id in toMatchIds)
@@ -290,11 +301,33 @@ public class ProviderMatchingController : ControllerBase
                 foreach (var candidate in execution.Candidates)
                 {
                     candidate.Status = MatchedCandidateStatus.Declined;
+                    candidate.UpdatedAt = DateTime.UtcNow;
                 }
             }
 
             await _applicationDbContext.SaveChangesAsync(cancellationToken);
             await _dbContext.SaveChangesAsync(cancellationToken);
+
+            if (!isApproved)
+            {
+                var srId = execution.ServiceRequestId;
+                _logger.LogInformation("Admin rejected match on thread {ThreadId}. Triggering cascade re-match for ServiceRequest {ServiceRequestId}.", threadId, srId);
+
+                _ = Task.Run(async () =>
+                {
+                    try
+                    {
+                        using var scope = _scopeFactory.CreateScope();
+                        var coordinator = scope.ServiceProvider.GetRequiredService<IProviderMatchingCoordinator>();
+                        var result = await coordinator.ExecuteMatchForRequestAsync(srId);
+                        _logger.LogInformation("Cascade re-matching after Admin rejection concluded for ServiceRequest {ServiceRequestId} with status: {Status} (Success={Success}).", srId, result.Status, result.Success);
+                    }
+                    catch (Exception ex)
+                    {
+                        _logger.LogError(ex, "Cascade re-matching failed after Admin rejection for ServiceRequest {ServiceRequestId}.", srId);
+                    }
+                });
+            }
 
             return Ok(response);
         }

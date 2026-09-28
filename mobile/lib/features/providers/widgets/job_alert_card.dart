@@ -12,6 +12,8 @@ class JobAlertCard extends StatelessWidget {
   final bool isOutOfRange;
   final bool isAccepted;
   final String jobStatus;
+  final int? remainingSeconds;
+  final int totalTimeoutSeconds;
   final VoidCallback? onAccept;
   final VoidCallback? onDecline;
   final VoidCallback? onStart;
@@ -27,6 +29,8 @@ class JobAlertCard extends StatelessWidget {
     this.isOutOfRange = false,
     this.isAccepted = false,
     this.jobStatus = 'Assigned',
+    this.remainingSeconds,
+    this.totalTimeoutSeconds = 60,
     this.onAccept,
     this.onDecline,
     this.onStart,
@@ -57,12 +61,16 @@ class JobAlertCard extends StatelessWidget {
                   children: [
                     Text(
                       category,
-                      style: AppTextStyles.sectionHeading.copyWith(fontSize: 17),
+                      style: AppTextStyles.sectionHeading.copyWith(
+                        fontSize: 17,
+                      ),
                     ),
                     const SizedBox(width: 8),
                     Container(
                       padding: const EdgeInsets.symmetric(
-                          horizontal: 8, vertical: 2),
+                        horizontal: 8,
+                        vertical: 2,
+                      ),
                       decoration: BoxDecoration(
                         color: urgency.toLowerCase() == 'high'
                             ? Colors.red.shade100
@@ -84,6 +92,49 @@ class JobAlertCard extends StatelessWidget {
                 ),
                 Row(
                   children: [
+                    if (remainingSeconds != null) ...[
+                      Container(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 7,
+                          vertical: 2,
+                        ),
+                        decoration: BoxDecoration(
+                          color: (remainingSeconds! <= 15)
+                              ? Colors.red.shade50
+                              : Colors.amber.shade50,
+                          borderRadius: BorderRadius.circular(6),
+                          border: Border.all(
+                            color: (remainingSeconds! <= 15)
+                                ? Colors.red.shade300
+                                : Colors.amber.shade400,
+                          ),
+                        ),
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Icon(
+                              Icons.timer_outlined,
+                              size: 13,
+                              color: (remainingSeconds! <= 15)
+                                  ? Colors.red.shade800
+                                  : Colors.amber.shade900,
+                            ),
+                            const SizedBox(width: 3),
+                            Text(
+                              '${remainingSeconds}s',
+                              style: TextStyle(
+                                fontSize: 11,
+                                fontWeight: FontWeight.bold,
+                                color: (remainingSeconds! <= 15)
+                                    ? Colors.red.shade900
+                                    : Colors.amber.shade900,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                    ],
                     Icon(
                       Icons.location_on,
                       size: 15,
@@ -110,6 +161,23 @@ class JobAlertCard extends StatelessWidget {
                 ),
               ],
             ),
+            if (remainingSeconds != null) ...[
+              const SizedBox(height: 8),
+              ClipRRect(
+                borderRadius: BorderRadius.circular(2),
+                child: LinearProgressIndicator(
+                  value: (remainingSeconds! / totalTimeoutSeconds).clamp(
+                    0.0,
+                    1.0,
+                  ),
+                  backgroundColor: Colors.grey.shade200,
+                  valueColor: AlwaysStoppedAnimation<Color>(
+                    remainingSeconds! <= 15 ? Colors.red : Colors.orange,
+                  ),
+                  minHeight: 3.5,
+                ),
+              ),
+            ],
             if (description != null && description!.isNotEmpty) ...[
               const SizedBox(height: 6),
               Text(
@@ -127,7 +195,10 @@ class JobAlertCard extends StatelessWidget {
               const SizedBox(height: 8),
               Container(
                 width: double.infinity,
-                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 10,
+                  vertical: 8,
+                ),
                 decoration: BoxDecoration(
                   color: Colors.blue.shade50.withValues(alpha: 0.9),
                   borderRadius: BorderRadius.circular(8),
@@ -138,8 +209,11 @@ class JobAlertCard extends StatelessWidget {
                   children: [
                     Row(
                       children: [
-                        Icon(Icons.auto_awesome,
-                            size: 14, color: Colors.blue.shade700),
+                        Icon(
+                          Icons.auto_awesome,
+                          size: 14,
+                          color: Colors.blue.shade700,
+                        ),
                         const SizedBox(width: 5),
                         Text(
                           'AI Problem Review',
@@ -186,10 +260,16 @@ class JobAlertCard extends StatelessWidget {
                     onPressed: isOutOfRange ? null : (onAccept ?? () {}),
                     style: ElevatedButton.styleFrom(
                       padding: const EdgeInsets.symmetric(vertical: 12),
-                      backgroundColor: isOutOfRange ? Colors.grey : Theme.of(context).primaryColor,
+                      backgroundColor: isOutOfRange
+                          ? Colors.grey
+                          : Theme.of(context).primaryColor,
                       foregroundColor: Colors.white,
                     ),
-                    child: const Text('Accept Match'),
+                    child: Text(
+                      remainingSeconds != null
+                          ? 'Accept Match (${remainingSeconds}s)'
+                          : 'Accept Match',
+                    ),
                   ),
                 ),
               ],

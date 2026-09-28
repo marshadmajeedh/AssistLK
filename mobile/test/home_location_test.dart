@@ -407,6 +407,9 @@ void main() {
         await tap(tester, 'Remove captured GPS');
         expect(draft(tester).hasGps, isFalse);
         await tap(tester, 'Next: Review');
+        expect(find.text('Use This Location'), findsOneWidget);
+        await tap(tester, 'Use This Location');
+        await tap(tester, 'Next: Review');
         expect(find.text('Review Service Request'), findsOneWidget);
         await tap(tester, 'Back');
         expect(find.text('Service Location'), findsOneWidget);

@@ -181,16 +181,34 @@ public class ServiceRequestService : IServiceRequestService
         }
 
         CanonicalServiceCategories.IsValidHint(request.CategoryHint, out var revisionHint);
+        var locationChanged = !string.Equals(
+            serviceRequest.LocationText,
+            request.LocationText.Trim(),
+            StringComparison.Ordinal);
+
+        decimal? targetLatitude = request.Latitude;
+        decimal? targetLongitude = request.Longitude;
+        LocationSource targetLocationSource = request.LocationSource;
+
+        if (locationChanged && serviceRequest.Latitude.HasValue &&
+            request.Latitude == serviceRequest.Latitude &&
+            request.Longitude == serviceRequest.Longitude)
+        {
+            targetLatitude = null;
+            targetLongitude = null;
+            targetLocationSource = LocationSource.Manual;
+        }
+
         if (descriptionChanged || serviceRequest.CategoryHint != revisionHint ||
-            serviceRequest.LocationText != request.LocationText.Trim() ||
-            serviceRequest.Latitude != request.Latitude || serviceRequest.Longitude != request.Longitude)
+            locationChanged ||
+            serviceRequest.Latitude != targetLatitude || serviceRequest.Longitude != targetLongitude)
             serviceRequest.EvidenceRevision = checked(serviceRequest.EvidenceRevision + 1);
 
         serviceRequest.Description = request.Description.Trim();
         serviceRequest.LocationText = request.LocationText.Trim();
-        serviceRequest.LocationSource = request.LocationSource;
-        serviceRequest.Latitude = request.Latitude;
-        serviceRequest.Longitude = request.Longitude;
+        serviceRequest.LocationSource = targetLocationSource;
+        serviceRequest.Latitude = targetLatitude;
+        serviceRequest.Longitude = targetLongitude;
 
         CanonicalServiceCategories.IsValidHint(request.CategoryHint, out var normalizedCategoryHint);
         serviceRequest.CategoryHint = normalizedCategoryHint;
@@ -504,6 +522,15 @@ public class ServiceRequestService : IServiceRequestService
         {
             throw new ConflictException(
                 "Service request must have location text to be marked ready for matching.");
+        }
+
+        if (!serviceRequest.Latitude.HasValue ||
+            !serviceRequest.Longitude.HasValue ||
+            serviceRequest.Latitude.Value is < -90 or > 90 ||
+            serviceRequest.Longitude.Value is < -180 or > 180)
+        {
+            throw new ConflictException(
+                "Service request location must be resolved with valid coordinates before it can be marked ready for matching.");
         }
 
         if (serviceRequest.Clarifications != null &&

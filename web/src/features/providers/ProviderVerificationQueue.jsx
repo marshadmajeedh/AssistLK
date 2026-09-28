@@ -223,29 +223,34 @@ function ProviderVerificationQueue() {
                     </td>
 
                     <td style={{ padding: "16px", verticalAlign: "top" }}>
-                      {provider.skills?.some((s) => s.certificationUrl) ? (
-                        <button
-                          type="button"
-                          onClick={() => {
-                            const cert = provider.skills.find((s) => s.certificationUrl);
-                            handleViewCertificate(cert.certificationUrl);
-                          }}
-                          style={{
-                            display: "inline-flex",
-                            alignItems: "center",
-                            gap: "6px",
-                            padding: "6px 12px",
-                            backgroundColor: "#f8fafc",
-                            border: "1px solid #cbd5e1",
-                            borderRadius: "6px",
-                            cursor: "pointer",
-                            fontSize: "12px",
-                            fontWeight: 600,
-                            color: "#0f172a",
-                          }}
-                        >
-                          📄 View / Download PDF
-                        </button>
+                      {provider.skills?.filter((s) => s.certificationUrl).length > 0 ? (
+                        <div style={{ display: "flex", flexDirection: "column", gap: "6px" }}>
+                          {provider.skills
+                            .filter((s) => s.certificationUrl)
+                            .map((skill, cIdx) => (
+                              <button
+                                key={cIdx}
+                                type="button"
+                                onClick={() => handleViewCertificate(skill.certificationUrl)}
+                                style={{
+                                  display: "inline-flex",
+                                  alignItems: "center",
+                                  gap: "6px",
+                                  padding: "6px 10px",
+                                  backgroundColor: "#f8fafc",
+                                  border: "1px solid #cbd5e1",
+                                  borderRadius: "6px",
+                                  cursor: "pointer",
+                                  fontSize: "12px",
+                                  fontWeight: 600,
+                                  color: "#0f172a",
+                                  textAlign: "left",
+                                }}
+                              >
+                                📄 {skill.category} PDF
+                              </button>
+                            ))}
+                        </div>
                       ) : (
                         <span style={{ fontSize: "12px", color: "#94a3b8" }}>None attached</span>
                       )}

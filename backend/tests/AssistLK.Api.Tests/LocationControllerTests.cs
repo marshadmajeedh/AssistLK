@@ -14,6 +14,7 @@ namespace AssistLK.Api.Tests;
 public class LocationControllerTests
 {
     private const string Endpoint = "/api/location/reverse-geocode";
+    private const string ForwardEndpoint = "/api/location/forward-geocode";
     private const string Secret = "test-key-never-return-this";
 
     private sealed class Handler(Func<HttpRequestMessage, CancellationToken, Task<HttpResponseMessage>> send) : HttpMessageHandler
@@ -58,6 +59,23 @@ public class LocationControllerTests
         if (role != null)
             client.DefaultRequestHeaders.Authorization = new("Bearer", parent.GenerateJwtToken(Guid.NewGuid(), role.Value));
         return await client.PostAsJsonAsync(Endpoint, payload);
+    }
+
+    private static async Task<HttpResponseMessage> SendForward(Handler handler, object payload,
+        UserRole? role = UserRole.Customer)
+    {
+        using var parent = new AssistLKApiTestFactory();
+        using var factory = parent.WithWebHostBuilder(builder => builder.ConfigureTestServices(services =>
+        {
+            services.AddSingleton(new LocationGeocodingOptions());
+            services.AddScoped<AssistLKDbContext>(_ => throw new InvalidOperationException("Preview accessed the database."));
+            services.AddHttpClient<ILocationGeocodingService, NominatimReverseGeocodingService>()
+                .ConfigurePrimaryHttpMessageHandler(() => handler);
+        }));
+        using var client = factory.CreateClient();
+        if (role != null)
+            client.DefaultRequestHeaders.Authorization = new("Bearer", parent.GenerateJwtToken(Guid.NewGuid(), role.Value));
+        return await client.PostAsJsonAsync(ForwardEndpoint, payload);
     }
 
     [Fact]
@@ -234,5 +252,84 @@ public class LocationControllerTests
         Assert.DoesNotContain(Secret, body);
         Assert.DoesNotContain("nominatim.openstreetmap.org", body);
         Assert.DoesNotContain("Exception", body);
+    }
+
+    [Fact]
+    public async Task ForwardGeocode_ValidAddress_ProducesSearchRequest_AndReturnsBoundedCandidates()
+    {
+        var rawResponse = JsonSerializer.Serialize(new[]
+        {
+            new { display_name = "Independence Square, Colombo 07, Sri Lanka", lat = "6.905", lon = "79.86", place_id = (object)101 },
+            new { display_name = "Independence Arcade, Colombo 07, Sri Lanka", lat = "6.904", lon = "79.861", place_id = (object)102 },
+            new { display_name = "Independence Hall, Colombo 07, Sri Lanka", lat = "6.906", lon = "79.859", place_id = (object)103 },
+            new { display_name = "Fourth Location That Exceeds Bound", lat = "6.907", lon = "79.858", place_id = (object)104 }
+        });
+        var handler = Reply(rawResponse);
+        using var response = await SendForward(handler, new { address = "Independence Square, Colombo 07" });
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        Assert.True(response.Headers.CacheControl!.NoStore);
+        Assert.Equal(1, handler.Calls);
+        Assert.Equal("/search", handler.Path);
+        Assert.Contains("q=Independence%20Square%2C%20Colombo%2007", handler.Query);
+        Assert.Contains("format=jsonv2&addressdetails=1&limit=3", handler.Query);
+        Assert.Equal("AssistLK-SE3090/1.0", handler.UserAgent);
+
+        var candidates = await response.Content.ReadFromJsonAsync<List<JsonElement>>();
+        Assert.NotNull(candidates);
+        Assert.Equal(3, candidates.Count);
+        Assert.Equal("Independence Square, Colombo 07, Sri Lanka", candidates[0].GetProperty("displayAddress").GetString());
+        Assert.Equal(6.905m, candidates[0].GetProperty("latitude").GetDecimal());
+        Assert.Equal(79.86m, candidates[0].GetProperty("longitude").GetDecimal());
+        Assert.Equal("101", candidates[0].GetProperty("placeId").GetString());
+        Assert.Equal("OpenStreetMap", candidates[0].GetProperty("source").GetString());
+    }
+
+    [Theory]
+    [InlineData("")]
+    [InlineData("   ")]
+    [InlineData("Address\0with null byte")]
+    [InlineData("Address\nwith newline")]
+    public async Task ForwardGeocode_InvalidOrEmptyAddress_Returns400_WithoutCallingNominatim(string invalidAddress)
+    {
+        var handler = Reply("[]");
+        using var response = await SendForward(handler, new { address = invalidAddress });
+        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+        Assert.Equal(0, handler.Calls);
+    }
+
+    [Fact]
+    public async Task ForwardGeocode_NoMatchingResult_ReturnsEmptyList()
+    {
+        var handler = Reply("[]");
+        using var response = await SendForward(handler, new { address = "Nonexistent Fantasy Land 9999" });
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        var candidates = await response.Content.ReadFromJsonAsync<List<JsonElement>>();
+        Assert.NotNull(candidates);
+        Assert.Empty(candidates);
+    }
+
+    [Theory]
+    [InlineData(null, 401)]
+    [InlineData(UserRole.Admin, 403)]
+    [InlineData(UserRole.Provider, 403)]
+    public async Task ForwardGeocode_Authorization_BlocksOtherRoles(UserRole? role, int expected)
+    {
+        var handler = Reply("[]");
+        using var response = await SendForward(handler, new { address = "Valid Address" }, role);
+        Assert.Equal(expected, (int)response.StatusCode);
+        Assert.Equal(0, handler.Calls);
+    }
+
+    [Theory]
+    [InlineData(500)]
+    [InlineData(503)]
+    [InlineData(429)]
+    public async Task ForwardGeocode_UpstreamFailures_Return503(int upstreamStatus)
+    {
+        var handler = Reply(Secret, (HttpStatusCode)upstreamStatus);
+        using var response = await SendForward(handler, new { address = "Valid Address" });
+        await AssertUnavailable(response);
+        Assert.Equal(1, handler.Calls);
     }
 }

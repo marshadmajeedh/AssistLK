@@ -365,6 +365,7 @@ class _ServiceRequestDetailScreenState
                                       )?.displayName ??
                                       request.category),
                             style: AppTextStyles.sectionHeading,
+                            overflow: TextOverflow.ellipsis,
                           ),
                           StatusBadge(status: request.status),
                         ],

@@ -32,7 +32,7 @@ public class AttachmentServiceTests
     private sealed class Fixture : IDisposable
     {
         public AssistLKDbContext Db { get; } = new(new DbContextOptionsBuilder<AssistLKDbContext>().UseInMemoryDatabase(Guid.NewGuid().ToString()).Options);
-        public ServiceRequest Request { get; } = new() { CustomerId = Guid.NewGuid(), Description = "Leaking pipe under kitchen sink", LocationText = "Colombo" };
+        public ServiceRequest Request { get; } = new() { CustomerId = Guid.NewGuid(), Description = "Leaking pipe under kitchen sink", LocationText = "Colombo", Latitude = 6.9271m, Longitude = 79.8612m };
         public FakeAttachmentStorage Storage { get; } = new();
         public Repository Repository { get; }
         public ServiceRequestAttachmentService Service { get; }
@@ -125,7 +125,7 @@ public class AttachmentServiceTests
         {
             case "description": edit.Description += " now"; break;
             case "category": edit.CategoryHint = "Plumbing"; break;
-            case "location": edit.LocationText = "Kandy"; break;
+            case "location": edit.LocationText = "Kandy"; edit.Latitude = 6; edit.Longitude = 80; break;
             case "latitude": edit.Latitude = 6; break;
             case "longitude": edit.Longitude = 80; break;
         }

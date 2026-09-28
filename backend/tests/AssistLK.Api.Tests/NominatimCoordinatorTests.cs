@@ -13,8 +13,12 @@ public class NominatimCoordinatorTests
         protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)
         {
             Starts.Add(Stopwatch.GetTimestamp());
+            var isSearch = request.RequestUri?.AbsolutePath.Contains("search") == true;
+            var json = isSearch
+                ? "[{\"display_name\":\"Example Road\",\"lat\":\"6.9\",\"lon\":\"79.9\"}]"
+                : "{\"display_name\":\"Example Road\"}";
             return Task.FromResult(new HttpResponseMessage(Fail ? HttpStatusCode.TooManyRequests : HttpStatusCode.OK)
-            { Content = new StringContent("{\"display_name\":\"Example Road\"}") });
+            { Content = new StringContent(json) });
         }
     }
 
@@ -83,6 +87,37 @@ public class NominatimCoordinatorTests
     {
         Assert.Throws<InvalidOperationException>(() => new LocationGeocodingOptions {
             NominatimBaseUrl = url, UserAgent = userAgent }.Validate());
+    }
+
+    [Fact]
+    public async Task ForwardAndReverse_ShareOneApplicationThrottle_AndNamespaceCache()
+    {
+        using var gate = new NominatimRequestCoordinator();
+        var handler = new Handler();
+        using var http = new HttpClient(handler);
+        var service = new NominatimReverseGeocodingService(http, new(), gate);
+
+        var rev = await service.ReverseGeocodeAsync(6.9m, 79.9m);
+        var fwd = await service.ForwardGeocodeAsync("Example Road");
+
+        Assert.Equal(2, handler.Starts.Count);
+        Assert.True(Stopwatch.GetElapsedTime(handler.Starts[0], handler.Starts[1]) >= TimeSpan.FromSeconds(1));
+    }
+
+    [Fact]
+    public async Task ConcurrentIdenticalForwardQueries_UseOneOutboundCallAndCachedPreview()
+    {
+        using var gate = new NominatimRequestCoordinator();
+        var handler = new Handler();
+        using var http = new HttpClient(handler);
+        var service = new NominatimReverseGeocodingService(http, new(), gate);
+        var previews = await Task.WhenAll(Enumerable.Range(0, 5).Select(_ => service.ForwardGeocodeAsync("Example Road")));
+        Assert.Single(handler.Starts);
+        Assert.All(previews, candidates =>
+        {
+            Assert.Single(candidates);
+            Assert.Equal("Example Road", candidates[0].DisplayAddress);
+        });
     }
 
     [Fact]

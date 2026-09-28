@@ -250,8 +250,12 @@ public class ProblemUnderstandingHttpClient : IProblemUnderstandingClient
         // Internal service auth key: only attach when configured and non-empty
         if (!string.IsNullOrWhiteSpace(_options.InternalApiKey))
         {
-            request.Headers.Remove(InternalApiKeyHeader);
-            request.Headers.Add(InternalApiKeyHeader, _options.InternalApiKey.Trim());
+            var normalizedKey = _options.InternalApiKey.Trim().Trim('"', '\'');
+            if (!string.IsNullOrEmpty(normalizedKey))
+            {
+                request.Headers.Remove(InternalApiKeyHeader);
+                request.Headers.Add(InternalApiKeyHeader, normalizedKey);
+            }
         }
 
         // Explicitly clear any Authorization headers to ensure customer JWT is NEVER forwarded

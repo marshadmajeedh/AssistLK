@@ -16,7 +16,7 @@ public class ProviderProfile : BaseEntity
 
     public int TotalCompletedJobs { get; set; }
 
-    public int MaxActiveJobs { get; set; } = 3;
+    public int MaxActiveJobs { get; set; } = 1;
 
     public bool IsOnline { get; set; }
 

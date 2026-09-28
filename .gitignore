@@ -10,10 +10,15 @@ secrets.json
 **/secrets.json
 appsettings.Development.json
 **/appsettings.Development.json
+appsettings.Local.json
+**/appsettings.Local.json
+appsettings.Production.json
+**/appsettings.Production.json
 
 # ---------------- .NET ----------------
 **/bin/
 **/obj/
+build-validation/
 .vs/
 *.user
 *.suo
@@ -67,6 +72,11 @@ Thumbs.db
 
 # ---------------- Logs / temp ----------------
 *.log
+*.db
+*.sqlite
+*.sqlite3
+*.mdf
+*.ldf
 logs/
 tmp/
 temp/

@@ -43,29 +43,32 @@ class _ProviderRegistrationScreenState
   bool _isLocationResolved = false;
   bool _isResolvingLocation = false;
 
-  // Step 3: Skills & Certificates
-  String _selectedCategory = 'Plumbing';
+  // Step 3: Skills & Certificates (Multiple Skills Support)
   final List<String> _categories = [
     'Plumbing',
     'Electrical',
     'Vehicle Assistance',
     'Appliance Repair',
   ];
-  String _skillName = '';
-  Uint8List? _pdfBytes;
-  String? _pdfPath;
-  String? _pdfFileName;
+  late final List<_RegistrationSkillItem> _skills;
   bool _isUploading = false;
+  String _uploadStatusMessage = '';
 
   @override
   void initState() {
     super.initState();
     _apiService = ProviderRegistrationService();
+    _skills = [
+      _RegistrationSkillItem(category: 'Plumbing'),
+    ];
   }
 
   @override
   void dispose() {
     _addressController.dispose();
+    for (final skill in _skills) {
+      skill.dispose();
+    }
     super.dispose();
   }
 
@@ -229,9 +232,82 @@ class _ProviderRegistrationScreenState
     }
   }
 
-  // --- PDF File Picker ---
+  // --- Dynamic Skills Management ---
 
-  Future<void> _pickFile() async {
+  void _addSkill() {
+    if (_skills.length >= _categories.length) return;
+    final usedCategories = _skills.map((s) => s.category).toSet();
+    final nextAvailable = _categories.firstWhere(
+      (c) => !usedCategories.contains(c),
+      orElse: () => _categories.first,
+    );
+    setState(() {
+      _skills.add(_RegistrationSkillItem(category: nextAvailable));
+    });
+  }
+
+  void _removeSkill(int index) {
+    if (_skills.length <= 1) return;
+    setState(() {
+      final removed = _skills.removeAt(index);
+      removed.dispose();
+    });
+  }
+
+  IconData _getCategoryIcon(String category) {
+    switch (category.trim().toLowerCase()) {
+      case 'plumbing':
+        return Icons.plumbing;
+      case 'electrical':
+        return Icons.electrical_services;
+      case 'vehicle assistance':
+      case 'vehicleassistance':
+        return Icons.car_repair;
+      case 'appliance repair':
+      case 'appliancerepair':
+        return Icons.home_repair_service;
+      default:
+        return Icons.handyman;
+    }
+  }
+
+  Color _getCategoryColor(String category) {
+    switch (category.trim().toLowerCase()) {
+      case 'plumbing':
+        return Colors.blue.shade700;
+      case 'electrical':
+        return Colors.amber.shade900;
+      case 'vehicle assistance':
+      case 'vehicleassistance':
+        return Colors.deepOrange.shade700;
+      case 'appliance repair':
+      case 'appliancerepair':
+        return Colors.purple.shade700;
+      default:
+        return Colors.teal.shade700;
+    }
+  }
+
+  String _getCategoryHint(String category) {
+    switch (category.trim().toLowerCase()) {
+      case 'plumbing':
+        return 'e.g., Pipe & Leak Repair, Sanitary Installation';
+      case 'electrical':
+        return 'e.g., House Wiring, Circuit Breaker & DB Fixing';
+      case 'vehicle assistance':
+      case 'vehicleassistance':
+        return 'e.g., Tyre Replacement, Battery Jumpstart & Towing';
+      case 'appliance repair':
+      case 'appliancerepair':
+        return 'e.g., AC Repair, Refrigerator & Washing Machine';
+      default:
+        return 'e.g., General maintenance & repairs';
+    }
+  }
+
+  // --- PDF File Picker Per Skill ---
+
+  Future<void> _pickFileForSkill(_RegistrationSkillItem skill) async {
     try {
       final PlatformFile? file = await FilePicker.pickFile(
         type: FileType.custom,
@@ -256,9 +332,9 @@ class _ProviderRegistrationScreenState
         final Uint8List bytes = await file.readAsBytes();
 
         setState(() {
-          _pdfBytes = bytes;
-          _pdfPath = file.path ?? file.name;
-          _pdfFileName = file.name;
+          skill.pdfBytes = bytes;
+          skill.pdfPath = file.path ?? file.name;
+          skill.pdfFileName = file.name;
         });
       }
     } catch (e) {
@@ -275,14 +351,34 @@ class _ProviderRegistrationScreenState
     if (!_step3Key.currentState!.validate()) return;
     _step3Key.currentState!.save();
 
-    if (_pdfBytes == null && _pdfPath == null && _pdfFileName == null) {
+    // Check duplicate categories
+    final selectedCategories = _skills.map((s) => s.category).toList();
+    if (selectedCategories.toSet().length != selectedCategories.length) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
           backgroundColor: Colors.red,
-          content: Text('Please upload a PDF certificate before submitting.'),
+          content: Text(
+            'Duplicate categories detected. Each service entry must have a distinct category.',
+          ),
         ),
       );
       return;
+    }
+
+    // Verify each skill has certificate
+    for (final skill in _skills) {
+      if (skill.pdfBytes == null &&
+          skill.pdfPath == null &&
+          skill.pdfFileName == null) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            backgroundColor: Colors.red,
+            content:
+                Text('Please upload a PDF certificate for "${skill.category}".'),
+          ),
+        );
+        return;
+      }
     }
 
     if (!_isLocationResolved || (_latitude == 0.0 && _longitude == 0.0)) {
@@ -297,31 +393,53 @@ class _ProviderRegistrationScreenState
       return;
     }
 
-    setState(() => _isUploading = true);
+    setState(() {
+      _isUploading = true;
+      _uploadStatusMessage = 'Uploading certificates...';
+    });
 
     try {
-      final String? certUrl = await _apiService.uploadCertificate(
-        filePath: _pdfPath,
-        bytes: _pdfBytes,
-        fileName: _pdfFileName,
-      );
+      final List<Map<String, dynamic>> skillsPayload = [];
 
+      for (int i = 0; i < _skills.length; i++) {
+        final skill = _skills[i];
+        if (mounted) {
+          setState(() {
+            _uploadStatusMessage =
+                'Uploading certificate ${i + 1} of ${_skills.length} (${skill.category})...';
+          });
+        }
+
+        final String? certUrl = await _apiService.uploadCertificate(
+          filePath: skill.pdfPath,
+          bytes: skill.pdfBytes,
+          fileName: skill.pdfFileName,
+        );
+
+        skillsPayload.add({
+          'category': skill.category,
+          'skillName': skill.skillNameController.text.trim(),
+          'certificationUrl': certUrl,
+        });
+      }
+
+      if (mounted) {
+        setState(() {
+          _uploadStatusMessage = 'Submitting provider application...';
+        });
+      }
+
+      final cleanPhone = _phone.replaceAll(RegExp(r'[\s\-]'), '').trim();
       final payload = {
-        'fullName': _fullName,
-        'email': _email,
+        'fullName': _fullName.trim(),
+        'email': _email.trim().toLowerCase(),
         'password': _password,
-        'phoneNumber': _phone,
-        'businessName': _businessName,
+        'phoneNumber': cleanPhone,
+        'businessName': _businessName.trim(),
         'latitude': _latitude,
         'longitude': _longitude,
         'operatingRadiusKm': _radiusKm,
-        'skills': [
-          {
-            'category': _selectedCategory,
-            'skillName': _skillName,
-            'certificationUrl': certUrl,
-          },
-        ],
+        'skills': skillsPayload,
       };
 
       await _apiService.registerProvider(payload);
@@ -338,8 +456,8 @@ class _ProviderRegistrationScreenState
               Text('Application Submitted'),
             ],
           ),
-          content: const Text(
-            'Your registration has been submitted successfully and is pending Admin Review.\n\nOnce approved, your account will be activated.',
+          content: Text(
+            'Your registration for ${_skills.length} service ${_skills.length == 1 ? "category" : "categories"} has been submitted successfully and is pending Admin Review.\n\nOnce approved, your account will be activated.',
           ),
           actions: [
             ElevatedButton(
@@ -354,15 +472,23 @@ class _ProviderRegistrationScreenState
       );
     } catch (e) {
       if (!mounted) return;
+      final errorMsg = e
+          .toString()
+          .replaceFirst('Exception: ', '')
+          .replaceFirst('Failed to register provider: ', '');
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           backgroundColor: Colors.red,
-          content: Text('Registration Failed: $e'),
+          content: Text('Registration Failed: $errorMsg'),
+          duration: const Duration(seconds: 6),
         ),
       );
     } finally {
       if (mounted) {
-        setState(() => _isUploading = false);
+        setState(() {
+          _isUploading = false;
+          _uploadStatusMessage = '';
+        });
       }
     }
   }
@@ -403,8 +529,6 @@ class _ProviderRegistrationScreenState
 
   @override
   Widget build(BuildContext context) {
-    final bool hasFile =
-        _pdfBytes != null || _pdfPath != null || _pdfFileName != null;
 
     return Scaffold(
       appBar: AppBar(title: const Text('Provider Registration')),
@@ -440,8 +564,8 @@ class _ProviderRegistrationScreenState
                       if (val.trim().length < 3) {
                         return 'Full Name must be at least 3 characters';
                       }
-                      if (!RegExp(r'^[a-zA-Z\s]+$').hasMatch(val.trim())) {
-                        return 'Alphabetic characters and spaces only';
+                      if (!RegExp(r'^[a-zA-Z\s\.]+$').hasMatch(val.trim())) {
+                        return 'Alphabetic characters, spaces, and initials only';
                       }
                       return null;
                     },
@@ -701,11 +825,15 @@ class _ProviderRegistrationScreenState
           ),
 
           // -------------------------------------------------------------
-          // STEP 3: Skills & PDF Certificate Upload
+          // STEP 3: Skills & PDF Certificate Upload (Multi-Skill Cards)
           // -------------------------------------------------------------
           Step(
             title: const Text('Skills & Verification'),
-            subtitle: const Text('Category & certificate credentials'),
+            subtitle: Text(
+              _skills.length == 1
+                  ? '1 Service configured'
+                  : '${_skills.length} Services configured',
+            ),
             isActive: _currentStep >= 2,
             state: _currentStep == 2 ? StepState.editing : StepState.indexed,
             content: Form(
@@ -714,83 +842,311 @@ class _ProviderRegistrationScreenState
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  // Whitelisted Category Dropdown
-                  DropdownButtonFormField<String>(
-                    initialValue: _selectedCategory,
-                    items: _categories
-                        .map((c) => DropdownMenuItem(value: c, child: Text(c)))
-                        .toList(),
-                    onChanged: (val) =>
-                        setState(() => _selectedCategory = val ?? 'Plumbing'),
-                    decoration: const InputDecoration(
-                      labelText: 'Official Service Category',
-                      prefixIcon: Icon(Icons.category_outlined),
-                    ),
-                  ),
-                  const SizedBox(height: 14),
-
-                  // Specific Skill Name (e.g., Leak Repair)
-                  TextFormField(
-                    decoration: const InputDecoration(
-                      labelText: 'Skill Competency',
-                      hintText:
-                          'e.g., Pipe & Leak Repair / Circuit Installation',
-                      prefixIcon: Icon(Icons.handyman_outlined),
-                    ),
-                    validator: (val) {
-                      if (val == null || val.trim().isEmpty) {
-                        return 'Skill Name is required';
-                      }
-                      if (val.trim().length < 3) {
-                        return 'Skill Name must be at least 3 characters';
-                      }
-                      return null;
-                    },
-                    onSaved: (val) => _skillName = val?.trim() ?? '',
-                  ),
-                  const SizedBox(height: 18),
-
-                  // PDF Certificate Upload & Cap
-                  const Text(
-                    'Professional Certification / License (PDF)',
-                    style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
+                  Row(
+                    children: [
+                      Icon(
+                        Icons.verified_outlined,
+                        color: Theme.of(context).primaryColor,
+                        size: 20,
+                      ),
+                      const SizedBox(width: 8),
+                      Text(
+                        'Services Offered (${_skills.length})',
+                        style: const TextStyle(
+                          fontWeight: FontWeight.bold,
+                          fontSize: 15,
+                        ),
+                      ),
+                    ],
                   ),
                   const SizedBox(height: 4),
                   const Text(
-                    'Upload verification document (strictly PDF format, max 5 MB).',
+                    'You can register for one or multiple trades (Plumbing, Electrical, Vehicle Assistance, Appliance Repair). Add certificates for each.',
                     style: TextStyle(fontSize: 12, color: Colors.black54),
                   ),
-                  const SizedBox(height: 10),
+                  const SizedBox(height: 16),
 
-                  ElevatedButton.icon(
-                    icon: Icon(
-                      hasFile ? Icons.check_circle : Icons.upload_file,
-                    ),
-                    label: Text(
-                      _pdfFileName == null
-                          ? 'Select PDF Certificate'
-                          : 'Attached: $_pdfFileName',
-                    ),
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: hasFile ? Colors.green.shade700 : null,
-                      foregroundColor: hasFile ? Colors.white : null,
-                    ),
-                    onPressed: _pickFile,
+                  // Dynamic Skill Cards List
+                  ListView.separated(
+                    shrinkWrap: true,
+                    physics: const NeverScrollableScrollPhysics(),
+                    itemCount: _skills.length,
+                    separatorBuilder: (context, index) =>
+                        const SizedBox(height: 16),
+                    itemBuilder: (context, index) {
+                      final skill = _skills[index];
+                      final bool hasSkillFile = skill.pdfBytes != null ||
+                          skill.pdfPath != null ||
+                          skill.pdfFileName != null;
+                      final catColor = _getCategoryColor(skill.category);
+
+                      return Container(
+                        key: ObjectKey(skill),
+                        decoration: BoxDecoration(
+                          color: Colors.white,
+                          borderRadius: BorderRadius.circular(12),
+                          border: Border.all(
+                            color: catColor.withValues(alpha: 0.35),
+                            width: 1.5,
+                          ),
+                          boxShadow: [
+                            BoxShadow(
+                              color: catColor.withValues(alpha: 0.06),
+                              blurRadius: 8,
+                              offset: const Offset(0, 3),
+                            ),
+                          ],
+                        ),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            // Card Header
+                            Container(
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 14,
+                                vertical: 10,
+                              ),
+                              decoration: BoxDecoration(
+                                color: catColor.withValues(alpha: 0.1),
+                                borderRadius: const BorderRadius.vertical(
+                                  top: Radius.circular(10),
+                                ),
+                              ),
+                              child: Row(
+                                children: [
+                                  Icon(
+                                    _getCategoryIcon(skill.category),
+                                    color: catColor,
+                                    size: 20,
+                                  ),
+                                  const SizedBox(width: 8),
+                                  Expanded(
+                                    child: Text(
+                                      index == 0
+                                          ? 'Service #1 (Primary)'
+                                          : 'Service #${index + 1}',
+                                      style: TextStyle(
+                                        fontWeight: FontWeight.bold,
+                                        fontSize: 13,
+                                        color: catColor,
+                                      ),
+                                    ),
+                                  ),
+                                  if (_skills.length > 1)
+                                    IconButton(
+                                      icon: const Icon(
+                                        Icons.delete_outline,
+                                        color: Colors.red,
+                                        size: 20,
+                                      ),
+                                      tooltip: 'Remove Service',
+                                      visualDensity: VisualDensity.compact,
+                                      padding: EdgeInsets.zero,
+                                      constraints: const BoxConstraints(),
+                                      onPressed: () => _removeSkill(index),
+                                    ),
+                                ],
+                              ),
+                            ),
+
+                            Padding(
+                              padding: const EdgeInsets.all(14),
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  // Category Dropdown
+                                  DropdownButtonFormField<String>(
+                                    initialValue: skill.category,
+                                    items: _categories
+                                        .map(
+                                          (c) => DropdownMenuItem(
+                                            value: c,
+                                            child: Row(
+                                              children: [
+                                                Icon(
+                                                  _getCategoryIcon(c),
+                                                  size: 18,
+                                                  color: _getCategoryColor(c),
+                                                ),
+                                                const SizedBox(width: 10),
+                                                Text(c),
+                                              ],
+                                            ),
+                                          ),
+                                        )
+                                        .toList(),
+                                    onChanged: (val) {
+                                      if (val != null) {
+                                        setState(() => skill.category = val);
+                                      }
+                                    },
+                                    decoration: const InputDecoration(
+                                      labelText: 'Service Category',
+                                      prefixIcon: Icon(Icons.category_outlined),
+                                    ),
+                                  ),
+                                  const SizedBox(height: 14),
+
+                                  // Skill Competency
+                                  TextFormField(
+                                    controller: skill.skillNameController,
+                                    decoration: InputDecoration(
+                                      labelText: 'Skill Competency',
+                                      hintText:
+                                          _getCategoryHint(skill.category),
+                                      prefixIcon:
+                                          const Icon(Icons.handyman_outlined),
+                                    ),
+                                    validator: (val) {
+                                      if (val == null || val.trim().isEmpty) {
+                                        return 'Skill description is required';
+                                      }
+                                      if (val.trim().length < 3) {
+                                        return 'Must be at least 3 characters';
+                                      }
+                                      return null;
+                                    },
+                                  ),
+                                  const SizedBox(height: 14),
+
+                                  // Certificate Upload
+                                  const Text(
+                                    'Certification / License (PDF)',
+                                    style: TextStyle(
+                                      fontWeight: FontWeight.bold,
+                                      fontSize: 12,
+                                    ),
+                                  ),
+                                  const SizedBox(height: 4),
+                                  const Text(
+                                    'Upload official proof (strictly PDF format, max 5 MB).',
+                                    style: TextStyle(
+                                      fontSize: 11,
+                                      color: Colors.black54,
+                                    ),
+                                  ),
+                                  const SizedBox(height: 8),
+
+                                  OutlinedButton.icon(
+                                    icon: Icon(
+                                      hasSkillFile
+                                          ? Icons.check_circle
+                                          : Icons.upload_file,
+                                      color: hasSkillFile
+                                          ? Colors.green.shade700
+                                          : null,
+                                      size: 18,
+                                    ),
+                                    label: Text(
+                                      skill.pdfFileName == null
+                                          ? 'Select PDF Certificate'
+                                          : 'Attached: ${skill.pdfFileName}',
+                                      style: TextStyle(
+                                        color: hasSkillFile
+                                            ? Colors.green.shade800
+                                            : null,
+                                        fontWeight: hasSkillFile
+                                            ? FontWeight.bold
+                                            : FontWeight.normal,
+                                        fontSize: 12,
+                                      ),
+                                    ),
+                                    style: OutlinedButton.styleFrom(
+                                      side: BorderSide(
+                                        color: hasSkillFile
+                                            ? Colors.green.shade600
+                                            : Colors.grey.shade400,
+                                      ),
+                                      backgroundColor: hasSkillFile
+                                          ? Colors.green.shade50
+                                          : null,
+                                      padding: const EdgeInsets.symmetric(
+                                        horizontal: 12,
+                                        vertical: 10,
+                                      ),
+                                    ),
+                                    onPressed: () => _pickFileForSkill(skill),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ],
+                        ),
+                      );
+                    },
                   ),
+
+                  const SizedBox(height: 14),
+
+                  // "+ Add Another Service" Button
+                  if (_skills.length < _categories.length)
+                    SizedBox(
+                      width: double.infinity,
+                      child: OutlinedButton.icon(
+                        icon: const Icon(Icons.add_circle_outline),
+                        label: Text(
+                          '+ Add Another Service (${_skills.length}/${_categories.length})',
+                          style: const TextStyle(fontWeight: FontWeight.bold),
+                        ),
+                        style: OutlinedButton.styleFrom(
+                          padding: const EdgeInsets.symmetric(vertical: 12),
+                          side: BorderSide(
+                            color: Theme.of(context).primaryColor,
+                            width: 1.5,
+                          ),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(10),
+                          ),
+                        ),
+                        onPressed: _addSkill,
+                      ),
+                    )
+                  else
+                    Container(
+                      padding: const EdgeInsets.all(10),
+                      decoration: BoxDecoration(
+                        color: Colors.blue.shade50,
+                        borderRadius: BorderRadius.circular(8),
+                        border: Border.all(color: Colors.blue.shade200),
+                      ),
+                      child: Row(
+                        children: [
+                          Icon(
+                            Icons.check_circle_outline,
+                            color: Colors.blue.shade700,
+                            size: 18,
+                          ),
+                          const SizedBox(width: 8),
+                          const Expanded(
+                            child: Text(
+                              'All 4 service categories added.',
+                              style: TextStyle(
+                                fontSize: 12,
+                                fontWeight: FontWeight.w600,
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
 
                   if (_isUploading) ...[
                     const SizedBox(height: 16),
-                    const Row(
+                    Row(
                       children: [
-                        SizedBox(
+                        const SizedBox(
                           width: 20,
                           height: 20,
                           child: CircularProgressIndicator(strokeWidth: 2),
                         ),
-                        SizedBox(width: 12),
-                        Text(
-                          'Uploading certificate & submitting application...',
-                          style: TextStyle(fontSize: 13),
+                        const SizedBox(width: 12),
+                        Expanded(
+                          child: Text(
+                            _uploadStatusMessage.isNotEmpty
+                                ? _uploadStatusMessage
+                                : 'Uploading certificates & submitting application...',
+                            style: const TextStyle(fontSize: 13),
+                          ),
                         ),
                       ],
                     ),
@@ -802,5 +1158,22 @@ class _ProviderRegistrationScreenState
         ],
       ),
     );
+  }
+}
+
+class _RegistrationSkillItem {
+  String category;
+  final TextEditingController skillNameController;
+  Uint8List? pdfBytes;
+  String? pdfPath;
+  String? pdfFileName;
+
+  _RegistrationSkillItem({
+    required this.category,
+    String initialSkill = '',
+  }) : skillNameController = TextEditingController(text: initialSkill);
+
+  void dispose() {
+    skillNameController.dispose();
   }
 }

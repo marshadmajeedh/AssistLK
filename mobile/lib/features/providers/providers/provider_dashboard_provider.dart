@@ -9,6 +9,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 import '../services/provider_service.dart';
 import 'web_notifications.dart';
+import '../../../../core/services/notification_service.dart';
 
 class ProviderDashboardProvider extends ChangeNotifier {
   static const String _prefIsOnlineKey = 'provider_is_online';
@@ -37,6 +38,14 @@ class ProviderDashboardProvider extends ChangeNotifier {
   String? _lastAnnouncedJobId;
   List<latlong.LatLng> routePoints = [];
 
+  int? _remainingAcceptSeconds;
+  int _totalTimeoutSeconds = 60;
+  Timer? _countdownTimer;
+  String? _countdownJobId;
+
+  int? get remainingAcceptSeconds => _remainingAcceptSeconds;
+  int get totalTimeoutSeconds => _totalTimeoutSeconds;
+
   bool get isProfileLoading => _isProfileLoading;
   bool get isOnline => _isOnline;
   double get operatingRadiusKm => _operatingRadiusKm;
@@ -56,6 +65,18 @@ class ProviderDashboardProvider extends ChangeNotifier {
   String get fullName => profile?['fullName']?.toString() ?? '';
   String get businessName => profile?['businessName']?.toString() ?? '';
   String get category => profile?['category']?.toString() ?? 'Plumbing';
+  List<dynamic> get skills => (profile?['skills'] as List<dynamic>?) ?? [];
+  List<String> get categories {
+    final list = skills
+        .map((s) => (s is Map ? s['category']?.toString() : null) ?? '')
+        .where((s) => s.isNotEmpty)
+        .toSet()
+        .toList();
+    if (list.isEmpty && category.isNotEmpty) {
+      return [category];
+    }
+    return list;
+  }
   double get rating => (profile?['rating'] as num?)?.toDouble() ?? 5.0;
 
   StreamSubscription<Position>? _positionStreamSubscription;
@@ -71,6 +92,8 @@ class ProviderDashboardProvider extends ChangeNotifier {
     } catch (e) {
       debugPrint('Failed to load persisted provider preferences: $e');
     }
+
+    unawaited(NotificationService().init());
 
     await fetchProfile();
   }
@@ -102,11 +125,11 @@ class ProviderDashboardProvider extends ChangeNotifier {
       notifyListeners();
 
       if (isVerified) {
+        _isOnline = true;
+        _saveIsOnline(true);
         unawaited(_checkPermissionsAndFetchLocation());
-        if (_isOnline) {
-          fetchLatestDispatchedJob();
-          _startPolling();
-        }
+        fetchLatestDispatchedJob();
+        _startPolling();
       } else {
         _stopPolling();
         _clearJobState();
@@ -216,9 +239,10 @@ class ProviderDashboardProvider extends ChangeNotifier {
           });
 
       _error = null;
+      _updateLiveDistance();
       notifyListeners();
 
-      if (_isOnline && isVerified) {
+      if (isVerified) {
         _syncAvailability();
       }
     } catch (e) {
@@ -239,6 +263,9 @@ class ProviderDashboardProvider extends ChangeNotifier {
           cLng.toDouble(),
         );
         _liveDistanceKm = distanceInMeters / 1000.0;
+      } else {
+        final num? staticDist = activeJobMatch!['distanceKm'] as num?;
+        _liveDistanceKm = staticDist?.toDouble();
       }
     } else {
       _liveDistanceKm = null;
@@ -357,9 +384,20 @@ class ProviderDashboardProvider extends ChangeNotifier {
         _updateLiveDistance();
 
         final jobId = data['jobId']?.toString();
-        if (jobId != null && jobId != _lastAnnouncedJobId) {
+        final status = data['status']?.toString();
+        if (jobId != null && jobId != _lastAnnouncedJobId && status != 'Accepted') {
           _lastAnnouncedJobId = jobId;
           unawaited(_announceJob(data));
+        }
+
+        // Manage acceptance countdown timer for pending recommended dispatch
+        if (status != 'Accepted') {
+          final int timeoutSec = (data['timeoutSeconds'] as num?)?.toInt() ?? 60;
+          _totalTimeoutSeconds = timeoutSec;
+          final int remaining = (data['remainingSeconds'] as num?)?.toInt() ?? timeoutSec;
+          _startAcceptCountdown(remaining, jobId);
+        } else {
+          _stopAcceptCountdown();
         }
 
         final dynamic rawLat = data['customerLatitude'];
@@ -424,6 +462,13 @@ class ProviderDashboardProvider extends ChangeNotifier {
           'New $category Job ($distance km)',
           problemDesc,
         );
+      } else {
+        unawaited(NotificationService().showJobAlertNotification(
+          id: (data['jobId']?.hashCode ?? DateTime.now().millisecondsSinceEpoch) & 0x7FFFFFFF,
+          title: '🚨 New $category Job ($distance km)',
+          body: '$problemDesc (Urgency: $urgency)',
+          payload: data['jobId']?.toString(),
+        ));
       }
 
       if (_isVoiceAlertEnabled) {
@@ -437,7 +482,49 @@ class ProviderDashboardProvider extends ChangeNotifier {
     }
   }
 
+  void _startAcceptCountdown(int initialSeconds, String? jobId) {
+    if (_countdownTimer != null && _countdownJobId == jobId) {
+      // Timer already active for this exact job; don't reset countdown
+      return;
+    }
+
+    _stopAcceptCountdown();
+    _countdownJobId = jobId;
+    _remainingAcceptSeconds = initialSeconds;
+
+    _countdownTimer = Timer.periodic(const Duration(seconds: 1), (timer) {
+      if (_remainingAcceptSeconds != null && _remainingAcceptSeconds! > 0) {
+        _remainingAcceptSeconds = _remainingAcceptSeconds! - 1;
+        notifyListeners();
+      } else {
+        _stopAcceptCountdown();
+        _onDispatchTimedOut();
+      }
+    });
+  }
+
+  void _stopAcceptCountdown() {
+    _countdownTimer?.cancel();
+    _countdownTimer = null;
+    _countdownJobId = null;
+    _remainingAcceptSeconds = null;
+  }
+
+  Future<void> _onDispatchTimedOut() async {
+    try {
+      debugPrint('Job acceptance timer expired. Auto-declining and releasing to next provider.');
+      if (_isVoiceAlertEnabled) {
+        unawaited(flutterTts.speak('Dispatch request expired. Re-dispatching to next available provider.'));
+      }
+      await declineJob();
+    } catch (e) {
+      debugPrint('Error triggering timeout decline: $e');
+      _clearJobState();
+    }
+  }
+
   void _clearJobState() {
+    _stopAcceptCountdown();
     activeJobMatch = null;
     routePoints = [];
     notifyListeners();
@@ -447,7 +534,19 @@ class ProviderDashboardProvider extends ChangeNotifier {
     _clearJobState();
   }
 
+  Future<void> completeJob() async {
+    _stopAcceptCountdown();
+    try {
+      await providerService.apiClient.client.post('/providers/active-dispatch/complete');
+    } catch (e) {
+      debugPrint('Error marking dispatch completed on backend: $e');
+    }
+    _clearJobState();
+    _lastAnnouncedJobId = null;
+  }
+
   Future<void> declineJob() async {
+    _stopAcceptCountdown();
     try {
       await providerService.declineActiveDispatch();
       _clearJobState();
@@ -457,8 +556,29 @@ class ProviderDashboardProvider extends ChangeNotifier {
     }
   }
 
+  Future<void> onLogout() async {
+    _stopAcceptCountdown();
+    _stopPolling();
+    _positionStreamSubscription?.cancel();
+    _positionStreamSubscription = null;
+    _isOnline = false;
+    await _saveIsOnline(false);
+    try {
+      await providerService.updateAvailability(
+        isOnline: false,
+        latitude: _latitude,
+        longitude: _longitude,
+        operatingRadiusKm: _operatingRadiusKm,
+      );
+    } catch (e) {
+      debugPrint('Failed to sync offline status on logout: $e');
+    }
+    _clearJobState();
+  }
+
   @override
   void dispose() {
+    _stopAcceptCountdown();
     _stopPolling();
     _positionStreamSubscription?.cancel();
     super.dispose();

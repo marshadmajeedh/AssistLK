@@ -10,6 +10,8 @@ class JobAlertCard extends StatelessWidget {
   final String? description;
   final String? aiRationale;
   final bool isOutOfRange;
+  final int? remainingSeconds;
+  final int totalTimeoutSeconds;
   final VoidCallback? onAccept;
   final VoidCallback? onDecline;
 
@@ -21,6 +23,8 @@ class JobAlertCard extends StatelessWidget {
     this.description,
     this.aiRationale,
     this.isOutOfRange = false,
+    this.remainingSeconds,
+    this.totalTimeoutSeconds = 60,
     this.onAccept,
     this.onDecline,
   });
@@ -76,6 +80,47 @@ class JobAlertCard extends StatelessWidget {
                 ),
                 Row(
                   children: [
+                    if (remainingSeconds != null) ...[
+                      Container(
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 7, vertical: 2),
+                        decoration: BoxDecoration(
+                          color: (remainingSeconds! <= 15)
+                              ? Colors.red.shade50
+                              : Colors.amber.shade50,
+                          borderRadius: BorderRadius.circular(6),
+                          border: Border.all(
+                            color: (remainingSeconds! <= 15)
+                                ? Colors.red.shade300
+                                : Colors.amber.shade400,
+                          ),
+                        ),
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Icon(
+                              Icons.timer_outlined,
+                              size: 13,
+                              color: (remainingSeconds! <= 15)
+                                  ? Colors.red.shade800
+                                  : Colors.amber.shade900,
+                            ),
+                            const SizedBox(width: 3),
+                            Text(
+                              '${remainingSeconds}s',
+                              style: TextStyle(
+                                fontSize: 11,
+                                fontWeight: FontWeight.bold,
+                                color: (remainingSeconds! <= 15)
+                                    ? Colors.red.shade900
+                                    : Colors.amber.shade900,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                    ],
                     Icon(
                       Icons.location_on,
                       size: 15,
@@ -102,6 +147,20 @@ class JobAlertCard extends StatelessWidget {
                 ),
               ],
             ),
+            if (remainingSeconds != null) ...[
+              const SizedBox(height: 8),
+              ClipRRect(
+                borderRadius: BorderRadius.circular(2),
+                child: LinearProgressIndicator(
+                  value: (remainingSeconds! / totalTimeoutSeconds).clamp(0.0, 1.0),
+                  backgroundColor: Colors.grey.shade200,
+                  valueColor: AlwaysStoppedAnimation<Color>(
+                    remainingSeconds! <= 15 ? Colors.red : Colors.orange,
+                  ),
+                  minHeight: 3.5,
+                ),
+              ),
+            ],
             if (description != null && description!.isNotEmpty) ...[
               const SizedBox(height: 6),
               Text(
@@ -181,7 +240,11 @@ class JobAlertCard extends StatelessWidget {
                       backgroundColor: isOutOfRange ? Colors.grey : Theme.of(context).primaryColor,
                       foregroundColor: Colors.white,
                     ),
-                    child: const Text('Accept Match'),
+                    child: Text(
+                      remainingSeconds != null
+                          ? 'Accept Match (${remainingSeconds}s)'
+                          : 'Accept Match',
+                    ),
                   ),
                 ),
               ],

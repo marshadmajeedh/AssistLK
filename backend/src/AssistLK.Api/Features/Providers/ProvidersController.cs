@@ -31,19 +31,22 @@ public class ProvidersController : ControllerBase
     private readonly ILogger<ProvidersController> _logger;
     private readonly IPasswordHasher<User> _passwordHasher;
     private readonly IWebHostEnvironment _environment;
+    private readonly IServiceScopeFactory _scopeFactory;
 
     public ProvidersController(
         AssistLKDbContext dbContext,
         IServiceRequestRepository serviceRequestRepository,
         ILogger<ProvidersController> logger,
         IPasswordHasher<User> passwordHasher,
-        IWebHostEnvironment environment)
+        IWebHostEnvironment environment,
+        IServiceScopeFactory scopeFactory)
     {
         _dbContext = dbContext;
         _serviceRequestRepository = serviceRequestRepository;
         _logger = logger;
         _passwordHasher = passwordHasher;
         _environment = environment;
+        _scopeFactory = scopeFactory;
     }
 
     /// <summary>
@@ -329,12 +332,58 @@ public class ProvidersController : ControllerBase
         var latestMatch = await _dbContext.MatchedCandidates
             .Include(m => m.MatchingExecution)
             .Where(m => m.ProviderId == profile.Id 
-                     && m.Status == MatchedCandidateStatus.Recommended
+                     && (m.Status == MatchedCandidateStatus.Recommended || m.Status == MatchedCandidateStatus.Accepted)
                      && m.MatchingExecution != null
                      && m.MatchingExecution.Status == MatchingExecutionStatus.Completed)
             .OrderByDescending(m => m.CreatedAt)
             .FirstOrDefaultAsync(cancellationToken);
         if (latestMatch == null) return NoContent(); 
+
+        const int dispatchTimeoutSeconds = 60;
+        var dispatchedAt = latestMatch.MatchingExecution?.CompletedAt ?? latestMatch.CreatedAt;
+        var elapsedSeconds = (int)(DateTime.UtcNow - dispatchedAt).TotalSeconds;
+
+        if (latestMatch.Status == MatchedCandidateStatus.Recommended && elapsedSeconds >= dispatchTimeoutSeconds)
+        {
+            _logger.LogInformation("Match {CandidateId} for provider {ProviderId} timed out ({ElapsedSeconds}s elapsed). Marking as declined and triggering cascade re-dispatch.",
+                latestMatch.Id, profile.Id, elapsedSeconds);
+
+            latestMatch.Status = MatchedCandidateStatus.Declined;
+            latestMatch.UpdatedAt = DateTime.UtcNow;
+            latestMatch.MatchRationale = (latestMatch.MatchRationale ?? "") + " [Timed out after 60s without acceptance]";
+
+            if (latestMatch.MatchingExecution != null)
+            {
+                latestMatch.MatchingExecution.Status = MatchingExecutionStatus.Failed;
+                latestMatch.MatchingExecution.CompletedAt = DateTime.UtcNow;
+            }
+
+            await _dbContext.SaveChangesAsync(cancellationToken);
+
+            var srId = latestMatch.MatchingExecution?.ServiceRequestId;
+            if (srId.HasValue)
+            {
+                _ = Task.Run(async () =>
+                {
+                    try
+                    {
+                        using var scope = _scopeFactory.CreateScope();
+                        var coordinator = scope.ServiceProvider.GetRequiredService<AssistLK.Application.Services.Providers.IProviderMatchingCoordinator>();
+                        await coordinator.ExecuteMatchForRequestAsync(srId.Value, autoApprove: true);
+                    }
+                    catch (Exception ex)
+                    {
+                        _logger.LogError(ex, "Failed to auto-redispatch ServiceRequest {ServiceRequestId} following provider timeout.", srId.Value);
+                    }
+                });
+            }
+
+            return NoContent();
+        }
+
+        var remainingSeconds = latestMatch.Status == MatchedCandidateStatus.Recommended
+            ? Math.Max(0, dispatchTimeoutSeconds - elapsedSeconds)
+            : 0;
 
         ServiceRequest? serviceRequest = null;
         string? component1Review = null;
@@ -371,17 +420,22 @@ public class ProvidersController : ControllerBase
         return Ok(new
         {
             jobId = latestMatch.Id,
+            status = latestMatch.Status.ToString(),
             category = category,
             distanceKm = latestMatch.DistanceKm,
             urgency = urgency,
             description = serviceRequest?.Description,
+            locationText = serviceRequest?.LocationText,
             detectedProblem = component1Review,
             aiRationale = component1Review ?? serviceRequest?.Description ?? latestMatch.MatchRationale,
             rationale = component1Review ?? serviceRequest?.Description ?? latestMatch.MatchRationale,
             matchingRationale = latestMatch.MatchRationale,
             score = latestMatch.Score,
             customerLatitude = serviceRequest?.Latitude,
-            customerLongitude = serviceRequest?.Longitude
+            customerLongitude = serviceRequest?.Longitude,
+            timeoutSeconds = dispatchTimeoutSeconds,
+            remainingSeconds = remainingSeconds,
+            dispatchedAt = dispatchedAt
         });
     }
 
@@ -412,8 +466,34 @@ public class ProvidersController : ControllerBase
         return Ok(new { message = "Match accepted successfully.", candidateId = candidate.Id, status = candidate.Status.ToString() });
     }
 
+    [HttpPost("active-dispatch/complete")]
+    [Authorize(Roles = "Provider")]
+    public async Task<IActionResult> CompleteActiveDispatch(CancellationToken cancellationToken)
+    {
+        var userIdString = User.FindFirstValue(ClaimTypes.NameIdentifier);
+        if (!Guid.TryParse(userIdString, out var userId)) return Unauthorized("Invalid user claim.");
+
+        var profile = await _dbContext.ProviderProfiles.FirstOrDefaultAsync(p => p.UserId == userId, cancellationToken);
+        if (profile == null) return NotFound("Provider profile not found.");
+
+        var candidate = await _dbContext.MatchedCandidates
+            .Include(m => m.MatchingExecution)
+            .Where(m => m.ProviderId == profile.Id 
+                     && m.Status == MatchedCandidateStatus.Accepted)
+            .OrderByDescending(m => m.CreatedAt)
+            .FirstOrDefaultAsync(cancellationToken);
+        if (candidate == null) return NotFound("No active accepted match found.");
+
+        candidate.Status = MatchedCandidateStatus.Completed;
+        candidate.UpdatedAt = DateTime.UtcNow;
+        await _dbContext.SaveChangesAsync(cancellationToken);
+        return Ok(new { message = "Job marked completed successfully.", candidateId = candidate.Id, status = candidate.Status.ToString() });
+    }
+
     [HttpPost("active-dispatch/{jobId:guid}/decline")]
     [HttpPost("active-dispatch/decline")]
+    [HttpPost("active-dispatch/{jobId:guid}/timeout")]
+    [HttpPost("active-dispatch/timeout")]
     [Authorize(Roles = "Provider")]
     public async Task<IActionResult> DeclineActiveDispatch(CancellationToken cancellationToken)
     {
@@ -435,8 +515,39 @@ public class ProvidersController : ControllerBase
 
         candidate.Status = MatchedCandidateStatus.Declined;
         candidate.UpdatedAt = DateTime.UtcNow;
+
+        var execution = candidate.MatchingExecution;
+        if (execution != null)
+        {
+            execution.Status = MatchingExecutionStatus.Failed;
+            execution.CompletedAt = DateTime.UtcNow;
+        }
+
         await _dbContext.SaveChangesAsync(cancellationToken);
-        return Ok(new { message = "Match declined successfully.", candidateId = candidate.Id, status = candidate.Status.ToString() });
+
+        var serviceRequestId = execution?.ServiceRequestId;
+        if (serviceRequestId.HasValue)
+        {
+            var srId = serviceRequestId.Value;
+            _logger.LogInformation("Provider {ProviderId} declined/timed-out dispatch. Triggering cascade re-matching for ServiceRequest {ServiceRequestId}.", profile.Id, srId);
+
+            _ = Task.Run(async () =>
+            {
+                try
+                {
+                    using var scope = _scopeFactory.CreateScope();
+                    var coordinator = scope.ServiceProvider.GetRequiredService<AssistLK.Application.Services.Providers.IProviderMatchingCoordinator>();
+                    var result = await coordinator.ExecuteMatchForRequestAsync(srId, autoApprove: true);
+                    _logger.LogInformation("Cascade re-matching for ServiceRequest {ServiceRequestId} concluded with status: {Status} (Success={Success}).", srId, result.Status, result.Success);
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogError(ex, "Cascade re-matching failed in background for ServiceRequest {ServiceRequestId}.", srId);
+                }
+            });
+        }
+
+        return Ok(new { message = "Match declined successfully. Searching for next eligible provider.", candidateId = candidate.Id, status = candidate.Status.ToString() });
     }
 
     [HttpPut("availability")]
@@ -513,7 +624,7 @@ public class ProvidersController : ControllerBase
 
 public class ProviderRegistrationRequest
 {
-    [Required, MinLength(3), MaxLength(150), RegularExpression(@"^[a-zA-Z\s]+$")]
+    [Required, MinLength(3), MaxLength(150), RegularExpression(@"^[a-zA-Z\s\.]+$")]
     public string FullName { get; set; } = string.Empty;
 
     [Required, EmailAddress]

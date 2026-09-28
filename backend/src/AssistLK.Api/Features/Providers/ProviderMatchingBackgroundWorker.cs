@@ -40,12 +40,68 @@ public class ProviderMatchingBackgroundWorker : BackgroundService
         {
             try
             {
+                await ProcessTimedOutDispatchesAsync(stoppingToken);
                 await ProcessReadyRequestsAsync(stoppingToken);
             }
             catch (Exception ex)
             {
                 _logger.LogError(ex, "Unexpected error in ProviderMatchingBackgroundWorker loop.");
             }
+        }
+    }
+
+    private async Task ProcessTimedOutDispatchesAsync(CancellationToken stoppingToken)
+    {
+        using var scope = _scopeFactory.CreateScope();
+        var dbContext = scope.ServiceProvider.GetRequiredService<IAgentWorkflowDbContext>();
+
+        // 60-second dispatch acceptance timeout threshold
+        var timeoutLimit = DateTime.UtcNow.AddSeconds(-60);
+
+        var timedOutCandidates = await dbContext.MatchedCandidates
+            .Include(m => m.MatchingExecution)
+            .Where(m => m.Status == MatchedCandidateStatus.Recommended
+                     && m.MatchingExecution != null
+                     && m.MatchingExecution.Status == MatchingExecutionStatus.Completed
+                     && ((m.MatchingExecution.CompletedAt ?? m.CreatedAt) < timeoutLimit))
+            .ToListAsync(stoppingToken);
+
+        if (timedOutCandidates.Count == 0) return;
+
+        _logger.LogInformation("ProviderMatchingBackgroundWorker detected {Count} timed-out dispatch match(es).", timedOutCandidates.Count);
+
+        foreach (var candidate in timedOutCandidates)
+        {
+            if (stoppingToken.IsCancellationRequested) break;
+
+            var serviceRequestId = candidate.MatchingExecution.ServiceRequestId;
+            _logger.LogInformation("Match candidate {CandidateId} for provider {ProviderId} timed out after 60s. Auto-redispatching ServiceRequest {ServiceRequestId}.",
+                candidate.Id, candidate.ProviderId, serviceRequestId);
+
+            candidate.Status = MatchedCandidateStatus.Declined;
+            candidate.UpdatedAt = DateTime.UtcNow;
+            candidate.MatchRationale = (candidate.MatchRationale ?? string.Empty) + " [Timed out after 60s without acceptance]";
+
+            candidate.MatchingExecution.Status = MatchingExecutionStatus.Failed;
+            candidate.MatchingExecution.CompletedAt = DateTime.UtcNow;
+
+            await dbContext.SaveChangesAsync(stoppingToken);
+
+            _ = Task.Run(async () =>
+            {
+                try
+                {
+                    using var innerScope = _scopeFactory.CreateScope();
+                    var coordinator = innerScope.ServiceProvider.GetRequiredService<IProviderMatchingCoordinator>();
+                    var result = await coordinator.ExecuteMatchForRequestAsync(serviceRequestId, autoApprove: true);
+                    _logger.LogInformation("Cascade re-matching following timeout for ServiceRequest {ServiceRequestId} concluded with status: {Status} (Success={Success}).",
+                        serviceRequestId, result.Status, result.Success);
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogError(ex, "Failed to cascade re-match following timeout for ServiceRequest {ServiceRequestId}.", serviceRequestId);
+                }
+            });
         }
     }
 

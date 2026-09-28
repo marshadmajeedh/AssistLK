@@ -39,13 +39,10 @@ class _ProviderHomeScreenState extends State<ProviderHomeScreen> {
   }
 
   Future<void> _onAcceptMatch() async {
-    final distanceKm = _dashboardProvider?.activeJobMatch?['distanceKm'] ?? 0.0;
-
     try {
       await _dashboardProvider?.providerService.acceptActiveDispatch(
         '/api/providers/active-dispatch/accept',
       );
-      _dashboardProvider?.clearActiveJobMatch();
       if (mounted) {
         setState(() {
           _hasAcceptedActiveMatch = true;
@@ -69,103 +66,20 @@ class _ProviderHomeScreenState extends State<ProviderHomeScreen> {
     ScaffoldMessenger.of(context).showSnackBar(
       const SnackBar(
         backgroundColor: Colors.green,
-        duration: Duration(seconds: 2),
+        duration: Duration(seconds: 3),
         content: Row(
           children: [
             Icon(Icons.check_circle, color: Colors.white),
             SizedBox(width: 8),
             Expanded(
               child: Text(
-                'Match Accepted! Creating booking payload...',
+                'Job Accepted! Route & customer location locked on map.',
                 style: TextStyle(fontWeight: FontWeight.bold),
               ),
             ),
           ],
         ),
       ),
-    );
-
-    showModalBottomSheet(
-      context: context,
-      isScrollControlled: true,
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
-      ),
-      builder: (sheetContext) {
-        return Padding(
-          padding: const EdgeInsets.all(AppSpacing.lg),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
-                  const Text(
-                    'Component 3 Handoff',
-                    style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
-                  ),
-                  IconButton(
-                    icon: const Icon(Icons.close),
-                    onPressed: () => Navigator.of(sheetContext).pop(),
-                  ),
-                ],
-              ),
-              const Divider(),
-              const SizedBox(height: 8),
-              const Text(
-                'Matched Candidate Contract:',
-                style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
-              ),
-              const SizedBox(height: 6),
-              Container(
-                width: double.infinity,
-                padding: const EdgeInsets.all(12),
-                decoration: BoxDecoration(
-                  color: Colors.grey.shade100,
-                  borderRadius: BorderRadius.circular(8),
-                  border: Border.all(color: Colors.grey.shade300),
-                ),
-                child: Text(
-                  '{\n'
-                  '  "ServiceRequestId": "d8b4b485-3c0b-401a-849e-f0f116219903",\n'
-                  '  "ProviderId": "prov-001",\n'
-                  '  "DistanceKm": $distanceKm,\n'
-                  '  "Status": "AcceptedForQuotation"\n'
-                  '}',
-                  style: const TextStyle(fontFamily: 'monospace', fontSize: 13),
-                ),
-              ),
-              const SizedBox(height: 16),
-              const Text(
-                'The dispatch request has been transferred to the Quotation & Booking subsystem.',
-                style: TextStyle(color: Colors.black87, fontSize: 13),
-              ),
-              const SizedBox(height: 20),
-              SizedBox(
-                width: double.infinity,
-                child: ElevatedButton(
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: Colors.green.shade700,
-                    foregroundColor: Colors.white,
-                    padding: const EdgeInsets.symmetric(vertical: 14),
-                  ),
-                  onPressed: () {
-                    Navigator.of(sheetContext).pop();
-                    if (mounted) {
-                      setState(() {
-                        _hasAcceptedActiveMatch = true;
-                      });
-                    }
-                  },
-                  child: const Text('Proceed to Quotation Workspace'),
-                ),
-              ),
-              const SizedBox(height: 10),
-            ],
-          ),
-        );
-      },
     );
   }
 
@@ -677,24 +591,72 @@ class _ProviderHomeViewState extends State<_ProviderHomeView> {
                       ),
                     ],
                     const Divider(height: 18),
-                    Row(
-                      children: [
-                        Icon(
-                          _getCategoryIcon(dashboard.category),
-                          size: 18,
-                          color: categoryColor,
-                        ),
-                        const SizedBox(width: 8),
-                        Text(
-                          'Category: ${dashboard.category}',
-                          style: TextStyle(
-                            fontSize: 13,
-                            fontWeight: FontWeight.w600,
+                    if (dashboard.categories.length <= 1)
+                      Row(
+                        children: [
+                          Icon(
+                            _getCategoryIcon(dashboard.category),
+                            size: 18,
                             color: categoryColor,
                           ),
+                          const SizedBox(width: 8),
+                          Text(
+                            'Category: ${dashboard.category}',
+                            style: TextStyle(
+                              fontSize: 13,
+                              fontWeight: FontWeight.w600,
+                              color: categoryColor,
+                            ),
+                          ),
+                        ],
+                      )
+                    else ...[
+                      const Text(
+                        'Registered Service Categories:',
+                        style: TextStyle(
+                          fontSize: 12,
+                          fontWeight: FontWeight.bold,
+                          color: Colors.black87,
                         ),
-                      ],
-                    ),
+                      ),
+                      const SizedBox(height: 8),
+                      Wrap(
+                        spacing: 8,
+                        runSpacing: 6,
+                        children: dashboard.categories.map((cat) {
+                          final cColor = _getCategoryColor(cat);
+                          return Container(
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 10,
+                              vertical: 5,
+                            ),
+                            decoration: BoxDecoration(
+                              color: cColor.withValues(alpha: 0.1),
+                              borderRadius: BorderRadius.circular(6),
+                              border: Border.all(
+                                color: cColor.withValues(alpha: 0.35),
+                              ),
+                            ),
+                            child: Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                Icon(_getCategoryIcon(cat),
+                                    size: 15, color: cColor),
+                                const SizedBox(width: 6),
+                                Text(
+                                  cat,
+                                  style: TextStyle(
+                                    fontSize: 12,
+                                    fontWeight: FontWeight.w600,
+                                    color: cColor,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          );
+                        }).toList(),
+                      ),
+                    ],
                   ],
                 ),
               ),
@@ -966,6 +928,8 @@ class _ProviderHomeViewState extends State<_ProviderHomeView> {
                   options: MapOptions(
                     initialCenter: centerLocation,
                     initialZoom: 13.0,
+                    minZoom: 6.5,
+                    maxZoom: 18.0,
                   ),
                   children: [
                     TileLayer(
@@ -1236,7 +1200,9 @@ class _ProviderHomeViewState extends State<_ProviderHomeView> {
                                       Row(
                                         children: [
                                           Text(
-                                            dashboard.category,
+                                            dashboard.categories.length > 1
+                                                ? dashboard.categories.join(' • ')
+                                                : dashboard.category,
                                             style: TextStyle(
                                               fontSize: 11,
                                               fontWeight: FontWeight.w600,
@@ -1327,7 +1293,8 @@ class _ProviderHomeViewState extends State<_ProviderHomeView> {
                       constraints: const BoxConstraints(maxWidth: 580),
                       child: (dashboard.isOnline &&
                               dashboard.activeJobMatch != null &&
-                              !widget.hasAcceptedActiveMatch)
+                              !widget.hasAcceptedActiveMatch &&
+                              dashboard.activeJobMatch!['status'] != 'Accepted')
                           // Active Incoming Job Alert Card
                           ? JobAlertCard(
                               category: dashboard
@@ -1357,10 +1324,162 @@ class _ProviderHomeViewState extends State<_ProviderHomeView> {
                               isOutOfRange: dashboard.liveDistanceKm != null &&
                                   dashboard.liveDistanceKm! >
                                       dashboard.operatingRadiusKm,
+                              remainingSeconds:
+                                  dashboard.remainingAcceptSeconds,
+                              totalTimeoutSeconds:
+                                  dashboard.totalTimeoutSeconds,
                               onAccept: widget.onAcceptMatch,
                               onDecline: widget.onDeclineMatch,
                             )
-                          // Default Duty Operations Cockpit Card
+                          : (dashboard.isOnline &&
+                                  dashboard.activeJobMatch != null &&
+                                  (widget.hasAcceptedActiveMatch ||
+                                      dashboard.activeJobMatch!['status'] ==
+                                          'Accepted'))
+                              // Accepted Active In-Progress Job Cockpit!
+                              ? Card(
+                                  elevation: 8,
+                                  shadowColor: Colors.black26,
+                                  shape: RoundedRectangleBorder(
+                                    borderRadius: BorderRadius.circular(18),
+                                  ),
+                                  color: Colors.white,
+                                  child: Padding(
+                                    padding: const EdgeInsets.symmetric(
+                                      horizontal: 16,
+                                      vertical: 14,
+                                    ),
+                                    child: Column(
+                                      mainAxisSize: MainAxisSize.min,
+                                      crossAxisAlignment:
+                                          CrossAxisAlignment.start,
+                                      children: [
+                                        Row(
+                                          mainAxisAlignment:
+                                              MainAxisAlignment.spaceBetween,
+                                          children: [
+                                            Row(
+                                              children: [
+                                                Container(
+                                                  width: 10,
+                                                  height: 10,
+                                                  decoration:
+                                                      const BoxDecoration(
+                                                    color: Colors.green,
+                                                    shape: BoxShape.circle,
+                                                  ),
+                                                ),
+                                                const SizedBox(width: 8),
+                                                const Text(
+                                                  'EN ROUTE TO CUSTOMER',
+                                                  style: TextStyle(
+                                                    fontWeight: FontWeight.w900,
+                                                    fontSize: 13,
+                                                    color: Colors.green,
+                                                    letterSpacing: 0.5,
+                                                  ),
+                                                ),
+                                              ],
+                                            ),
+                                            Container(
+                                              padding:
+                                                  const EdgeInsets.symmetric(
+                                                horizontal: 8,
+                                                vertical: 3,
+                                              ),
+                                              decoration: BoxDecoration(
+                                                color: Colors.blue.shade50,
+                                                borderRadius:
+                                                    BorderRadius.circular(8),
+                                              ),
+                                              child: Text(
+                                                dashboard.activeJobMatch![
+                                                            'category']
+                                                        ?.toString() ??
+                                                    'Service',
+                                                style: TextStyle(
+                                                  color: Colors.blue.shade800,
+                                                  fontWeight: FontWeight.bold,
+                                                  fontSize: 12,
+                                                ),
+                                              ),
+                                            ),
+                                          ],
+                                        ),
+                                        const SizedBox(height: 10),
+                                        Text(
+                                          dashboard.activeJobMatch![
+                                                  'detectedProblem'] ??
+                                              dashboard.activeJobMatch![
+                                                  'description'] ??
+                                              'Customer Assistance Request',
+                                          style: const TextStyle(
+                                            fontSize: 15,
+                                            fontWeight: FontWeight.bold,
+                                            color: Colors.black87,
+                                          ),
+                                          maxLines: 2,
+                                          overflow: TextOverflow.ellipsis,
+                                        ),
+                                        if (dashboard.activeJobMatch![
+                                                'locationText'] !=
+                                            null) ...[
+                                          const SizedBox(height: 4),
+                                          Row(
+                                            children: [
+                                              Icon(Icons.location_on,
+                                                  size: 14,
+                                                  color: Colors.grey.shade600),
+                                              const SizedBox(width: 4),
+                                              Expanded(
+                                                child: Text(
+                                                  dashboard.activeJobMatch![
+                                                          'locationText']
+                                                      .toString(),
+                                                  style: TextStyle(
+                                                    fontSize: 12,
+                                                    color: Colors.grey.shade700,
+                                                  ),
+                                                  maxLines: 1,
+                                                  overflow:
+                                                      TextOverflow.ellipsis,
+                                                ),
+                                              ),
+                                            ],
+                                          ),
+                                        ],
+                                        const SizedBox(height: 8),
+                                        Row(
+                                          children: [
+                                            Icon(Icons.directions_car,
+                                                size: 16,
+                                                color: Colors.blue.shade700),
+                                            const SizedBox(width: 6),
+                                            Text(
+                                              dashboard.liveDistanceKm != null
+                                                  ? '${dashboard.liveDistanceKm!.toStringAsFixed(1)} km away'
+                                                  : '${dashboard.activeJobMatch!['distanceKm'] ?? 'Nearby'} km',
+                                              style: TextStyle(
+                                                fontWeight: FontWeight.w600,
+                                                fontSize: 13,
+                                                color: Colors.blue.shade900,
+                                              ),
+                                            ),
+                                            const Spacer(),
+                                            Text(
+                                              'Urgency: ${dashboard.activeJobMatch!['urgency'] ?? 'High'}',
+                                              style: TextStyle(
+                                                fontWeight: FontWeight.bold,
+                                                fontSize: 12,
+                                                 color: Colors.orange.shade800,
+                                              ),
+                                            ),
+                                          ],
+                                        ),
+                                      ],
+                                    ),
+                                  ),
+                                )
                           : Card(
                               elevation: 6,
                               shadowColor: Colors.black26,

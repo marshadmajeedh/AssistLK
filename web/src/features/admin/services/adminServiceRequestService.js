@@ -4,8 +4,12 @@ export const adminServiceRequestService = {
   getAll: async (filters = {}) => {
     const params = {};
     for (const key of ["status", "category", "urgency"]) {
-      if (typeof filters[key] === "string" && filters[key].trim()) {
-        params[key] = filters[key].trim();
+      const val = filters[key];
+      if (typeof val === "string") {
+        const trimmed = val.trim();
+        if (trimmed && trimmed.toLowerCase() !== "all") {
+          params[key] = trimmed;
+        }
       }
     }
     const response = await apiClient.get("/api/admin/service-requests", { params });

@@ -1,4 +1,5 @@
 import 'package:mobile/features/service_requests/models/service_request_attachment.dart';
+import 'package:mobile/features/service_requests/models/location_source.dart';
 import 'package:mobile/features/customer/providers/customer_location_provider.dart';
 
 import 'mocks/mock_location_geocoding_service.dart';
@@ -521,6 +522,12 @@ void main() {
       await tester.ensureVisible(find.text('Next: Review'));
       await tester.tap(find.text('Next: Review'));
       await tester.pumpAndSettle();
+      await tester.ensureVisible(find.text('Use This Location'));
+      await tester.tap(find.text('Use This Location'));
+      await tester.pumpAndSettle();
+      await tester.ensureVisible(find.text('Next: Review'));
+      await tester.tap(find.text('Next: Review'));
+      await tester.pumpAndSettle();
 
       expect(find.text('Review Service Request'), findsOneWidget);
       expect(find.text('Submit Request'), findsOneWidget);
@@ -587,6 +594,12 @@ void main() {
         expect(find.text('45 Havelock Road, Colombo 05'), findsOneWidget);
 
         // Advance to Step 3
+        await tester.ensureVisible(find.text('Next: Review'));
+        await tester.tap(find.text('Next: Review'));
+        await tester.pumpAndSettle();
+        await tester.ensureVisible(find.text('Use This Location'));
+        await tester.tap(find.text('Use This Location'));
+        await tester.pumpAndSettle();
         await tester.ensureVisible(find.text('Next: Review'));
         await tester.tap(find.text('Next: Review'));
         await tester.pumpAndSettle();
@@ -1449,6 +1462,12 @@ void main() {
         await tester.ensureVisible(find.text('Next: Review'));
         await tester.tap(find.text('Next: Review'));
         await tester.pumpAndSettle();
+        await tester.ensureVisible(find.text('Use This Location'));
+        await tester.tap(find.text('Use This Location'));
+        await tester.pumpAndSettle();
+        await tester.ensureVisible(find.text('Next: Review'));
+        await tester.tap(find.text('Next: Review'));
+        await tester.pumpAndSettle();
 
         expect(find.text('Plumbing'), findsWidgets);
 
@@ -1496,6 +1515,12 @@ void main() {
         await tester.ensureVisible(find.text('Next: Review'));
         await tester.tap(find.text('Next: Review'));
         await tester.pumpAndSettle();
+        await tester.ensureVisible(find.text('Use This Location'));
+        await tester.tap(find.text('Use This Location'));
+        await tester.pumpAndSettle();
+        await tester.ensureVisible(find.text('Next: Review'));
+        await tester.tap(find.text('Next: Review'));
+        await tester.pumpAndSettle();
 
         // UI displays customer-friendly 'Vehicle Assistance'
         expect(find.text('Vehicle Assistance'), findsWidgets);
@@ -1540,6 +1565,12 @@ void main() {
       await tester.ensureVisible(find.text('Next: Review'));
       await tester.tap(find.text('Next: Review'));
       await tester.pumpAndSettle();
+      await tester.ensureVisible(find.text('Use This Location'));
+      await tester.tap(find.text('Use This Location'));
+      await tester.pumpAndSettle();
+      await tester.ensureVisible(find.text('Next: Review'));
+      await tester.tap(find.text('Next: Review'));
+      await tester.pumpAndSettle();
 
       final submitBtn = find.text('Submit Request');
       await tester.ensureVisible(submitBtn);
@@ -1575,6 +1606,12 @@ void main() {
       await tester.ensureVisible(find.text('Next: Review'));
       await tester.tap(find.text('Next: Review'));
       await tester.pumpAndSettle();
+      await tester.ensureVisible(find.text('Use This Location'));
+      await tester.tap(find.text('Use This Location'));
+      await tester.pumpAndSettle();
+      await tester.ensureVisible(find.text('Next: Review'));
+      await tester.tap(find.text('Next: Review'));
+      await tester.pumpAndSettle();
 
       final submitBtn2 = find.text('Submit Request');
       await tester.ensureVisible(submitBtn2);
@@ -1606,6 +1643,12 @@ void main() {
           find.widgetWithText(TextFormField, 'Location / Address'),
           'Rajagiriya',
         );
+        await tester.ensureVisible(find.text('Next: Review'));
+        await tester.tap(find.text('Next: Review'));
+        await tester.pumpAndSettle();
+        await tester.ensureVisible(find.text('Use This Location'));
+        await tester.tap(find.text('Use This Location'));
+        await tester.pumpAndSettle();
         await tester.ensureVisible(find.text('Next: Review'));
         await tester.tap(find.text('Next: Review'));
         await tester.pumpAndSettle();
@@ -1711,6 +1754,14 @@ void main() {
           find.widgetWithText(TextFormField, 'Location / Address'),
           'New Address Colombo 03',
         );
+        await tester.ensureVisible(find.text('Save Changes'));
+        await tester.tap(find.text('Save Changes'));
+        await tester.pumpAndSettle();
+
+        await tester.ensureVisible(find.text('Use This Location'));
+        await tester.tap(find.text('Use This Location'));
+        await tester.pumpAndSettle();
+
         await tester.ensureVisible(find.text('Save Changes'));
         await tester.tap(find.text('Save Changes'));
         await tester.pumpAndSettle();
@@ -2504,6 +2555,12 @@ void main() {
         await tester.ensureVisible(find.text('Next: Review'));
         await tester.tap(find.text('Next: Review'));
         await tester.pumpAndSettle();
+        await tester.ensureVisible(find.text('Use This Location'));
+        await tester.tap(find.text('Use This Location'));
+        await tester.pumpAndSettle();
+        await tester.ensureVisible(find.text('Next: Review'));
+        await tester.tap(find.text('Next: Review'));
+        await tester.pumpAndSettle();
 
         // Step 3: Review & Submit
         expect(find.text('Review Service Request'), findsOneWidget);
@@ -2520,9 +2577,9 @@ void main() {
           mockService.lastCreateDto!.locationText,
           '123 Galle Road, Colombo 03',
         );
-        expect(mockService.lastCreateDto!.latitude, isNull);
-        expect(mockService.lastCreateDto!.longitude, isNull);
-        expect(mockService.lastCreateDto!.toJson()['locationSource'], 'Manual');
+        expect(mockService.lastCreateDto!.latitude, 6.905);
+        expect(mockService.lastCreateDto!.longitude, 79.86);
+        expect(mockService.lastCreateDto!.toJson()['locationSource'], 'OpenStreetMap');
         expect(mockLocationService.getCurrentLocationCallCount, 0);
       },
     );
@@ -2632,6 +2689,12 @@ void main() {
       await tester.ensureVisible(find.text('Next: Review'));
       await tester.tap(find.text('Next: Review'));
       await tester.pumpAndSettle();
+      await tester.ensureVisible(find.text('Use This Location'));
+      await tester.tap(find.text('Use This Location'));
+      await tester.pumpAndSettle();
+      await tester.ensureVisible(find.text('Next: Review'));
+      await tester.tap(find.text('Next: Review'));
+      await tester.pumpAndSettle();
 
       expect(find.textContaining('GPS location captured'), findsNothing);
 
@@ -2640,8 +2703,8 @@ void main() {
       await tester.tap(submitBtn);
       await tester.pumpAndSettle();
 
-      expect(mockService.lastCreateDto!.latitude, isNull);
-      expect(mockService.lastCreateDto!.longitude, isNull);
+      expect(mockService.lastCreateDto!.latitude, isNotNull);
+      expect(mockService.lastCreateDto!.longitude, isNotNull);
     });
 
     testWidgets(
@@ -2685,14 +2748,20 @@ void main() {
         await tester.ensureVisible(find.text('Next: Review'));
         await tester.tap(find.text('Next: Review'));
         await tester.pumpAndSettle();
+        await tester.ensureVisible(find.text('Use This Location'));
+        await tester.tap(find.text('Use This Location'));
+        await tester.pumpAndSettle();
+        await tester.ensureVisible(find.text('Next: Review'));
+        await tester.tap(find.text('Next: Review'));
+        await tester.pumpAndSettle();
 
         final submitBtn = find.text('Submit Request');
         await tester.ensureVisible(submitBtn);
         await tester.tap(submitBtn);
         await tester.pumpAndSettle();
 
-        expect(mockService.lastCreateDto!.latitude, isNull);
-        expect(mockService.lastCreateDto!.longitude, isNull);
+        expect(mockService.lastCreateDto!.latitude, isNotNull);
+        expect(mockService.lastCreateDto!.longitude, isNotNull);
       },
     );
 
@@ -3103,10 +3172,19 @@ void main() {
         await tester.tap(saveBtn);
         await tester.pumpAndSettle();
 
+        // Address resolution was triggered
+        expect(find.text('Use This Location'), findsOneWidget);
+        await tester.tap(find.text('Use This Location'));
+        await tester.pumpAndSettle();
+
+        await tester.ensureVisible(saveBtn);
+        await tester.tap(saveBtn);
+        await tester.pumpAndSettle();
+
         expect(mockService.lastUpdateDto, isNotNull);
-        expect(mockService.lastUpdateDto!.locationText, 'Galle Fort');
-        expect(mockService.lastUpdateDto!.latitude, isNull);
-        expect(mockService.lastUpdateDto!.longitude, isNull);
+        expect(mockService.lastUpdateDto!.latitude, isNotNull);
+        expect(mockService.lastUpdateDto!.longitude, isNotNull);
+        expect(mockService.lastUpdateDto!.locationSource, LocationSource.openStreetMap);
       },
     );
 

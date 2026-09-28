@@ -26,6 +26,7 @@ import 'package:mobile/features/service_requests/widgets/clarification_section.d
 import 'package:mobile/features/service_requests/widgets/ready_for_matching_section.dart';
 import 'package:mobile/shared/theme/app_theme.dart';
 import 'package:provider/provider.dart';
+import 'mocks/mock_location_geocoding_service.dart';
 
 class MockLayoutServiceRequestService extends ServiceRequestService {
   MockLayoutServiceRequestService() : super(apiClient: ApiClient());
@@ -198,7 +199,9 @@ void main() {
 
     testWidgets('3. Create Request screen renders and handles hover without exceptions',
         (tester) async {
-      await tester.pumpWidget(buildThemedApp(const CreateServiceRequestScreen()));
+      await tester.pumpWidget(buildThemedApp(CreateServiceRequestScreen(
+        geocodingService: MockLocationGeocodingService(),
+      )));
       await tester.pumpAndSettle();
 
       expect(find.text('Create Service Request'), findsOneWidget);
@@ -223,6 +226,12 @@ void main() {
         find.widgetWithText(TextFormField, 'Location / Address'),
         '123 Galle Road, Colombo 03',
       );
+      await tester.ensureVisible(find.text('Next: Review'));
+      await tester.tap(find.text('Next: Review'));
+      await tester.pumpAndSettle();
+      await tester.ensureVisible(find.text('Use This Location'));
+      await tester.tap(find.text('Use This Location'));
+      await tester.pumpAndSettle();
       await tester.ensureVisible(find.text('Next: Review'));
       await tester.tap(find.text('Next: Review'));
       await tester.pumpAndSettle();

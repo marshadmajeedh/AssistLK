@@ -73,6 +73,8 @@ public class Component1EndToEndPostgreSqlTests : PostgreSqlIntegrationTestBase
                 Category = "Plumbing",
                 Description = "Kitchen pipe is leaking under sink and flooding floor",
                 LocationText = "Colombo 03",
+                Latitude = 6.905m,
+                Longitude = 79.86m,
                 Urgency = ServiceRequestUrgency.High,
                 Status = ServiceRequestStatus.Created
             };
@@ -188,6 +190,8 @@ public class Component1EndToEndPostgreSqlTests : PostgreSqlIntegrationTestBase
                 Category = "Appliance Repair",
                 Description = "refrigerator",
                 LocationText = "Galle",
+                Latitude = 6.0535m,
+                Longitude = 80.2210m,
                 Urgency = ServiceRequestUrgency.Unknown,
                 Status = ServiceRequestStatus.Created
             };
@@ -228,7 +232,9 @@ public class Component1EndToEndPostgreSqlTests : PostgreSqlIntegrationTestBase
             await requestService.UpdateAsync(customer.Id, requestId, new AssistLK.Application.ServiceRequests.DTOs.UpdateServiceRequestRequest
             {
                 Description = "The refrigerator is warm and not cooling food",
-                LocationText = "Galle"
+                LocationText = "Galle",
+                Latitude = 6.0535m,
+                Longitude = 80.2210m
             });
         }
 
@@ -302,6 +308,8 @@ public class Component1EndToEndPostgreSqlTests : PostgreSqlIntegrationTestBase
                 Category = "Electrical",
                 Description = "Exposed sparking wire in bathroom near water",
                 LocationText = "Kandy",
+                Latitude = 7.2906m,
+                Longitude = 80.6337m,
                 Urgency = ServiceRequestUrgency.High,
                 Status = ServiceRequestStatus.Created
             };

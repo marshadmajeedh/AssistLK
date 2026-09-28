@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../../customer/models/location_suggestion.dart';
 
+import '../models/forward_geocode_candidate.dart';
 import '../models/location_source.dart';
 import '../models/resolved_location.dart';
 import '../services/location_service.dart';
@@ -15,6 +16,8 @@ class LocationSelectionController extends ChangeNotifier {
   double? latitude, longitude, accuracy;
   LocationSource source;
   ResolvedLocation? preview;
+  List<ForwardGeocodeCandidate> candidates = [];
+  ForwardGeocodeCandidate? selectedCandidate;
   bool busy = false;
   bool needsGpsChoice = false;
   String? message;
@@ -25,9 +28,20 @@ class LocationSelectionController extends ChangeNotifier {
   String? _resolvedAddress;
   LocationSuggestion? _suggestion;
   LocationSource _previewSource = LocationSource.openStreetMap;
+  bool _fromForwardGeocode = false;
   final DateTime Function() clock;
+
   bool get isSuggested => preview != null && _suggestion != null;
   LocationSource get previewSource => _previewSource;
+  bool get fromGps => !_fromForwardGeocode && hasGps;
+  bool get fromForwardGeocode => _fromForwardGeocode;
+  bool get hasForwardCandidates => candidates.isNotEmpty;
+  bool get hasConfirmedCoordinates =>
+      latitude != null &&
+      longitude != null &&
+      !needsGpsChoice &&
+      preview == null &&
+      candidates.isEmpty;
 
   LocationSelectionController({
     required this.gps,
@@ -36,6 +50,7 @@ class LocationSelectionController extends ChangeNotifier {
     this.latitude,
     this.longitude,
     this.source = LocationSource.manual,
+    this._fromForwardGeocode = false,
     LocationSuggestion? initialSuggestion,
     DateTime Function()? clock,
   }) : clock = clock ?? DateTime.now,
@@ -58,20 +73,33 @@ class LocationSelectionController extends ChangeNotifier {
   }
 
   bool get hasGps => latitude != null && longitude != null;
-  bool get canSubmit => !busy && preview == null && !needsGpsChoice;
+  bool get canSubmit =>
+      !busy && preview == null && candidates.isEmpty && !needsGpsChoice;
 
   void _edited() {
     if (_settingText || text.text == _lastText) return;
     _lastText = text.text;
-    // Every edit invalidates both in-flight work and the last keep-GPS decision.
+    // Every edit invalidates both in-flight work and unconfirmed candidates.
     _generation++;
     busy = false;
     preview = null;
     _suggestion = null;
-    // Editing a Provider-derived address does not erase its provenance. A fresh
-    // manual entry (or explicit GPS removal) is a separate choice below.
-    if (text.text.isEmpty) source = LocationSource.manual;
-    needsGpsChoice = hasGps;
+    candidates = [];
+    selectedCandidate = null;
+
+    if (_fromForwardGeocode) {
+      // Editing a forward-geocoded address immediately invalidates coordinates.
+      latitude = null;
+      longitude = null;
+      accuracy = null;
+      source = LocationSource.manual;
+      needsGpsChoice = false;
+      _fromForwardGeocode = false;
+    } else {
+      // Editing with GPS-attached coordinates invokes the GPS choice flow.
+      if (text.text.isEmpty) source = LocationSource.manual;
+      needsGpsChoice = hasGps;
+    }
     message = null;
     notifyListeners();
   }
@@ -86,6 +114,8 @@ class LocationSelectionController extends ChangeNotifier {
   Future<void> capture() async {
     _suggestion = null;
     _previewSource = LocationSource.openStreetMap;
+    candidates = [];
+    selectedCandidate = null;
     final generation = ++_generation;
     busy = true;
     preview = null;
@@ -104,6 +134,7 @@ class LocationSelectionController extends ChangeNotifier {
       latitude = result.coordinates!.latitude;
       longitude = result.coordinates!.longitude;
       accuracy = result.coordinates!.accuracy;
+      _fromForwardGeocode = false;
       // A refreshed point must never silently accompany the old address.
       needsGpsChoice = true;
       final resolved = await geocoding.reverseGeocode(latitude!, longitude!);
@@ -134,10 +165,94 @@ class LocationSelectionController extends ChangeNotifier {
     _setText(address);
     source = _previewSource;
     _resolvedAddress = address;
+    _fromForwardGeocode = false;
+    preview = null;
+    _suggestion = null;
+    candidates = [];
+    selectedCandidate = null;
+    needsGpsChoice = false;
+    message = 'Location confirmed';
+    notifyListeners();
+  }
+
+  Future<void> resolveAddress() async {
+    final query = text.text.trim();
+    if (query.isEmpty) {
+      message = 'Please provide the service location.';
+      notifyListeners();
+      return;
+    }
+    if (query.length > 255) {
+      message = 'Location cannot exceed 255 characters.';
+      notifyListeners();
+      return;
+    }
+
+    _suggestion = null;
+    final generation = ++_generation;
+    busy = true;
+    preview = null;
+    candidates = [];
+    selectedCandidate = null;
+    message = null;
+    notifyListeners();
+
+    bool current() => !_disposed && generation == _generation;
+
+    try {
+      final results = await geocoding.forwardGeocode(query);
+      if (!current()) return;
+      if (results.isEmpty) {
+        message = 'No matching locations found. Please enter a more specific address or landmark.';
+        return;
+      }
+      candidates = results;
+      selectedCandidate = results.first;
+    } catch (_) {
+      if (!current()) return;
+      message = 'Could not resolve your location. Please enter the location manually or retry.';
+    } finally {
+      if (current()) {
+        busy = false;
+        notifyListeners();
+      }
+    }
+  }
+
+  void selectCandidate(ForwardGeocodeCandidate candidate) {
+    selectedCandidate = candidate;
+    notifyListeners();
+  }
+
+  void confirmCandidate([ForwardGeocodeCandidate? candidate]) {
+    final target = candidate ?? selectedCandidate;
+    if (busy || target == null) return;
+    if (target.displayAddress.length > 255) {
+      message = 'This address exceeds 255 characters. Enter a shorter location manually.';
+      notifyListeners();
+      return;
+    }
+    _setText(target.displayAddress);
+    latitude = target.latitude;
+    longitude = target.longitude;
+    accuracy = null;
+    _fromForwardGeocode = true;
+    source = LocationSource.openStreetMap;
+    _resolvedAddress = target.displayAddress;
+    candidates = [];
+    selectedCandidate = null;
     preview = null;
     _suggestion = null;
     needsGpsChoice = false;
     message = 'Location confirmed';
+    notifyListeners();
+  }
+
+  void dismissCandidates() {
+    _generation++;
+    candidates = [];
+    selectedCandidate = null;
+    message = null;
     notifyListeners();
   }
 
@@ -146,8 +261,11 @@ class LocationSelectionController extends ChangeNotifier {
     _generation++;
     busy = false;
     preview = null;
+    candidates = [];
+    selectedCandidate = null;
     // Do not relabel a copied resolved address as independently entered content.
-    if (source == LocationSource.openStreetMap) _setText('');
+    if (source == LocationSource.openStreetMap && !fromForwardGeocode) _setText('');
+    _fromForwardGeocode = false;
     source = LocationSource.manual;
     needsGpsChoice = hasGps;
     message = null;
@@ -166,7 +284,10 @@ class LocationSelectionController extends ChangeNotifier {
     _generation++;
     busy = false;
     preview = null;
+    candidates = [];
+    selectedCandidate = null;
     latitude = longitude = accuracy = null;
+    _fromForwardGeocode = false;
     if (source == LocationSource.openStreetMap &&
         text.text == _resolvedAddress) {
       _setText('');
@@ -182,6 +303,8 @@ class LocationSelectionController extends ChangeNotifier {
     _generation++;
     busy = false;
     preview = null;
+    candidates = [];
+    selectedCandidate = null;
   }
 
   String? validate() {

@@ -76,8 +76,8 @@ export default function AdminDashboardPage() {
       <div className="page-hero-content">
         <div>
           <div className="page-kicker">Admin Dashboard</div>
-          <h1 className="page-hero-title">See service demand and AI workflow health in one pass.</h1>
-          <p className="page-hero-copy">This dashboard keeps Component 1 lifecycle monitoring and AssistLK AI execution metrics visible without changing the backend aggregation rules.</p>
+          <h1 className="page-hero-title">Dashboard</h1>
+          <p className="page-hero-copy">See service demand and AI workflow health in one pass. This dashboard keeps Component 1 lifecycle monitoring and AssistLK AI execution metrics visible without changing the backend aggregation rules.</p>
         </div>
         <div className="page-hero-meta">
           <div className="page-stat">

@@ -98,6 +98,11 @@
   position: relative;
 }
 
+.admin-main .app-shell {
+  width: 100%;
+  max-width: 1480px;
+}
+
 @media (max-width: 980px) {
   .admin-layout {
     flex-direction: column;

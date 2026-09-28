@@ -15,23 +15,20 @@ class RequestSummaryArtwork extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final asset = category == 'Unclassified'
-        ? serviceRequestCategoryAsset(category)
-        : null;
+    final asset = serviceRequestCategoryAsset(category);
     if (asset == null) return child;
     return LayoutBuilder(
       builder: (context, constraints) {
-        final wide =
-            constraints.maxWidth >=
-            400 * MediaQuery.textScalerOf(context).scale(14) / 14;
+        final wide = constraints.maxWidth >= 480;
+        final artworkSize = wide ? 72.0 : 48.0;
         final artwork = IgnorePointer(
           child: ExcludeSemantics(
             child: Opacity(
               opacity: 0.65,
               child: Image.asset(
                 asset,
-                width: wide ? 72 : 48,
-                height: wide ? 72 : 48,
+                width: artworkSize,
+                height: artworkSize,
                 fit: BoxFit.contain,
                 excludeFromSemantics: true,
                 errorBuilder: (_, _, _) => const SizedBox.shrink(),
@@ -39,21 +36,15 @@ class RequestSummaryArtwork extends StatelessWidget {
             ),
           ),
         );
-        if (wide) {
-          return Row(
-            children: [
-              Expanded(child: child),
-              const SizedBox(width: AppSpacing.md),
-              artwork,
-            ],
-          );
-        }
-        return Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
+        return Row(
+          crossAxisAlignment: CrossAxisAlignment.center,
           children: [
-            Align(alignment: Alignment.centerRight, child: artwork),
-            const SizedBox(height: AppSpacing.sm),
-            child,
+            Expanded(child: child),
+            const SizedBox(width: AppSpacing.md),
+            Padding(
+              padding: const EdgeInsets.only(right: AppSpacing.xs),
+              child: artwork,
+            ),
           ],
         );
       },

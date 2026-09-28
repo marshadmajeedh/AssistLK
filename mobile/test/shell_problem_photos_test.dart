@@ -18,6 +18,7 @@ import 'package:mobile/features/service_requests/services/problem_image_picker.d
 import 'package:mobile/features/service_requests/widgets/problem_photos.dart';
 
 import 'mocks/fake_problem_photos.dart';
+import 'mocks/mock_location_geocoding_service.dart';
 import 'session_foundation_test.dart' show AuthStub;
 
 void main() {
@@ -25,6 +26,7 @@ void main() {
   late AuthStub authService;
   late PhotoApi api;
   late FakePhotoPicker picker;
+  late MockLocationGeocodingService geocoding;
 
   setUp(() {
     final tokens = MemoryTokens();
@@ -32,6 +34,7 @@ void main() {
     auth = AuthProvider(authService: authService, tokenStorage: tokens);
     api = PhotoApi();
     picker = FakePhotoPicker()..next = photo(1);
+    geocoding = MockLocationGeocodingService();
   });
   tearDown(() => auth.dispose());
 
@@ -50,7 +53,10 @@ void main() {
           ChangeNotifierProvider<AuthProvider>.value(value: auth),
           Provider<ProblemImagePicker>.value(value: picker),
         ],
-        child: AssistLKApp(serviceRequestService: api),
+        child: AssistLKApp(
+          serviceRequestService: api,
+          geocodingService: geocoding,
+        ),
       ),
     );
     await tester.pumpAndSettle();
@@ -71,6 +77,10 @@ void main() {
       'Colombo',
     );
     await tap(tester, 'Next: Review');
+    if (find.text('Use This Location').evaluate().isNotEmpty) {
+      await tap(tester, 'Use This Location');
+      await tap(tester, 'Next: Review');
+    }
     expect(find.byType(PrivatePhotoImage), findsOneWidget);
     expect(find.byKey(const Key('wizard_actions')), findsOneWidget);
     expect(

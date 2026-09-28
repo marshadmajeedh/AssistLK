@@ -350,6 +350,8 @@ public class ClarificationWorkflowPostgreSqlTests : PostgreSqlIntegrationTestBas
                 Category = "Appliance Repair",
                 Description = "broken fridge",
                 LocationText = "Colombo",
+                Latitude = 6.9271m,
+                Longitude = 79.8612m,
                 Status = ServiceRequestStatus.AwaitingInformation
             };
             await context.ServiceRequests.AddAsync(req);
@@ -378,7 +380,9 @@ public class ClarificationWorkflowPostgreSqlTests : PostgreSqlIntegrationTestBas
             await service.UpdateAsync(customer.Id, requestId, new UpdateServiceRequestRequest
             {
                 Description = "The refrigerator compressor makes a buzzing noise and food is warm",
-                LocationText = "Colombo"
+                LocationText = "Colombo",
+                Latitude = 6.9271m,
+                Longitude = 79.8612m
             });
         }
 

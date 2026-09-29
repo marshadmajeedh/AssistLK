@@ -2,10 +2,8 @@ class AppAssets {
   AppAssets._();
 
   // Auth
-  static const String authWelcome =
-      'assets/images/auth/auth_welcome.png';
-  static const String authRegister =
-      'assets/images/auth/auth_register.png';
+  static const String authWelcome = 'assets/images/auth/auth_welcome.png';
+  static const String authRegister = 'assets/images/auth/auth_register.png';
   static const String authCustomerRegister =
       'assets/images/auth/auth_customer_register.png';
 
@@ -34,4 +32,6 @@ class AppAssets {
       'assets/images/illustrations/location_pin.png';
   static const String readyForMatching =
       'assets/images/illustrations/ready_for_matching.png';
+  static const String emptyRecentActivity =
+      'assets/images/illustrations/empty_recent_activity.png';
 }

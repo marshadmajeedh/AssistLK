@@ -9,6 +9,7 @@ import '../../../../shared/theme/app_text_styles.dart';
 import '../../../../shared/widgets/app_button.dart';
 import '../../../../shared/widgets/app_card.dart';
 import '../../../../shared/widgets/app_image_asset.dart';
+import '../../../../shared/widgets/empty_state_card.dart';
 import '../../../../shared/widgets/section_header.dart';
 import '../../auth/providers/auth_provider.dart';
 import '../../customer/widgets/home_location_banner.dart';
@@ -50,7 +51,7 @@ class CustomerHomeScreen extends StatelessWidget {
             const SizedBox(height: AppSpacing.lg),
             Container(
               width: double.infinity,
-              height: 135,
+              constraints: const BoxConstraints(minHeight: 135),
               decoration: BoxDecoration(
                 borderRadius: BorderRadius.circular(AppRadius.large),
                 border: Border.all(color: AppColors.border),
@@ -58,6 +59,7 @@ class CustomerHomeScreen extends StatelessWidget {
               ),
               clipBehavior: Clip.antiAlias,
               child: Stack(
+                alignment: Alignment.centerLeft,
                 children: [
                   const Positioned.fill(
                     child: AppImageAsset(
@@ -67,20 +69,22 @@ class CustomerHomeScreen extends StatelessWidget {
                       semanticLabel: 'Home Service Assistance',
                     ),
                   ),
-                  Container(
-                    width: double.infinity,
-                    height: 135,
-                    decoration: BoxDecoration(
-                      gradient: LinearGradient(
-                        begin: Alignment.centerLeft,
-                        end: Alignment.centerRight,
-                        colors: [
-                          AppColors.primaryDark.withValues(alpha: 0.92),
-                          AppColors.primaryDark.withValues(alpha: 0.70),
-                          Colors.transparent,
-                        ],
+                  Positioned.fill(
+                    child: Container(
+                      decoration: BoxDecoration(
+                        gradient: LinearGradient(
+                          begin: Alignment.centerLeft,
+                          end: Alignment.centerRight,
+                          colors: [
+                            AppColors.primaryDark.withValues(alpha: 0.92),
+                            AppColors.primaryDark.withValues(alpha: 0.70),
+                            Colors.transparent,
+                          ],
+                        ),
                       ),
                     ),
+                  ),
+                  Padding(
                     padding: const EdgeInsets.symmetric(
                       horizontal: AppSpacing.md,
                       vertical: AppSpacing.sm,
@@ -88,6 +92,7 @@ class CustomerHomeScreen extends StatelessWidget {
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       mainAxisAlignment: MainAxisAlignment.center,
+                      mainAxisSize: MainAxisSize.min,
                       children: [
                         Text(
                           'Welcome, ${user?.fullName ?? 'Customer'}',
@@ -162,13 +167,14 @@ class CustomerHomeScreen extends StatelessWidget {
             ),
             const SizedBox(height: AppSpacing.lg),
             const SectionHeader(title: 'Recent Activity'),
-            Align(
-              alignment: Alignment.centerLeft,
-              child: TextButton(
-                onPressed: onViewAll,
-                child: const Text('View All'),
+            if (recent.isNotEmpty)
+              Align(
+                alignment: Alignment.centerLeft,
+                child: TextButton(
+                  onPressed: onViewAll,
+                  child: const Text('View All'),
+                ),
               ),
-            ),
             if (requests.isLoading && recent.isEmpty)
               const LinearProgressIndicator()
             else if (requests.error != null)
@@ -177,21 +183,37 @@ class CustomerHomeScreen extends StatelessWidget {
                 style: AppTextStyles.small.copyWith(color: AppColors.error),
               )
             else if (recent.isEmpty)
-              const Text('No recent requests yet.', style: AppTextStyles.body),
-            for (final request in recent)
-              Padding(
-                padding: const EdgeInsets.only(bottom: AppSpacing.sm),
-                child: ServiceRequestCard(
-                  request: request,
-                  onTap: () => Navigator.of(context).push(
-                    MaterialPageRoute<void>(
-                      builder: (_) => ServiceRequestDetailScreen(
-                        requestId: request.serviceRequestId,
+              EmptyStateCard(
+                title: 'No service requests yet',
+                description:
+                    'Create your first request and track its progress here.',
+                imageAsset: AppAssets.emptyRecentActivity,
+                imageSemanticLabel: 'No recent activity illustration',
+                padding: const EdgeInsets.symmetric(
+                  horizontal: AppSpacing.lg,
+                  vertical: AppSpacing.xl,
+                ),
+                imageWidth: 96,
+                imageHeight: 96,
+                actionText: 'Create Service Request',
+                actionWidth: 220,
+                onAction: () => openCreateServiceRequest(context),
+              )
+            else
+              for (final request in recent)
+                Padding(
+                  padding: const EdgeInsets.only(bottom: AppSpacing.sm),
+                  child: ServiceRequestCard(
+                    request: request,
+                    onTap: () => Navigator.of(context).push(
+                      MaterialPageRoute<void>(
+                        builder: (_) => ServiceRequestDetailScreen(
+                          requestId: request.serviceRequestId,
+                        ),
                       ),
                     ),
                   ),
                 ),
-              ),
           ],
         ),
       ),

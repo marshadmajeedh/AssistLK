@@ -18,7 +18,7 @@ class HomeLocationBanner extends StatelessWidget {
     final resolved = provider.state == CustomerLocationState.resolved;
     final message = switch (provider.state) {
       CustomerLocationState.idle =>
-        'Use your current location for a faster service request.',
+        'Add your location so we can help find services near you.',
       CustomerLocationState.capturing => 'Finding your location…',
       CustomerLocationState.resolving => 'Finding your address…',
       CustomerLocationState.resolved =>
@@ -40,7 +40,7 @@ class HomeLocationBanner extends StatelessWidget {
                 ? (provider.freshSuggestion != null
                       ? 'Current location'
                       : 'Last captured location')
-                : 'Location not set',
+                : 'Set your service location',
             style: AppTextStyles.cardHeading,
           ),
           const SizedBox(height: AppSpacing.sm),

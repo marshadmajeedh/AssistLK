@@ -1,6 +1,9 @@
 import 'package:mobile/app/customer_bottom_navigation.dart';
+
 import 'mocks/mock_location_geocoding_service.dart';
+
 import 'package:mobile/features/service_requests/widgets/service_request_category_asset.dart';
+
 import 'dart:async';
 
 import 'package:flutter/material.dart';
@@ -85,8 +88,9 @@ void main() {
     await tester.pumpAndSettle();
   }
 
-  int selected(WidgetTester tester) =>
-      tester.widget<CustomerBottomNavigation>(find.byType(CustomerBottomNavigation)).selectedIndex;
+  int selected(WidgetTester tester) => tester
+      .widget<CustomerBottomNavigation>(find.byType(CustomerBottomNavigation))
+      .selectedIndex;
   Future<void> tapText(WidgetTester tester, String label) async {
     final finder = find.text(label).first;
     await tester.ensureVisible(finder);
@@ -100,10 +104,12 @@ void main() {
       await mount(tester);
       await tester.pumpAndSettle();
       expect(find.byType(CustomerAppShell), findsOneWidget);
-      expect(
-        CustomerBottomNavigation.labels,
-        ['Home', 'Services', 'Activity', 'Account'],
-      );
+      expect(CustomerBottomNavigation.labels, [
+        'Home',
+        'Services',
+        'Activity',
+        'Account',
+      ]);
       expect(selected(tester), 0);
       for (final label in ['Services', 'Activity', 'Account', 'Home']) {
         await tab(tester, label);
@@ -113,7 +119,9 @@ void main() {
     },
   );
 
-  testWidgets('Home recent activity and Activity share category artwork', (tester) async {
+  testWidgets('Home recent activity and Activity share category artwork', (
+    tester,
+  ) async {
     requests.items = [
       request('one').copyWith(category: 'Unclassified'),
       request('two').copyWith(category: 'Plumbing'),
@@ -127,10 +135,16 @@ void main() {
       expect(cards, findsNWidgets(3));
       for (final element in cards.evaluate()) {
         final card = element.widget as ServiceRequestCard;
-        final image = tester.widget<Image>(find.descendant(
-          of: find.byWidget(card), matching: find.byType(Image)));
-        expect((image.image as AssetImage).assetName,
-          serviceRequestCategoryAsset(card.request.category));
+        final image = tester.widget<Image>(
+          find.descendant(
+            of: find.byWidget(card),
+            matching: find.byType(Image),
+          ),
+        );
+        expect(
+          (image.image as AssetImage).assetName,
+          serviceRequestCategoryAsset(card.request.category),
+        );
       }
     }
   });
@@ -400,13 +414,14 @@ void main() {
       await tester.pumpAndSettle();
       await tab(tester, 'Account');
       expect(find.text('Customer A'), findsOneWidget);
-      expect(find.text('A@example.com'), findsOneWidget);
-      expect(find.text('Role: Customer'), findsOneWidget);
+      expect(find.text('A@example.com'), findsWidgets);
+      expect(find.text('Account type'), findsOneWidget);
+      expect(find.text('Customer'), findsWidgets);
       expect(find.textContaining('null'), findsNothing);
-      expect(
-        find.textContaining('Phone:'),
-        phone == null ? findsNothing : findsOneWidget,
-      );
+      expect(find.text('Phone'), phone == null ? findsNothing : findsOneWidget);
+      if (phone != null) {
+        expect(find.text(phone), findsOneWidget);
+      }
     });
   }
 

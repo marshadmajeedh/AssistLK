@@ -19,6 +19,10 @@ class EmptyStateCard extends StatelessWidget {
   final String? actionText;
   final VoidCallback? onAction;
   final double actionWidth;
+  final EdgeInsetsGeometry? padding;
+  final double imageWidth;
+  final double imageHeight;
+  final String? imageSemanticLabel;
 
   const EmptyStateCard({
     super.key,
@@ -29,16 +33,19 @@ class EmptyStateCard extends StatelessWidget {
     this.actionText,
     this.onAction,
     this.actionWidth = 200,
+    this.padding,
+    this.imageWidth = 120,
+    this.imageHeight = 120,
+    this.imageSemanticLabel,
   });
 
   @override
   Widget build(BuildContext context) {
     return Container(
       width: double.infinity,
-      padding: const EdgeInsets.symmetric(
-        horizontal: AppSpacing.lg,
-        vertical: 36,
-      ),
+      padding:
+          padding ??
+          const EdgeInsets.symmetric(horizontal: AppSpacing.lg, vertical: 36),
       decoration: BoxDecoration(
         color: AppColors.surface,
         borderRadius: BorderRadius.circular(AppRadius.large),
@@ -51,11 +58,11 @@ class EmptyStateCard extends StatelessWidget {
           if (imageAsset != null) ...[
             AppImageAsset(
               assetPath: imageAsset!,
-              width: 120,
-              height: 120,
+              width: imageWidth,
+              height: imageHeight,
               fit: BoxFit.contain,
               fallbackIcon: icon ?? Icons.assignment_outlined,
-              semanticLabel: title,
+              semanticLabel: imageSemanticLabel ?? title,
             ),
             const SizedBox(height: AppSpacing.md),
           ] else if (icon != null) ...[
@@ -65,11 +72,7 @@ class EmptyStateCard extends StatelessWidget {
                 color: AppColors.primary.withValues(alpha: 0.08),
                 shape: BoxShape.circle,
               ),
-              child: Icon(
-                icon,
-                size: 40,
-                color: AppColors.primary,
-              ),
+              child: Icon(icon, size: 40, color: AppColors.primary),
             ),
             const SizedBox(height: AppSpacing.md),
           ],
@@ -93,10 +96,7 @@ class EmptyStateCard extends StatelessWidget {
             const SizedBox(height: AppSpacing.lg),
             SizedBox(
               width: actionWidth,
-              child: AppButton(
-                text: actionText!,
-                onPressed: onAction,
-              ),
+              child: AppButton(text: actionText!, onPressed: onAction),
             ),
           ],
         ],

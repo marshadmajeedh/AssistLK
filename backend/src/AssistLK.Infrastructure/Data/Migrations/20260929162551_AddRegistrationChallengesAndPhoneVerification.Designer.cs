@@ -3,6 +3,7 @@ using System;
 using AssistLK.Infrastructure.Data;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 
@@ -11,9 +12,11 @@ using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 namespace AssistLK.Infrastructure.Data.Migrations
 {
     [DbContext(typeof(AssistLKDbContext))]
-    partial class AssistLKDbContextModelSnapshot : ModelSnapshot
+    [Migration("20260929162551_AddRegistrationChallengesAndPhoneVerification")]
+    partial class AddRegistrationChallengesAndPhoneVerification
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
@@ -279,85 +282,6 @@ namespace AssistLK.Infrastructure.Data.Migrations
                     b.HasKey("Id");
 
                     b.ToTable("AgentWorkflows");
-                });
-
-            modelBuilder.Entity("AssistLK.Domain.Entities.Booking", b =>
-                {
-                    b.Property<int>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("integer");
-
-                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
-
-                    b.Property<DateTime>("CreatedAt")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.Property<Guid>("CustomerId")
-                        .HasColumnType("uuid");
-
-                    b.Property<decimal?>("Latitude")
-                        .HasColumnType("numeric");
-
-                    b.Property<string>("LocationText")
-                        .HasColumnType("text");
-
-                    b.Property<decimal?>("Longitude")
-                        .HasColumnType("numeric");
-
-                    b.Property<Guid>("ProviderId")
-                        .HasColumnType("uuid");
-
-                    b.Property<int>("QuotationId")
-                        .HasColumnType("integer");
-
-                    b.Property<DateTime>("ScheduledAt")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.Property<int>("Status")
-                        .HasColumnType("integer");
-
-                    b.Property<DateTime>("UpdatedAt")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.HasKey("Id");
-
-                    b.HasIndex("QuotationId")
-                        .IsUnique();
-
-                    b.ToTable("Bookings");
-                });
-
-            modelBuilder.Entity("AssistLK.Domain.Entities.BookingStatusHistory", b =>
-                {
-                    b.Property<int>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("integer");
-
-                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
-
-                    b.Property<int>("BookingId")
-                        .HasColumnType("integer");
-
-                    b.Property<DateTime>("ChangedAt")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.Property<Guid>("ChangedByUserId")
-                        .HasColumnType("uuid");
-
-                    b.Property<int>("NewStatus")
-                        .HasColumnType("integer");
-
-                    b.Property<int>("PreviousStatus")
-                        .HasColumnType("integer");
-
-                    b.Property<string>("Reason")
-                        .HasColumnType("text");
-
-                    b.HasKey("Id");
-
-                    b.HasIndex("BookingId");
-
-                    b.ToTable("BookingStatusHistories");
                 });
 
             modelBuilder.Entity("AssistLK.Domain.Entities.MatchedCandidate", b =>
@@ -679,68 +603,6 @@ namespace AssistLK.Infrastructure.Data.Migrations
                     b.HasIndex("ProviderId");
 
                     b.ToTable("ProviderSkills", (string)null);
-                });
-
-            modelBuilder.Entity("AssistLK.Domain.Entities.Quotation", b =>
-                {
-                    b.Property<int>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("integer");
-
-                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
-
-                    b.Property<DateTime>("CreatedAt")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.Property<string>("Notes")
-                        .HasColumnType("text");
-
-                    b.Property<Guid>("ProviderId")
-                        .HasColumnType("uuid");
-
-                    b.Property<Guid>("ServiceRequestId")
-                        .HasColumnType("uuid");
-
-                    b.Property<int>("Status")
-                        .HasColumnType("integer");
-
-                    b.Property<decimal>("TotalAmount")
-                        .HasColumnType("numeric");
-
-                    b.Property<DateTime>("UpdatedAt")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.HasKey("Id");
-
-                    b.ToTable("Quotations");
-                });
-
-            modelBuilder.Entity("AssistLK.Domain.Entities.QuotationItem", b =>
-                {
-                    b.Property<int>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("integer");
-
-                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
-
-                    b.Property<decimal>("Amount")
-                        .HasColumnType("numeric");
-
-                    b.Property<string>("Description")
-                        .IsRequired()
-                        .HasColumnType("text");
-
-                    b.Property<int>("Quantity")
-                        .HasColumnType("integer");
-
-                    b.Property<int>("QuotationId")
-                        .HasColumnType("integer");
-
-                    b.HasKey("Id");
-
-                    b.HasIndex("QuotationId");
-
-                    b.ToTable("QuotationItems");
                 });
 
             modelBuilder.Entity("AssistLK.Domain.Entities.RegistrationChallenge", b =>
@@ -1142,28 +1004,6 @@ namespace AssistLK.Infrastructure.Data.Migrations
                     b.Navigation("Workflow");
                 });
 
-            modelBuilder.Entity("AssistLK.Domain.Entities.Booking", b =>
-                {
-                    b.HasOne("AssistLK.Domain.Entities.Quotation", "Quotation")
-                        .WithOne("Booking")
-                        .HasForeignKey("AssistLK.Domain.Entities.Booking", "QuotationId")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
-
-                    b.Navigation("Quotation");
-                });
-
-            modelBuilder.Entity("AssistLK.Domain.Entities.BookingStatusHistory", b =>
-                {
-                    b.HasOne("AssistLK.Domain.Entities.Booking", "Booking")
-                        .WithMany("StatusHistory")
-                        .HasForeignKey("BookingId")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
-
-                    b.Navigation("Booking");
-                });
-
             modelBuilder.Entity("AssistLK.Domain.Entities.MatchedCandidate", b =>
                 {
                     b.HasOne("AssistLK.Domain.Entities.MatchingExecution", "MatchingExecution")
@@ -1238,17 +1078,6 @@ namespace AssistLK.Infrastructure.Data.Migrations
                     b.Navigation("Provider");
                 });
 
-            modelBuilder.Entity("AssistLK.Domain.Entities.QuotationItem", b =>
-                {
-                    b.HasOne("AssistLK.Domain.Entities.Quotation", "Quotation")
-                        .WithMany("Items")
-                        .HasForeignKey("QuotationId")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
-
-                    b.Navigation("Quotation");
-                });
-
             modelBuilder.Entity("AssistLK.Domain.Entities.ServiceRequest", b =>
                 {
                     b.HasOne("AssistLK.Domain.Entities.User", "Customer")
@@ -1291,11 +1120,6 @@ namespace AssistLK.Infrastructure.Data.Migrations
                     b.Navigation("Executions");
                 });
 
-            modelBuilder.Entity("AssistLK.Domain.Entities.Booking", b =>
-                {
-                    b.Navigation("StatusHistory");
-                });
-
             modelBuilder.Entity("AssistLK.Domain.Entities.MatchingExecution", b =>
                 {
                     b.Navigation("Candidates");
@@ -1308,13 +1132,6 @@ namespace AssistLK.Infrastructure.Data.Migrations
                     b.Navigation("Locations");
 
                     b.Navigation("Skills");
-                });
-
-            modelBuilder.Entity("AssistLK.Domain.Entities.Quotation", b =>
-                {
-                    b.Navigation("Booking");
-
-                    b.Navigation("Items");
                 });
 
             modelBuilder.Entity("AssistLK.Domain.Entities.ServiceRequest", b =>

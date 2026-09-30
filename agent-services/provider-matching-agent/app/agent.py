@@ -288,7 +288,7 @@ class PersistentMemorySaver(MemorySaver):
             logger.warning(f"Failed to persist LangGraph checkpoint: {e}")
 
     def _load(self):
-        if not os.path.exists(self.file_path):
+        if not os.path.exists(self.file_path) or os.path.getsize(self.file_path) == 0:
             return
         try:
             with open(self.file_path, "rb") as f:

@@ -11,9 +11,11 @@ using System.Text;
 using System.Text.Json.Serialization;
 using AssistLK.Api.Authentication;
 using AssistLK.Application.Interfaces;
+using AssistLK.Application.ServiceRequests;
 using AssistLK.Application.Services;
 using AssistLK.Application.Services.Auth;
 using AssistLK.Application.Quotations.DTOs;
+using AssistLK.Api.Features.ServiceRequests;
 using AssistLK.Domain.Entities;
 using FluentValidation;
 using FluentValidation.AspNetCore;
@@ -252,6 +254,17 @@ builder.Services.AddScoped<
 builder.Services.AddScoped<
     ProblemUnderstandingWorkflowService>();
 
+// C1 Stale Analysis Recovery
+builder.Services.AddSingleton(sp =>
+{
+    var config = sp.GetRequiredService<IConfiguration>();
+    var options = new C1RecoveryOptions();
+    config.GetSection(C1RecoveryOptions.SectionName).Bind(options);
+    options.Validate();
+    return options;
+});
+builder.Services.AddScoped<IStaleAnalysisRecoveryService, StaleAnalysisRecoveryService>();
+builder.Services.AddHostedService<StaleAnalysisRecoveryBackgroundService>();
 
 builder.Services.AddScoped<
     DemoProviderSearchTool>();

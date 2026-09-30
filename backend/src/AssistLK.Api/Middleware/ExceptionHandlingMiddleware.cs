@@ -50,6 +50,8 @@ public class ExceptionHandlingMiddleware
                     StatusCodes.Status404NotFound,
                 Microsoft.EntityFrameworkCore.DbUpdateConcurrencyException =>
                     StatusCodes.Status409Conflict,
+                HttpRequestException or TimeoutException =>
+                    StatusCodes.Status503ServiceUnavailable,
                 ConflictException =>
                     StatusCodes.Status409Conflict,
                 _ =>

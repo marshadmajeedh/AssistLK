@@ -250,8 +250,20 @@ builder.Services.AddSingleton(sp =>
 builder.Services.AddScoped<IStaleAnalysisRecoveryService, StaleAnalysisRecoveryService>();
 builder.Services.AddHostedService<StaleAnalysisRecoveryBackgroundService>();
 
+// C1 Attachment Reconciliation
+builder.Services.AddSingleton(sp =>
+{
+    var config = sp.GetRequiredService<IConfiguration>();
+    var options = new AssistLK.Application.Attachments.AttachmentReconciliationOptions();
+    config.GetSection(AssistLK.Application.Attachments.AttachmentReconciliationOptions.SectionName).Bind(options);
+    options.Validate();
+    return options;
+});
+builder.Services.AddHostedService<AttachmentReconciliationBackgroundService>();
+
 builder.Services.AddScoped<
     DemoProviderSearchTool>();
+
 
 
 // -----------------------------

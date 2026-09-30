@@ -2,17 +2,15 @@ using System;
 
 namespace AssistLK.Application.Quotations;
 
-/// <summary>
-/// Data Transfer Object representing a confirmed booking.
-/// Created when a customer approves a quotation (Component 3 business rule).
-/// Consumed by Component 4 (Service Tracking) to manage the provider's journey.
-/// </summary>
 public record BookingDto(
     int Id,
     int QuotationId,
-    int CustomerId,
-    int ProviderId,
+    Guid CustomerId,
+    Guid ProviderId,
     string Status,
     DateTime ScheduledAt,
+    string? LocationText,
+    decimal? Latitude,
+    decimal? Longitude,
     DateTime CreatedAt,
     DateTime UpdatedAt);

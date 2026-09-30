@@ -7,7 +7,7 @@ using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 namespace AssistLK.Infrastructure.Data.Migrations
 {
     /// <inheritdoc />
-    public partial class Component3_QuotationBooking : Migration
+    public partial class Component3_CreateQuotationBookingTables : Migration
     {
         /// <inheritdoc />
         protected override void Up(MigrationBuilder migrationBuilder)
@@ -18,8 +18,8 @@ namespace AssistLK.Infrastructure.Data.Migrations
                 {
                     Id = table.Column<int>(type: "integer", nullable: false)
                         .Annotation("Npgsql:ValueGenerationStrategy", NpgsqlValueGenerationStrategy.IdentityByDefaultColumn),
-                    ServiceRequestId = table.Column<int>(type: "integer", nullable: false),
-                    ProviderId = table.Column<int>(type: "integer", nullable: false),
+                    ServiceRequestId = table.Column<Guid>(type: "uuid", nullable: false),
+                    ProviderId = table.Column<Guid>(type: "uuid", nullable: false),
                     Status = table.Column<int>(type: "integer", nullable: false),
                     TotalAmount = table.Column<decimal>(type: "numeric", nullable: false),
                     Notes = table.Column<string>(type: "text", nullable: true),
@@ -38,8 +38,8 @@ namespace AssistLK.Infrastructure.Data.Migrations
                     Id = table.Column<int>(type: "integer", nullable: false)
                         .Annotation("Npgsql:ValueGenerationStrategy", NpgsqlValueGenerationStrategy.IdentityByDefaultColumn),
                     QuotationId = table.Column<int>(type: "integer", nullable: false),
-                    CustomerId = table.Column<int>(type: "integer", nullable: false),
-                    ProviderId = table.Column<int>(type: "integer", nullable: false),
+                    CustomerId = table.Column<Guid>(type: "uuid", nullable: false),
+                    ProviderId = table.Column<Guid>(type: "uuid", nullable: false),
                     Status = table.Column<int>(type: "integer", nullable: false),
                     ScheduledAt = table.Column<DateTime>(type: "timestamp with time zone", nullable: false),
                     CreatedAt = table.Column<DateTime>(type: "timestamp with time zone", nullable: false),
@@ -87,7 +87,7 @@ namespace AssistLK.Infrastructure.Data.Migrations
                     BookingId = table.Column<int>(type: "integer", nullable: false),
                     PreviousStatus = table.Column<int>(type: "integer", nullable: false),
                     NewStatus = table.Column<int>(type: "integer", nullable: false),
-                    ChangedByUserId = table.Column<string>(type: "text", nullable: false),
+                    ChangedByUserId = table.Column<Guid>(type: "uuid", nullable: false),
                     Reason = table.Column<string>(type: "text", nullable: true),
                     ChangedAt = table.Column<DateTime>(type: "timestamp with time zone", nullable: false)
                 },

@@ -41,7 +41,7 @@ public class QuotationsController : ControllerBase
         CancellationToken cancellationToken)
     {
         var providerUserId = GetCurrentUserId();
-        var created = await _quotationService.CreateAsync(dto, providerUserId);
+        var created = await _quotationService.CreateAsync(dto, providerUserId, cancellationToken);
         return CreatedAtAction(nameof(GetById), new { id = created.Id }, created);
     }
 
@@ -63,10 +63,10 @@ public class QuotationsController : ControllerBase
     /// <summary>
     /// List all quotations associated with a service request.
     /// </summary>
-    [HttpGet("by-request/{serviceRequestId:int}")]
+    [HttpGet("by-request/{serviceRequestId:guid}")]
     [ProducesResponseType(typeof(IEnumerable<QuotationDto>), StatusCodes.Status200OK)]
     public async Task<ActionResult<IEnumerable<QuotationDto>>> GetByServiceRequest(
-        int serviceRequestId,
+        Guid serviceRequestId,
         CancellationToken cancellationToken)
     {
         var quotations = await _quotationService.GetByServiceRequestAsync(serviceRequestId);
@@ -80,24 +80,28 @@ public class QuotationsController : ControllerBase
     /// </summary>
     [HttpPost("{id:int}/send-for-approval")]
     [Authorize(Roles = "Provider")]
-    [ProducesResponseType(typeof(QuotationDto), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(QuotationApprovalWorkflowDto), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
-    public async Task<ActionResult<QuotationDto>> SendForApproval(
+    public async Task<ActionResult<QuotationApprovalWorkflowDto>> SendForApproval(
         int id,
         CancellationToken cancellationToken)
     {
         var providerUserId = GetCurrentUserId();
-        var updated = await _quotationService.SendForApprovalAsync(id, providerUserId);
-        return Ok(updated);
+        var workflow = await _quotationService.StartApprovalWorkflowAsync(
+            id, providerUserId, cancellationToken);
+        return Ok(workflow);
     }
 
     /// <summary>
     /// Business-specific operation: Customer approves a quotation.
     /// Atomically transitions the quotation to Approved AND creates a Booking.
+    ///
+    /// The agent workflow resumes first; ASP.NET then applies the decision
+    /// using the authenticated customer's identity.
     /// </summary>
     [HttpPost("{id:int}/approve")]
-    [Authorize(Roles = "Customer")]
+    [Authorize(Roles = "Customer,Provider")]
     [ProducesResponseType(typeof(BookingDto), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
     [ProducesResponseType(StatusCodes.Status403Forbidden)]
@@ -107,16 +111,28 @@ public class QuotationsController : ControllerBase
         [FromBody] ApproveQuotationDto dto,
         CancellationToken cancellationToken)
     {
+        if (string.IsNullOrWhiteSpace(dto.ThreadId))
+        {
+            return BadRequest("threadId is required; start the quotation workflow first.");
+        }
+
+        await _quotationService.ResumeApprovalWorkflowAsync(
+            id, dto.ThreadId, "approve", dto.CustomerRemarks, cancellationToken);
+
         var customerUserId = GetCurrentUserId();
-        var booking = await _quotationService.ApproveAsync(id, dto, customerUserId);
+        var booking = await _quotationService.ApproveAsync(
+            id, dto, customerUserId, cancellationToken);
         return Ok(booking);
     }
 
     /// <summary>
     /// Customer rejects a quotation with a reason.
+    ///
+    /// The agent workflow resumes first; ASP.NET then applies the decision
+    /// using the authenticated customer's identity.
     /// </summary>
     [HttpPost("{id:int}/reject")]
-    [Authorize(Roles = "Customer")]
+    [Authorize(Roles = "Customer,Provider")]
     [ProducesResponseType(typeof(QuotationDto), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
     [ProducesResponseType(StatusCodes.Status403Forbidden)]
@@ -126,8 +142,17 @@ public class QuotationsController : ControllerBase
         [FromBody] RejectQuotationDto dto,
         CancellationToken cancellationToken)
     {
+        if (string.IsNullOrWhiteSpace(dto.ThreadId))
+        {
+            return BadRequest("threadId is required; start the quotation workflow first.");
+        }
+
+        await _quotationService.ResumeApprovalWorkflowAsync(
+            id, dto.ThreadId, "reject", dto.Reason, cancellationToken);
+
         var customerUserId = GetCurrentUserId();
-        var updated = await _quotationService.RejectAsync(id, dto, customerUserId);
+        var updated = await _quotationService.RejectAsync(
+            id, dto, customerUserId, cancellationToken);
         return Ok(updated);
     }
 

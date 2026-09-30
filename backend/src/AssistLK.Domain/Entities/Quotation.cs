@@ -1,11 +1,13 @@
-namespace AssistLK.Domain.Entities;
+using System;
+using System.Collections.Generic;
 
+namespace AssistLK.Domain.Entities;
 
 public class Quotation
 {
     public int Id { get; set; }
-    public int ServiceRequestId { get; set; }        // FK from Component 1
-    public int ProviderId { get; set; }               // FK from Component 2
+    public Guid ServiceRequestId { get; set; }        // ✅ Guid
+    public Guid ProviderId { get; set; }               // ✅ Guid
     public QuotationStatus Status { get; set; }
     public decimal TotalAmount { get; set; }
     public string? Notes { get; set; }
@@ -19,10 +21,10 @@ public class Quotation
 
 public enum QuotationStatus
 {
-    Draft,
-    Sent,
-    WaitingForCustomerApproval,   // 🚦 AI must pause here
-    Approved,
-    Rejected,
-    Expired
+    Draft = 0,
+    Sent = 1,
+    WaitingForCustomerApproval = 2,
+    Approved = 3,
+    Rejected = 4,
+    Expired = 5
 }

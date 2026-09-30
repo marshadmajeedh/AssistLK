@@ -10,6 +10,7 @@ using AssistLK.Infrastructure;
 using System.Text;
 using System.Text.Json.Serialization;
 using AssistLK.Api.Authentication;
+using AssistLK.Application.Auth;
 using AssistLK.Application.Interfaces;
 using AssistLK.Application.ServiceRequests;
 using AssistLK.Application.Services;
@@ -276,6 +277,18 @@ builder.Services.AddSingleton(sp =>
     return options;
 });
 builder.Services.AddHostedService<AttachmentReconciliationBackgroundService>();
+
+// Challenge Retention Cleanup
+builder.Services.AddSingleton(sp =>
+{
+    var config = sp.GetRequiredService<IConfiguration>();
+    var options = new RegistrationChallengeRetentionOptions();
+    config.GetSection(RegistrationChallengeRetentionOptions.SectionName).Bind(options);
+    options.Validate();
+    return options;
+});
+builder.Services.AddScoped<IRegistrationChallengeCleanupService, RegistrationChallengeCleanupService>();
+builder.Services.AddHostedService<RegistrationChallengeCleanupBackgroundService>();
 
 builder.Services.AddScoped<
     DemoProviderSearchTool>();

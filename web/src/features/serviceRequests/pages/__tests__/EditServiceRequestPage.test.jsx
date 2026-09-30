@@ -52,7 +52,9 @@ describe("EditServiceRequestPage", () => {
     renderEditPage();
 
     expect(
-      await screen.findByRole("heading", { name: /edit service request/i })
+      await screen.findByRole("heading", {
+        name: /refine the details before the workflow moves forward/i,
+      })
     ).toBeInTheDocument();
 
     const descInput = screen.getByLabelText(/problem description/i);
@@ -79,7 +81,9 @@ describe("EditServiceRequestPage", () => {
     renderEditPage();
 
     expect(
-      await screen.findByRole("heading", { name: /edit service request/i })
+      await screen.findByRole("heading", {
+        name: /refine the details before the workflow moves forward/i,
+      })
     ).toBeInTheDocument();
     expect(screen.getByLabelText(/problem description/i)).toHaveValue(
       "Power cut issue"

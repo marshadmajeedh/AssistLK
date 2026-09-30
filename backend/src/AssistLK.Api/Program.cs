@@ -18,6 +18,8 @@ using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.IdentityModel.Tokens;
 using Microsoft.OpenApi.Models;
+using Microsoft.AspNetCore.RateLimiting;
+using System.Threading.RateLimiting;
 using dotenv.net;
 
 // Load local .env configuration into environment variables before builder initialization
@@ -50,6 +52,21 @@ var jwtAudience =
     builder.Configuration["Jwt:Audience"]
     ?? throw new InvalidOperationException(
         "JWT audience is not configured.");
+
+var otpPepper =
+    builder.Configuration["AuthOtp:OtpPepper"];
+
+if (string.IsNullOrWhiteSpace(otpPepper))
+{
+    throw new InvalidOperationException(
+        "AuthOtp:OtpPepper is not configured. An explicit pepper must be provided via dotnet user-secrets or environment variable 'AuthOtp__OtpPepper'.");
+}
+
+if (otpPepper.Trim().Length < 16)
+{
+    throw new InvalidOperationException(
+        "AuthOtp:OtpPepper is too weak. The pepper must contain at least 16 characters.");
+}
 
 
 // -----------------------------
@@ -91,6 +108,23 @@ builder.Services.AddScoped<
 builder.Services.AddScoped<
     IJwtTokenService,
     JwtTokenService>();
+
+builder.Services.AddScoped<
+    IOtpSecurityService,
+    OtpSecurityService>();
+
+if (builder.Environment.IsDevelopment())
+{
+    builder.Services.AddScoped<
+        ISmsService,
+        AssistLK.Infrastructure.ExternalServices.Sms.LocalDevSmsService>();
+}
+else
+{
+    builder.Services.AddScoped<
+        ISmsService,
+        AssistLK.Infrastructure.ExternalServices.Sms.FailingProductionSmsService>();
+}
 
 
 // -----------------------------
@@ -239,6 +273,17 @@ builder.Services
 
 builder.Services.AddAuthorization();
 
+builder.Services.AddRateLimiter(options =>
+{
+    options.RejectionStatusCode = StatusCodes.Status429TooManyRequests;
+    options.AddFixedWindowLimiter("OtpPolicy", opt =>
+    {
+        opt.Window = TimeSpan.FromMinutes(1);
+        opt.PermitLimit = builder.Environment.IsEnvironment("Testing") ? 10000 : 30;
+        opt.QueueLimit = 0;
+    });
+});
+
 
 // -----------------------------
 // Swagger
@@ -350,6 +395,8 @@ app.UseStaticFiles();
 app.UseAuthentication();
 
 app.UseAuthorization();
+
+app.UseRateLimiter();
 
 
 // -----------------------------

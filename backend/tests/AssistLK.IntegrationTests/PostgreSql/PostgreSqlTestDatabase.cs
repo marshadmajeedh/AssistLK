@@ -163,6 +163,7 @@ public static class PostgreSqlTestDatabase
         // Never truncate __EFMigrationsHistory
         const string truncateSql = """
             TRUNCATE TABLE
+                "RegistrationChallenges",
                 "ProblemAnalyses",
                 "ServiceRequests",
                 "AgentMemories",

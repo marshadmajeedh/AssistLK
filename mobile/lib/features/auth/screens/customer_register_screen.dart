@@ -10,6 +10,7 @@ import '../../../shared/widgets/app_button.dart';
 import '../../../shared/widgets/app_image_asset.dart';
 import '../../../shared/widgets/app_text_field.dart';
 import '../providers/auth_provider.dart';
+import 'customer_phone_otp_screen.dart';
 
 class CustomerRegisterScreen extends StatefulWidget {
   const CustomerRegisterScreen({super.key});
@@ -44,7 +45,7 @@ class _CustomerRegisterScreenState extends State<CustomerRegisterScreen> {
       return;
     }
 
-    final success = await context.read<AuthProvider>().register(
+    final challenge = await context.read<AuthProvider>().registerStart(
       fullName: _nameController.text.trim(),
       email: _emailController.text.trim(),
       password: _passwordController.text,
@@ -52,9 +53,14 @@ class _CustomerRegisterScreenState extends State<CustomerRegisterScreen> {
       role: 'Customer',
     );
 
-    if (success && mounted) {
-      // Also works when this screen is hosted without the app session boundary.
-      Navigator.of(context).popUntil((route) => route.isFirst);
+    if (challenge != null && mounted) {
+      Navigator.of(context).push(
+        MaterialPageRoute(
+          builder: (context) => CustomerPhoneOtpScreen(
+            challenge: challenge,
+          ),
+        ),
+      );
     }
   }
 
@@ -170,12 +176,23 @@ class _CustomerRegisterScreenState extends State<CustomerRegisterScreen> {
                             AppTextField(
                               controller: _phoneController,
                               label: 'Phone Number',
-                              hint: 'e.g. 0771234567',
+                              hint: '077 123 4567',
                               keyboardType: TextInputType.phone,
                               prefixIcon: const Icon(
                                 Icons.phone_outlined,
                                 color: AppColors.textSecondary,
                               ),
+                              validator: (value) {
+                                if (value == null || value.trim().isEmpty) {
+                                  return 'Phone number is required.';
+                                }
+                                final clean = value.replaceAll(RegExp(r'[\s\-]'), '');
+                                final validMobile = RegExp(r'^(?:07\d{8}|\+947\d{8}|947\d{8})$');
+                                if (!validMobile.hasMatch(clean)) {
+                                  return 'Please enter a valid mobile number (e.g. 077 123 4567).';
+                                }
+                                return null;
+                              },
                             ),
                             const SizedBox(height: AppSpacing.md),
 

@@ -6,3 +6,6 @@ langchain-google-genai
 langgraph
 pydantic
 python-dotenv
+httpx
+pytest
+pytest-asyncio

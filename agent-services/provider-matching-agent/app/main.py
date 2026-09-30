@@ -8,6 +8,14 @@ from langgraph.types import Command
 
 app = FastAPI(title="Provider Matching Agent API")
 
+@app.get("/health")
+async def health():
+    return {
+        "status": "healthy",
+        "service": "provider-matching-agent",
+        "model": "gemini-3.6-flash"
+    }
+
 class ProviderCandidateDTO(BaseModel):
     model_config = ConfigDict(populate_by_name=True)
 

@@ -31,6 +31,22 @@ public class RegistrationChallengeRepository : IRegistrationChallengeRepository
         return Task.CompletedTask;
     }
 
+    public async Task<int> DeleteObsoleteChallengesAsync(DateTime obsoleteCutoffUtc, CancellationToken cancellationToken = default)
+    {
+        var obsolete = await _context.RegistrationChallenges
+            .Where(c => c.ExpiresAtUtc <= obsoleteCutoffUtc || (c.IsConsumed && c.UpdatedAt <= obsoleteCutoffUtc))
+            .ToListAsync(cancellationToken);
+
+        if (obsolete.Count == 0)
+        {
+            return 0;
+        }
+
+        _context.RegistrationChallenges.RemoveRange(obsolete);
+        await _context.SaveChangesAsync(cancellationToken);
+        return obsolete.Count;
+    }
+
     public async Task SaveChangesAsync(CancellationToken cancellationToken = default)
     {
         await _context.SaveChangesAsync(cancellationToken);

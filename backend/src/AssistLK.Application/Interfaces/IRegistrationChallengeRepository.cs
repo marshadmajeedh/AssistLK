@@ -16,6 +16,10 @@ public interface IRegistrationChallengeRepository
         RegistrationChallenge challenge,
         CancellationToken cancellationToken = default);
 
+    Task<int> DeleteObsoleteChallengesAsync(
+        DateTime obsoleteCutoffUtc,
+        CancellationToken cancellationToken = default);
+
     Task SaveChangesAsync(
         CancellationToken cancellationToken = default);
 }

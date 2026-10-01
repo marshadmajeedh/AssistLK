@@ -181,7 +181,8 @@ describe("ServiceRequestDetailPage", () => {
 
       renderDetailPage();
 
-      expect(await screen.findByText("Cancelled")).toBeInTheDocument();
+      const cancelledBadges = await screen.findAllByText("Cancelled");
+      expect(cancelledBadges).toHaveLength(2);
       expect(
         screen.queryByRole("button", { name: /analyze/i })
       ).not.toBeInTheDocument();
@@ -514,7 +515,8 @@ describe("ServiceRequestDetailPage", () => {
         expect(serviceRequestService.cancel).toHaveBeenCalledWith("req-100");
       });
 
-      expect(await screen.findByText("Cancelled")).toBeInTheDocument();
+      const cancelledBadges = await screen.findAllByText("Cancelled");
+      expect(cancelledBadges).toHaveLength(2);
       expect(
         screen.queryByRole("button", { name: /cancel request/i })
       ).not.toBeInTheDocument();

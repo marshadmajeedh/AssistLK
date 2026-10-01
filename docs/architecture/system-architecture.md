@@ -1,6 +1,6 @@
 # AssistLK System Architecture
 
-> **Implementation scope:** C1 uses the Python runtime described below. Later-component lifecycle examples describe the intended platform and do not establish completed implementations.
+> **Implementation scope:** Components 1 and 3 use Python services through ASP.NET adapters/application services. Later-component lifecycle examples describe intended platform behavior and do not establish completed implementations.
 
 ## 1. Introduction
 
@@ -104,9 +104,9 @@ Dependencies point inward toward domain and application abstractions. Controller
 
 ## 7. Agents Layer and Python service
 
-`AssistLK.Agents` contains `IAgent`, orchestration/registry abstractions, shared tool and safety abstractions, typed models, `ExternalProblemUnderstandingAgentAdapter`, and `ProblemUnderstandingHttpClient`.
+`AssistLK.Agents` contains `IAgent`, orchestration/registry abstractions, shared tool and safety abstractions, typed models, `ExternalProblemUnderstandingAgentAdapter`, `ProblemUnderstandingHttpClient`, and the typed `QuotationBookingAgentClient`.
 
-Component 1 reasoning runs only in `agent-services/problem-understanding-agent/`. Python owns the request-scoped LangGraph workflow and deterministic Python tools. ASP.NET owns authorization, lifecycle, persistence, monitoring, and failure recovery. Python has no database ownership. See [canonical agent architecture](../../agent-services/README.md) and [service details](../../agent-services/problem-understanding-agent/README.md).
+Component 1 reasoning runs in `agent-services/problem-understanding-agent/`. Component 3 quotation validation and the human approval interrupt run in `agent-services/quotation-booking-agent/`, called by the ASP.NET quotation application service. ASP.NET owns authorization, quotation lifecycle, booking persistence, and recovery; Python has no database ownership. C3 workflow checkpoints are currently in memory and do not survive Python process restarts. See [canonical agent architecture](../../agent-services/README.md), [C1 service details](../../agent-services/problem-understanding-agent/README.md), and [C3 service details](../../agent-services/quotation-booking-agent/README.md).
 
 ## 8. Domain Layer
 

@@ -13,12 +13,16 @@ using AssistLK.Api.Authentication;
 using AssistLK.Application.Interfaces;
 using AssistLK.Application.Services;
 using AssistLK.Application.Services.Auth;
+using AssistLK.Application.Quotations.DTOs;
 using AssistLK.Domain.Entities;
+using FluentValidation;
+using FluentValidation.AspNetCore;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.IdentityModel.Tokens;
 using Microsoft.OpenApi.Models;
 using dotenv.net;
+using AssistLK.Infrastructure.Repositories;
 
 // Load local .env configuration into environment variables before builder initialization
 Program.LoadDotEnv();
@@ -75,6 +79,11 @@ builder.Services
                 allowIntegerValues: false));
     });
 
+builder.Services
+    .AddFluentValidationAutoValidation()
+    .AddFluentValidationClientsideAdapters()
+    .AddValidatorsFromAssemblyContaining<CreateQuotationDtoValidator>();
+
 
 builder.Services.AddScoped<
     IPasswordHasher<User>,
@@ -105,6 +114,11 @@ builder.Services.AddScoped<AgentContextService>();
 
 builder.Services.AddScoped<AgentSafetyService>();
 
+builder.Services.AddScoped<IQuotationRepository, QuotationRepository>();
+builder.Services.AddScoped<IBookingRepository, BookingRepository>();
+builder.Services.AddScoped<AssistLK.Application.Services.Quotations.IQuotationService,
+    AssistLK.Application.Services.Quotations.QuotationService>();
+
 builder.Services.AddSingleton<
     AgentSafetyPolicyEngine>();
 
@@ -131,6 +145,8 @@ builder.Services.AddHttpClient<IProblemUnderstandingClient, ProblemUnderstanding
     client.BaseAddress = new Uri(baseUrl);
     client.Timeout = TimeSpan.FromSeconds(options.TimeoutSeconds > 0 ? options.TimeoutSeconds : 45);
 });
+
+builder.Services.AddHttpClient<IQuotationBookingAgentClient, QuotationBookingAgentClient>();
 
 // Provider Matching Microservice Client
 builder.Services.AddHttpClient<AssistLK.Application.Services.Providers.IProviderMatchingService, AssistLK.Application.Services.Providers.ProviderMatchingService>(client =>
@@ -261,7 +277,6 @@ builder.Services.AddSwaggerGen(options =>
                 "Enter JWT token."
         });
 
-
     options.AddSecurityRequirement(
         new OpenApiSecurityRequirement
         {
@@ -313,6 +328,9 @@ builder.Services.AddCors(options =>
 
 
 builder.Services.AddHealthChecks();
+
+//component 3 - Service Request Lookup.
+builder.Services.AddScoped<IServiceRequestLookup, ServiceRequestLookup>();
 
 
 var app = builder.Build();

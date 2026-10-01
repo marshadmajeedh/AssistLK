@@ -8,6 +8,7 @@ import '../models/location_source.dart';
 import '../widgets/location_attribution.dart';
 // FeedbackScreen එක සඳහා අලුත් import එක
 import '../../feedback/screens/feedback_screen.dart';
+import '../../feedback/screens/feedback_service.dart';
 
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
@@ -19,6 +20,7 @@ import '../../../../shared/theme/app_text_styles.dart';
 import '../../../../shared/widgets/app_button.dart';
 import '../../../../shared/widgets/app_card.dart';
 import '../models/canonical_service_category.dart';
+import '../models/completion_record_model.dart';
 import '../models/problem_understanding_result_model.dart';
 import '../models/service_request_model.dart';
 import '../models/service_request_status.dart';
@@ -847,58 +849,24 @@ class _ServiceRequestDetailScreenState
 
       // Job Completed UI සහ Feedback Button එක
       case ServiceRequestStatus.completed:
-        return AppCard(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              const Row(
-                children: [
-                  Icon(
-                    Icons.check_circle_rounded,
-                    color: AppColors.success,
-                    size: 24,
-                  ),
-                  SizedBox(width: AppSpacing.sm),
-                  Expanded(
-                    child: Text(
-                      'Job Completed',
-                      style: AppTextStyles.cardHeading,
-                    ),
-                  ),
-                ],
-              ),
-              const SizedBox(height: AppSpacing.xs),
-              Text(
-                'Your service request has been successfully completed. We would love to hear your thoughts!',
-                style: AppTextStyles.body.copyWith(
-                  color: AppColors.textSecondary,
-                ),
-              ),
+        return Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            if (request.completionRecord != null) ...[
+              _ProofOfWorkCard(record: request.completionRecord!),
               const SizedBox(height: AppSpacing.md),
-              AppButton(
-                text: 'Provide Feedback',
-                onPressed: () {
-                  final serviceJobId = request.serviceJobId;
-                  if (serviceJobId == null || serviceJobId.isEmpty) {
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      const SnackBar(
-                        content: Text(
-                          'Feedback is unavailable until a service job is assigned.',
-                        ),
-                      ),
-                    );
-                    return;
-                  }
-
-                  Navigator.of(context).push(
-                    MaterialPageRoute(
-                      builder: (_) => FeedbackScreen(jobId: serviceJobId),
+              request.hasFeedback
+                  ? _FeedbackSubmittedCard(
+                      rating: request.feedbackRating,
+                      comment: request.feedbackComment,
+                    )
+                  : _FeedbackCard(
+                      jobId: request.serviceJobId,
+                      onSubmitted: _refreshRequestAfterFeedback,
                     ),
-                  );
-                },
-              ),
-            ],
-          ),
+            ] else
+              _CompletedJobCard(request: request, context: context),
+          ],
         );
 
       case ServiceRequestStatus.cancelled:
@@ -921,8 +889,277 @@ class _ServiceRequestDetailScreenState
           ),
         );
 
-      default:
-        return const SizedBox.shrink();
     }
+  }
+
+  Future<void> _refreshRequestAfterFeedback() async {
+    await context
+        .read<ServiceRequestProvider>()
+        .loadRequestById(widget.requestId);
+  }
+}
+
+class _ProofOfWorkCard extends StatelessWidget {
+  final CompletionRecordModel record;
+
+  const _ProofOfWorkCard({required this.record});
+
+  @override
+  Widget build(BuildContext context) {
+    final imageUrl = record.proofOfWorkImageUrl?.trim();
+
+    return AppCard(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Text('Proof of Work', style: AppTextStyles.cardHeading),
+          const SizedBox(height: AppSpacing.sm),
+          ClipRRect(
+            borderRadius: BorderRadius.circular(AppRadius.medium),
+            child: AspectRatio(
+              aspectRatio: 16 / 9,
+              child: imageUrl == null || imageUrl.isEmpty
+                  ? const _ProofImageFallback()
+                  : Image.network(
+                      imageUrl,
+                      fit: BoxFit.cover,
+                      loadingBuilder: (context, child, loadingProgress) {
+                        if (loadingProgress == null) return child;
+                        return const Center(
+                          child: CircularProgressIndicator(),
+                        );
+                      },
+                      errorBuilder: (context, error, stackTrace) =>
+                          const _ProofImageFallback(),
+                    ),
+            ),
+          ),
+          if (record.summaryNotes.trim().isNotEmpty) ...[
+            const SizedBox(height: AppSpacing.md),
+            Text(record.summaryNotes.trim(), style: AppTextStyles.body),
+          ],
+        ],
+      ),
+    );
+  }
+}
+
+class _ProofImageFallback extends StatelessWidget {
+  const _ProofImageFallback();
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      color: AppColors.primarySurface,
+      alignment: Alignment.center,
+      child: const Icon(
+        Icons.image_not_supported_outlined,
+        color: AppColors.textSecondary,
+        size: 44,
+      ),
+    );
+  }
+}
+
+class _FeedbackCard extends StatefulWidget {
+  final String? jobId;
+  final Future<void> Function() onSubmitted;
+
+  const _FeedbackCard({required this.jobId, required this.onSubmitted});
+
+  @override
+  State<_FeedbackCard> createState() => _FeedbackCardState();
+}
+
+class _FeedbackCardState extends State<_FeedbackCard> {
+  final TextEditingController _controller = TextEditingController();
+  late final FeedbackService _feedbackService;
+  int _rating = 0;
+  bool _isSubmitting = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _feedbackService = FeedbackService(
+      apiClient: context.read<AuthProvider>().authService.apiClient,
+    );
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  Future<void> _submit() async {
+    final jobId = widget.jobId;
+    final comment = _controller.text.trim();
+    if (jobId == null || jobId.isEmpty) {
+      _showMessage('Feedback is unavailable until a service job is assigned.');
+      return;
+    }
+    if (_rating == 0) {
+      _showMessage('Please select a rating.');
+      return;
+    }
+    if (comment.isEmpty) {
+      _showMessage('Please enter your feedback.');
+      return;
+    }
+
+    setState(() => _isSubmitting = true);
+    try {
+      final result = await _feedbackService.submitFeedback(
+        jobId: jobId,
+        rating: _rating,
+        comment: comment,
+      );
+      if (!mounted) return;
+      if (result == null) {
+        _showMessage('Failed to send feedback. Please try again.');
+      } else {
+        _controller.clear();
+        _showMessage(result['message'] as String? ?? 'Thank you for your feedback.');
+        await widget.onSubmitted();
+      }
+    } on FeedbackSubmissionException catch (error) {
+      if (mounted) _showMessage(error.message);
+    } finally {
+      if (mounted) setState(() => _isSubmitting = false);
+    }
+  }
+
+  void _showMessage(String message) {
+    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(message)));
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AppCard(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Text('Feedback & Rating', style: AppTextStyles.cardHeading),
+          const SizedBox(height: AppSpacing.sm),
+          Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: List.generate(5, (index) {
+              final value = index + 1;
+              return IconButton(
+                tooltip: '$value star${value == 1 ? '' : 's'}',
+                icon: Icon(
+                  value <= _rating ? Icons.star : Icons.star_border,
+                  color: AppColors.warning,
+                ),
+                onPressed: () => setState(() => _rating = value),
+              );
+            }),
+          ),
+          const SizedBox(height: AppSpacing.sm),
+          TextField(
+            controller: _controller,
+            maxLines: 4,
+            decoration: const InputDecoration(
+              labelText: 'Review or feedback',
+              hintText: 'Tell us about your experience',
+              border: OutlineInputBorder(),
+            ),
+          ),
+          const SizedBox(height: AppSpacing.md),
+          AppButton(
+            text: 'Submit Feedback',
+            isLoading: _isSubmitting,
+            onPressed: _isSubmitting ? null : _submit,
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _FeedbackSubmittedCard extends StatelessWidget {
+  final int? rating;
+  final String? comment;
+
+  const _FeedbackSubmittedCard({this.rating, this.comment});
+
+  @override
+  Widget build(BuildContext context) {
+    final safeRating = rating?.clamp(0, 5) ?? 0;
+    final trimmedComment = comment?.trim() ?? '';
+
+    return AppCard(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Row(
+            children: [
+              Icon(Icons.check_circle_rounded, color: AppColors.success),
+              SizedBox(width: AppSpacing.sm),
+              Expanded(
+                child: Text(
+                  'Feedback Submitted',
+                  style: AppTextStyles.cardHeading,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: AppSpacing.sm),
+          Row(
+            children: List.generate(5, (index) {
+              return Icon(
+                index < safeRating ? Icons.star : Icons.star_border,
+                color: AppColors.warning,
+              );
+            }),
+          ),
+          if (trimmedComment.isNotEmpty) ...[
+            const SizedBox(height: AppSpacing.sm),
+            Text(trimmedComment, style: AppTextStyles.body),
+          ],
+        ],
+      ),
+    );
+  }
+}
+
+class _CompletedJobCard extends StatelessWidget {
+  final ServiceRequestModel request;
+  final BuildContext context;
+
+  const _CompletedJobCard({required this.request, required this.context});
+
+  @override
+  Widget build(BuildContext _) {
+    return AppCard(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Row(
+            children: [
+              Icon(Icons.check_circle_rounded, color: AppColors.success, size: 24),
+              SizedBox(width: AppSpacing.sm),
+              Expanded(child: Text('Job Completed', style: AppTextStyles.cardHeading)),
+            ],
+          ),
+          const SizedBox(height: AppSpacing.xs),
+          Text(
+            'Your service request has been completed. Feedback will be available when the job details are ready.',
+            style: AppTextStyles.body.copyWith(color: AppColors.textSecondary),
+          ),
+          const SizedBox(height: AppSpacing.md),
+          AppButton(
+            text: 'Provide Feedback',
+            onPressed: request.serviceJobId == null
+                ? null
+                : () => Navigator.of(context).push(
+                      MaterialPageRoute(
+                        builder: (_) => FeedbackScreen(jobId: request.serviceJobId!),
+                      ),
+                    ),
+          ),
+        ],
+      ),
+    );
   }
 }

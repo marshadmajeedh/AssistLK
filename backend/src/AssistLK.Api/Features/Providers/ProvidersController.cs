@@ -314,14 +314,21 @@ public class ProvidersController : ControllerBase
             UpdatedAt = DateTime.UtcNow
         }).ToList();
 
-        using var transaction = await _dbContext.Database.BeginTransactionAsync(cancellationToken);
-        _dbContext.Users.Add(user);
-        _dbContext.ProviderProfiles.Add(profile);
-        _dbContext.ProviderLocations.Add(location);
-        _dbContext.ProviderSkills.AddRange(skills);
-        
-        await _dbContext.SaveChangesAsync(cancellationToken);
-        await transaction.CommitAsync(cancellationToken);
+        var strategy = _dbContext.Database.CreateExecutionStrategy();
+
+await strategy.ExecuteAsync(async () =>
+{
+    await using var transaction = 
+        await _dbContext.Database.BeginTransactionAsync(cancellationToken);
+
+    _dbContext.Users.Add(user);
+    _dbContext.ProviderProfiles.Add(profile);
+    _dbContext.ProviderLocations.Add(location);
+    _dbContext.ProviderSkills.AddRange(skills);
+
+    await _dbContext.SaveChangesAsync(cancellationToken);
+    await transaction.CommitAsync(cancellationToken);
+});
 
         return Ok(new { message = "Provider registered successfully." });
     }

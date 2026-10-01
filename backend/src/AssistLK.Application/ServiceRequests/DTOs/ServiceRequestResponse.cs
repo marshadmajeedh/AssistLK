@@ -25,6 +25,12 @@ public class ServiceRequestResponse
 
     public ProblemAnalysisSummaryDto? LatestAnalysis { get; set; }
 
+    public CompletionRecordResponse? CompletionRecord { get; set; }
+
+    public bool HasFeedback { get; set; }
+    public int? FeedbackRating { get; set; }
+    public string? FeedbackComment { get; set; }
+
     public IReadOnlyList<ServiceRequestClarificationDto> Clarifications { get; set; }
         = Array.Empty<ServiceRequestClarificationDto>();
 }

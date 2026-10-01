@@ -126,11 +126,17 @@ public class ServiceRequestService : IServiceRequestService
             customerId,
             cancellationToken);
 
+        var activityByRequestId = await _serviceJobRepository
+            .GetActivityByServiceRequestIdsAsync(
+                requests.Select(request => request.Id),
+                cancellationToken);
+
         var responses = new List<ServiceRequestResponse>(requests.Count);
         foreach (var request in requests)
         {
             responses.Add(await MapResponse(
                 request,
+                activityByRequestId.GetValueOrDefault(request.Id),
                 cancellationToken: cancellationToken));
         }
 
@@ -867,6 +873,7 @@ public class ServiceRequestService : IServiceRequestService
 
     private async Task<ServiceRequestResponse> MapResponse(
         ServiceRequest serviceRequest,
+        ServiceRequestActivityData? activity = null,
         bool includeVisualEvidence = false,
         CancellationToken cancellationToken = default)
     {
@@ -897,12 +904,20 @@ public class ServiceRequestService : IServiceRequestService
                 .ToArray()
             : Array.Empty<ServiceRequestClarificationDto>();
 
+        activity ??= (await _serviceJobRepository
+            .GetActivityByServiceRequestIdsAsync(
+                new[] { serviceRequest.Id },
+                cancellationToken))
+            .GetValueOrDefault(serviceRequest.Id);
+
         return new ServiceRequestResponse
         {
             ServiceRequestId = serviceRequest.Id,
-            ServiceJobId = await _serviceJobRepository.GetIdByServiceRequestIdAsync(
-                serviceRequest.Id,
-                cancellationToken),
+            ServiceJobId = activity?.ServiceJobId,
+            CompletionRecord = activity?.CompletionRecord,
+            HasFeedback = activity?.Feedback != null,
+            FeedbackRating = activity?.Feedback?.Rating,
+            FeedbackComment = activity?.Feedback?.Comment,
             EvidenceRevision = serviceRequest.EvidenceRevision,
             CustomerId = serviceRequest.CustomerId,
             CategoryHint = serviceRequest.CategoryHint,

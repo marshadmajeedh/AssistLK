@@ -82,7 +82,11 @@ builder.Services.AddSingleton<AssistLK.Application.Attachments.IServiceRequestAt
 
 // DbContext Registration (PostgreSQL / Npgsql)
 builder.Services.AddDbContext<ApplicationDbContext>(options =>
-    options.UseNpgsql(connectionString));
+    options.UseNpgsql(connectionString, npgsqlOptions =>
+        npgsqlOptions.EnableRetryOnFailure(
+            maxRetryCount: 5,
+            maxRetryDelay: TimeSpan.FromSeconds(10),
+            errorCodesToAdd: null)));
 
 builder.Services.AddScoped<IServiceJobsDbContext>(
     serviceProvider => serviceProvider.GetRequiredService<ApplicationDbContext>());
@@ -401,7 +405,10 @@ if (!Directory.Exists(uploadsPath))
 
 app.UseCors("AssistLKClients");
 
-app.UseHttpsRedirection();
+if (!app.Environment.IsDevelopment())
+{
+    app.UseHttpsRedirection();
+}
 
 app.UseStaticFiles();
 

@@ -52,6 +52,10 @@ class AuthService {
     if (error is DioException) {
       final data = error.response?.data;
 
+      if (error.response?.statusCode == 500) {
+        return 'The server failed to process the request. Check the API logs.';
+      }
+
       if (data is Map && data['message'] != null) {
         return data['message'].toString();
       }

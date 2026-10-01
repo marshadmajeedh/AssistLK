@@ -2,6 +2,7 @@ using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Storage;
+using System.Diagnostics;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using System.Security.Claims;
@@ -13,6 +14,7 @@ using AssistLK.Domain.Entities;
 using AssistLK.Domain.Enums;
 using AssistLK.Api.Hubs;
 using Microsoft.AspNetCore.SignalR;
+using Npgsql;
 
 namespace AssistLK.Api.Controllers
 {
@@ -26,6 +28,8 @@ namespace AssistLK.Api.Controllers
         private readonly IProofOfWorkStorage _proofOfWorkStorage;
         private readonly IHubContext<TrackingHub> _trackingHubContext;
         private readonly FeedbackApplicationService _feedbackApplicationService;
+        private readonly AgentWorkflowService _agentWorkflowService;
+        private readonly AgentMonitoringService _agentMonitoringService;
 
         public ServiceJobsController(
             ApplicationDbContext context,
@@ -33,7 +37,9 @@ namespace AssistLK.Api.Controllers
             HttpClient httpClient,
             IProofOfWorkStorage proofOfWorkStorage,
             IHubContext<TrackingHub> trackingHubContext,
-            FeedbackApplicationService feedbackApplicationService)
+            FeedbackApplicationService feedbackApplicationService,
+            AgentWorkflowService agentWorkflowService,
+            AgentMonitoringService agentMonitoringService)
         {
             _applicationDbContext = context;
             _assistLkDbContext = serviceRequestContext;
@@ -41,6 +47,8 @@ namespace AssistLK.Api.Controllers
             _proofOfWorkStorage = proofOfWorkStorage;
             _trackingHubContext = trackingHubContext;
             _feedbackApplicationService = feedbackApplicationService;
+            _agentWorkflowService = agentWorkflowService;
+            _agentMonitoringService = agentMonitoringService;
         }
 
         [HttpPut("{id:guid}/status")]
@@ -95,15 +103,13 @@ namespace AssistLK.Api.Controllers
                     note = request.Notes ?? ""
                 };
 
-                var response = await _httpClient.PostAsJsonAsync("http://localhost:8000/agent/validate", agentPayload);
-                if (!response.IsSuccessStatusCode)
+                var validation = await ExecuteValidationAsync(
+                    agentPayload,
+                    HttpContext.RequestAborted);
+                if (!validation.ServiceAvailable)
                     return StatusCode(500, new { message = "AI Validation Service unavailable" });
 
-                var content = await response.Content.ReadAsStringAsync();
-                var agentResult = JsonSerializer.Deserialize<AgentValidationResponse>(content, new JsonSerializerOptions
-                {
-                    PropertyNameCaseInsensitive = true
-                });
+                var agentResult = validation.Result;
 
                 if (agentResult?.Status == "INVALID")
                 {
@@ -141,10 +147,12 @@ namespace AssistLK.Api.Controllers
                         _applicationDbContext.CompletionRecords.Add(completion);
                     }
 
+                    var completedAt = DateTime.UtcNow;
+                    job.CompletedAt = completedAt;
                     completion.WorkSummary = request.Notes ?? "Work completed";
                     completion.ProofOfWorkImageUrl = request.ProofOfWorkImageUrl;
                     completion.AdditionalCost = 0;
-                    completion.CompletedAt = DateTime.UtcNow;
+                    completion.CompletedAt = completedAt;
                 }
 
                 ServiceRequest? serviceRequest = null;
@@ -187,6 +195,91 @@ namespace AssistLK.Api.Controllers
             {
                 return StatusCode(500, new { message = "An error occurred while updating job status", error = ex.Message });
             }
+        }
+
+        private async Task<(AgentValidationResponse? Result, bool ServiceAvailable)> ExecuteValidationAsync(
+            object payload,
+            CancellationToken cancellationToken)
+        {
+            const string agentName = "TrackingValidationAgent";
+            var workflow = await _agentWorkflowService.CreateAsync(
+                null,
+                "TrackingValidation",
+                JsonSerializer.Serialize(payload));
+            await _agentWorkflowService.SetStatusAsync(workflow.Id, "Running");
+            var execution = await _agentWorkflowService.StartExecutionAsync(
+                workflow.Id,
+                agentName,
+                payload);
+            var stopwatch = Stopwatch.StartNew();
+
+            try
+            {
+                using var response = await _httpClient.PostAsJsonAsync(
+                    "http://localhost:8000/agent/validate",
+                    payload,
+                    cancellationToken);
+
+                if (!response.IsSuccessStatusCode)
+                {
+                    await CompleteValidationExecutionAsync(
+                        workflow.Id,
+                        execution.Id,
+                        agentName,
+                        false,
+                        new { statusCode = (int)response.StatusCode },
+                        stopwatch);
+                    return (null, false);
+                }
+
+                var content = await response.Content.ReadAsStringAsync(cancellationToken);
+                var result = JsonSerializer.Deserialize<AgentValidationResponse>(
+                    content,
+                    new JsonSerializerOptions { PropertyNameCaseInsensitive = true });
+                var success = result?.Status != "INVALID";
+
+                await CompleteValidationExecutionAsync(
+                    workflow.Id,
+                    execution.Id,
+                    agentName,
+                    success,
+                    result,
+                    stopwatch);
+                return (result, true);
+            }
+            catch
+            {
+                await CompleteValidationExecutionAsync(
+                    workflow.Id,
+                    execution.Id,
+                    agentName,
+                    false,
+                    null,
+                    stopwatch);
+                throw;
+            }
+        }
+
+        private async Task CompleteValidationExecutionAsync(
+            Guid workflowId,
+            Guid executionId,
+            string agentName,
+            bool success,
+            object? output,
+            Stopwatch stopwatch)
+        {
+            stopwatch.Stop();
+            await _agentWorkflowService.CompleteExecutionAsync(executionId, success, output);
+            await _agentWorkflowService.SetStatusAsync(
+                workflowId,
+                success ? "Completed" : "Failed");
+            await _agentMonitoringService.RecordAsync(
+                workflowId,
+                executionId,
+                agentName,
+                success ? "Completed" : "Failed",
+                stopwatch.ElapsedMilliseconds,
+                0);
         }
 
         private static ServiceRequestStatus MapServiceRequestStatus(
@@ -236,8 +329,7 @@ namespace AssistLK.Api.Controllers
                     return BadRequest(new { message = "Proof of work must be a JPEG, PNG, or WebP image." });
                 }
 
-                var validationResponse = await _httpClient.PostAsJsonAsync(
-                    "http://localhost:8000/agent/validate",
+                var validation = await ExecuteValidationAsync(
                     new
                     {
                         job_id = id.ToString(),
@@ -248,15 +340,12 @@ namespace AssistLK.Api.Controllers
                     },
                     cancellationToken);
 
-                if (!validationResponse.IsSuccessStatusCode)
+                if (!validation.ServiceAvailable)
                 {
                     return StatusCode(500, new { message = "AI Validation Service unavailable" });
                 }
 
-                var validationContent = await validationResponse.Content.ReadAsStringAsync(cancellationToken);
-                var validationResult = JsonSerializer.Deserialize<AgentValidationResponse>(
-                    validationContent,
-                    new JsonSerializerOptions { PropertyNameCaseInsensitive = true });
+                var validationResult = validation.Result;
 
                 if (validationResult?.Status == "INVALID")
                 {
@@ -281,6 +370,7 @@ namespace AssistLK.Api.Controllers
 
                 var oldStatus = job.Status;
                 job.Status = ServiceJobStatus.Completed;
+                job.CompletedAt = DateTime.UtcNow;
                 _applicationDbContext.ServiceStatusHistories.Add(new ServiceStatusHistory
                 {
                     Id = Guid.NewGuid(),
@@ -444,6 +534,7 @@ namespace AssistLK.Api.Controllers
         }
 
         [HttpPost("{id:guid}/feedback")]
+        [Authorize(Roles = "Customer")]
         public async Task<IActionResult> SubmitFeedback(
             Guid id,
             [FromBody] SubmitFeedbackDto dto,
@@ -458,7 +549,23 @@ namespace AssistLK.Api.Controllers
                     return NotFound(new { Message = "ServiceJob sapadla nahi." });
                 }
 
-                await using var transaction = await _applicationDbContext.Database.BeginTransactionAsync();
+                var customerIdClaim = User.FindFirstValue(ClaimTypes.NameIdentifier);
+                if (!Guid.TryParse(customerIdClaim, out var customerId))
+                {
+                    return Unauthorized(new { message = "Customer identity is missing or invalid." });
+                }
+
+                var ownsJob = job.ServiceRequestId.HasValue &&
+                    await _assistLkDbContext.ServiceRequests.AnyAsync(
+                        request => request.Id == job.ServiceRequestId.Value &&
+                                   request.CustomerId == customerId,
+                        cancellationToken);
+                if (!ownsJob)
+                {
+                    return Forbid();
+                }
+
+                await using var transaction = await _applicationDbContext.Database.BeginTransactionAsync(cancellationToken);
                 var applicationConnection = _applicationDbContext.Database.GetDbConnection();
                 if (!ReferenceEquals(_assistLkDbContext.Database.GetDbConnection(), applicationConnection))
                 {
@@ -495,7 +602,7 @@ namespace AssistLK.Api.Controllers
                 var result = await _feedbackApplicationService.SubmitAsync(
                     id,
                     new SubmitFeedbackCommand(
-                        dto.CustomerId,
+                        customerId,
                         dto.Rating,
                         dto.Comment,
                         sentimentResult.IsNegative || dto.Rating <= 2,
@@ -513,6 +620,14 @@ namespace AssistLK.Api.Controllers
                     result.Message
                 });
             }
+            catch (DuplicateFeedbackException ex)
+            {
+                return Conflict(new { message = ex.Message });
+            }
+            catch (DbUpdateException ex) when (IsUniqueConstraintViolation(ex))
+            {
+                return Conflict(new { message = "Feedback has already been submitted for this service job." });
+            }
             catch (ArgumentException ex)
             {
                 return BadRequest(new { message = ex.Message });
@@ -529,6 +644,20 @@ namespace AssistLK.Api.Controllers
             {
                 return StatusCode(500, new { message = "Error submitting feedback", error = ex.Message });
             }
+        }
+
+        private static bool IsUniqueConstraintViolation(DbUpdateException exception)
+        {
+            for (Exception? current = exception; current != null; current = current.InnerException)
+            {
+                if (current is PostgresException postgresException &&
+                    postgresException.SqlState == PostgresErrorCodes.UniqueViolation)
+                {
+                    return true;
+                }
+            }
+
+            return false;
         }
     }
 
@@ -558,7 +687,6 @@ namespace AssistLK.Api.Controllers
 
     public class SubmitFeedbackDto
     {
-        public Guid CustomerId { get; set; }
         public int Rating { get; set; }
         public string Comment { get; set; } = string.Empty;
     }

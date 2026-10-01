@@ -1,8 +1,10 @@
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
 
 // ෆයිල් දෙකම එකම ෆෝල්ඩරයේ තියෙන නිසා කෙළින්ම නම විතරක් දුන්නා
 import 'feedback_service.dart';
 
+import '../../auth/providers/auth_provider.dart';
 import '../../../shared/theme/app_spacing.dart';
 import '../../../shared/widgets/app_button.dart';
 
@@ -17,11 +19,18 @@ class FeedbackScreen extends StatefulWidget {
 
 class _FeedbackScreenState extends State<FeedbackScreen> {
   final TextEditingController _feedbackController = TextEditingController();
-  final FeedbackService _feedbackService =
-      FeedbackService(); // Service එක මෙතනට ගත්තා
+  late final FeedbackService _feedbackService;
 
   int _selectedRating = 5;
   bool _isLoading = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _feedbackService = FeedbackService(
+      apiClient: context.read<AuthProvider?>()?.authService.apiClient,
+    );
+  }
 
   @override
   void dispose() {
@@ -44,7 +53,6 @@ class _FeedbackScreenState extends State<FeedbackScreen> {
     try {
       result = await _feedbackService.submitFeedback(
         jobId: widget.jobId,
-        customerId: '3fa85f64-5717-4562-b3fc-2c963f66afa6', // දැනට Test Customer ID එකක්
         rating: _selectedRating,
         comment: text,
       );

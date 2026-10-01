@@ -18,6 +18,14 @@ public sealed record FeedbackApplicationResult(
     string Sentiment,
     string Message);
 
+public sealed class DuplicateFeedbackException : InvalidOperationException
+{
+    public DuplicateFeedbackException()
+        : base("Feedback has already been submitted for this service job.")
+    {
+    }
+}
+
 public class FeedbackApplicationService
 {
     private readonly IServiceJobsDbContext _serviceJobsDbContext;
@@ -55,13 +63,18 @@ public class FeedbackApplicationService
                 "Feedback cannot be submitted until a provider is assigned to this service job.");
         }
 
+        if (job.Status != ServiceJobStatus.Completed)
+        {
+            throw new InvalidOperationException(
+                "Feedback can only be submitted after the service job is completed.");
+        }
+
         var feedbackAlreadyExists = await _serviceJobsDbContext.Feedbacks
             .AnyAsync(feedback => feedback.ServiceJobId == serviceJobId, cancellationToken);
 
         if (feedbackAlreadyExists)
         {
-            throw new InvalidOperationException(
-                "Feedback has already been submitted for this service job.");
+            throw new DuplicateFeedbackException();
         }
 
         var feedback = new Feedback

@@ -133,6 +133,14 @@ describe("AI workflow monitoring", () => {
     expect(rows()[0]).toHaveTextContent("RecordedTestAgent");
     expect(service.getMetrics).toHaveBeenCalledTimes(1);
   });
+  it("includes TrackingValidationAgent in the agent filter", async () => {
+    service.getMetrics.mockResolvedValue([
+      ...metrics,
+      { ...metrics[0], id: "metric-tracking", agentName: "TrackingValidationAgent" },
+    ]);
+    await renderLoaded();
+    expect(screen.getByRole("option", { name: "TrackingValidationAgent" })).toBeInTheDocument();
+  });
   it("combines filters, shows filtered-empty state and clears filters", async () => {
     const user = userEvent.setup();
     await renderLoaded();

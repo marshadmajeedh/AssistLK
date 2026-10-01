@@ -15,7 +15,11 @@ public static class DependencyInjection
     {
         services.AddDbContext<AssistLKDbContext>(
             options =>
-                options.UseNpgsql(connectionString)
+                options.UseNpgsql(connectionString, npgsqlOptions =>
+                    npgsqlOptions.EnableRetryOnFailure(
+                        maxRetryCount: 5,
+                        maxRetryDelay: TimeSpan.FromSeconds(10),
+                        errorCodesToAdd: null))
         );
         services.AddScoped<IAgentWorkflowDbContext>(
             provider => provider.GetRequiredService<AssistLKDbContext>()

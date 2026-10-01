@@ -1,10 +1,6 @@
-import 'dart:convert';
+import 'package:dio/dio.dart';
 
-import 'package:http/http.dart' as http;
-
-// ඔයාගේ project එකේ AppConfig file එක තියෙන path එකට මේක වෙනස් කරගන්න.
-// (Agent දුන්න path එක තමයි මේ තියෙන්නේ)
-import '../../../core/config/app_config.dart';
+import '../../../core/api/api_client.dart';
 
 class FeedbackSubmissionException implements Exception {
   final String message;
@@ -13,46 +9,55 @@ class FeedbackSubmissionException implements Exception {
 }
 
 class FeedbackService {
-  // Hardcode කරපු URL එක වෙනුවට AppConfig.apiBaseUrl ලබා ගැනීම
-  static String get baseUrl => '${AppConfig.apiBaseUrl}/service-jobs';
+  final ApiClient _apiClient;
+
+  FeedbackService({ApiClient? apiClient}) : _apiClient = apiClient ?? ApiClient();
 
   Future<Map<String, dynamic>?> submitFeedback({
     required String jobId,
-    required String customerId,
     required int rating,
     required String comment,
   }) async {
-    final url = Uri.parse('$baseUrl/$jobId/feedback');
     try {
-      final response = await http.post(
-        url,
-        headers: {'Content-Type': 'application/json'},
-        body: jsonEncode({
-          'customerId': customerId,
+      final response = await _apiClient.client.post(
+        '/service-jobs/$jobId/feedback',
+        data: {
           'rating': rating,
           'comment': comment,
-        }),
+        },
       );
 
-      if (response.statusCode == 200) {
-        return jsonDecode(
-          response.body,
-        ); // JSON එක Map එකක් විදිහට return කිරීම
-      } else if (response.statusCode == 400) {
-        final responseBody = jsonDecode(response.body);
-        if (responseBody is Map<String, dynamic> &&
-            responseBody['message'] is String &&
-            (responseBody['message'] as String).isNotEmpty) {
-          throw FeedbackSubmissionException(responseBody['message'] as String);
-        }
-      } else {
-        print('Failed. Status Code: ${response.statusCode}');
+      if (response.data is Map) {
+        return Map<String, dynamic>.from(response.data as Map);
       }
-    } on FeedbackSubmissionException {
-      rethrow;
-    } catch (e) {
-      print('Connection Error: $e');
+
+      throw const FeedbackSubmissionException(
+        'The feedback response was invalid. Please try again.',
+      );
+    } on DioException catch (error) {
+      final statusCode = error.response?.statusCode;
+      if (statusCode == 409) {
+        throw const FeedbackSubmissionException(
+          'Feedback already submitted for this service job.',
+        );
+      }
+
+      if (statusCode == 500) {
+        throw const FeedbackSubmissionException(
+          'The server failed to process the request. Check the API logs.',
+        );
+      }
+
+      final responseData = error.response?.data;
+      if (responseData is Map && responseData['message'] is String) {
+        throw FeedbackSubmissionException(responseData['message'] as String);
+      }
+
+      throw FeedbackSubmissionException(
+        statusCode == null
+            ? 'Unable to connect to the server. Please try again.'
+            : 'Failed to submit feedback. Please try again.',
+      );
     }
-    return null;
   }
 }

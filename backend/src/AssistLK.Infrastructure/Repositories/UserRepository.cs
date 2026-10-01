@@ -44,6 +44,18 @@ public class UserRepository : IUserRepository
                 cancellationToken);
     }
 
+    public async Task<bool> VerifiedCustomerPhoneExistsAsync(
+        string normalizedPhoneNumber,
+        CancellationToken cancellationToken = default)
+    {
+        return await _context.Users
+            .AnyAsync(
+                x => x.Role == AssistLK.Domain.Enums.UserRole.Customer
+                     && x.IsPhoneVerified
+                     && x.PhoneNumber == normalizedPhoneNumber,
+                cancellationToken);
+    }
+
     public async Task AddAsync(
         User user,
         CancellationToken cancellationToken = default)

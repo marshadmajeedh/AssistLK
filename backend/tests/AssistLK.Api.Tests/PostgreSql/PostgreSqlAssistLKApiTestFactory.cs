@@ -34,7 +34,10 @@ public class PostgreSqlAssistLKApiTestFactory : WebApplicationFactory<Program>
         Environment.SetEnvironmentVariable("Jwt__Issuer", TestIssuer);
         Environment.SetEnvironmentVariable("Jwt__Audience", TestAudience);
         Environment.SetEnvironmentVariable("Jwt__ExpirationMinutes", "60");
+        Environment.SetEnvironmentVariable("AuthOtp__OtpPepper", "TestPepperValue1234567890ForTestingPurposes!");
     }
+
+    public TestDoubles.TestSmsService TestSms { get; } = new();
 
     protected override void ConfigureWebHost(IWebHostBuilder builder)
     {
@@ -48,7 +51,8 @@ public class PostgreSqlAssistLKApiTestFactory : WebApplicationFactory<Program>
                 ["Jwt:Key"] = TestJwtKey,
                 ["Jwt:Issuer"] = TestIssuer,
                 ["Jwt:Audience"] = TestAudience,
-                ["Jwt:ExpirationMinutes"] = "60"
+                ["Jwt:ExpirationMinutes"] = "60",
+                ["AuthOtp:OtpPepper"] = "TestPepperValue1234567890ForTestingPurposes!"
             });
         });
 
@@ -81,6 +85,13 @@ public class PostgreSqlAssistLKApiTestFactory : WebApplicationFactory<Program>
             services.AddSingleton<IProblemUnderstandingClient>(FakeAgentClient);
             services.AddSingleton<AssistLK.Application.Attachments.IServiceRequestAttachmentStorage,
                 AssistLK.Tests.Shared.FakeAttachmentStorage>();
+
+            var smsDescriptor = services.SingleOrDefault(d => d.ServiceType == typeof(AssistLK.Application.Interfaces.ISmsService));
+            if (smsDescriptor != null)
+            {
+                services.Remove(smsDescriptor);
+            }
+            services.AddSingleton<AssistLK.Application.Interfaces.ISmsService>(TestSms);
         });
     }
 

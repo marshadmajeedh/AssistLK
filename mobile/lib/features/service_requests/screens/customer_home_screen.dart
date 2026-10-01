@@ -3,11 +3,13 @@ import 'package:provider/provider.dart';
 
 import '../../../../shared/theme/app_assets.dart';
 import '../../../../shared/theme/app_colors.dart';
+import '../../../../shared/theme/app_radius.dart';
 import '../../../../shared/theme/app_spacing.dart';
 import '../../../../shared/theme/app_text_styles.dart';
 import '../../../../shared/widgets/app_button.dart';
 import '../../../../shared/widgets/app_card.dart';
 import '../../../../shared/widgets/app_image_asset.dart';
+import '../../../../shared/widgets/empty_state_card.dart';
 import '../../../../shared/widgets/section_header.dart';
 import '../../auth/providers/auth_provider.dart';
 import '../../customer/widgets/home_location_banner.dart';
@@ -47,16 +49,76 @@ class CustomerHomeScreen extends StatelessWidget {
           children: [
             const HomeLocationBanner(),
             const SizedBox(height: AppSpacing.lg),
-            Text(
-              'Welcome, ${user?.fullName ?? 'Customer'}',
-              style: AppTextStyles.pageTitle,
+            Container(
+              width: double.infinity,
+              constraints: const BoxConstraints(minHeight: 135),
+              decoration: BoxDecoration(
+                borderRadius: BorderRadius.circular(AppRadius.large),
+                border: Border.all(color: AppColors.border),
+                color: AppColors.surface,
+              ),
+              clipBehavior: Clip.antiAlias,
+              child: Stack(
+                alignment: Alignment.centerLeft,
+                children: [
+                  const Positioned.fill(
+                    child: AppImageAsset(
+                      assetPath: AppAssets.homeServiceHero,
+                      fit: BoxFit.cover,
+                      fallbackIcon: Icons.home_repair_service_rounded,
+                      semanticLabel: 'Home Service Assistance',
+                    ),
+                  ),
+                  Positioned.fill(
+                    child: Container(
+                      decoration: BoxDecoration(
+                        gradient: LinearGradient(
+                          begin: Alignment.centerLeft,
+                          end: Alignment.centerRight,
+                          colors: [
+                            AppColors.primaryDark.withValues(alpha: 0.92),
+                            AppColors.primaryDark.withValues(alpha: 0.70),
+                            Colors.transparent,
+                          ],
+                        ),
+                      ),
+                    ),
+                  ),
+                  Padding(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: AppSpacing.md,
+                      vertical: AppSpacing.sm,
+                    ),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Text(
+                          'Welcome, ${user?.fullName ?? 'Customer'}',
+                          style: AppTextStyles.sectionHeading.copyWith(
+                            color: Colors.white,
+                            fontWeight: FontWeight.w700,
+                          ),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                        const SizedBox(height: AppSpacing.xs),
+                        Text(
+                          'What can we help you with today?',
+                          style: AppTextStyles.body.copyWith(
+                            color: Colors.white.withValues(alpha: 0.90),
+                          ),
+                          maxLines: 2,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
             ),
-            const SizedBox(height: AppSpacing.sm),
-            const Text(
-              'What can we help you with today?',
-              style: AppTextStyles.body,
-            ),
-            const SizedBox(height: AppSpacing.md),
+            const SizedBox(height: AppSpacing.lg),
             AppButton(
               text: 'Create Service Request',
               onPressed: () => openCreateServiceRequest(context),
@@ -105,13 +167,14 @@ class CustomerHomeScreen extends StatelessWidget {
             ),
             const SizedBox(height: AppSpacing.lg),
             const SectionHeader(title: 'Recent Activity'),
-            Align(
-              alignment: Alignment.centerLeft,
-              child: TextButton(
-                onPressed: onViewAll,
-                child: const Text('View All'),
+            if (recent.isNotEmpty)
+              Align(
+                alignment: Alignment.centerLeft,
+                child: TextButton(
+                  onPressed: onViewAll,
+                  child: const Text('View All'),
+                ),
               ),
-            ),
             if (requests.isLoading && recent.isEmpty)
               const LinearProgressIndicator()
             else if (requests.error != null)
@@ -120,21 +183,37 @@ class CustomerHomeScreen extends StatelessWidget {
                 style: AppTextStyles.small.copyWith(color: AppColors.error),
               )
             else if (recent.isEmpty)
-              const Text('No recent requests yet.', style: AppTextStyles.body),
-            for (final request in recent)
-              Padding(
-                padding: const EdgeInsets.only(bottom: AppSpacing.sm),
-                child: ServiceRequestCard(
-                  request: request,
-                  onTap: () => Navigator.of(context).push(
-                    MaterialPageRoute<void>(
-                      builder: (_) => ServiceRequestDetailScreen(
-                        requestId: request.serviceRequestId,
+              EmptyStateCard(
+                title: 'No service requests yet',
+                description:
+                    'Create your first request and track its progress here.',
+                imageAsset: AppAssets.emptyRecentActivity,
+                imageSemanticLabel: 'No recent activity illustration',
+                padding: const EdgeInsets.symmetric(
+                  horizontal: AppSpacing.lg,
+                  vertical: AppSpacing.xl,
+                ),
+                imageWidth: 96,
+                imageHeight: 96,
+                actionText: 'Create Service Request',
+                actionWidth: 220,
+                onAction: () => openCreateServiceRequest(context),
+              )
+            else
+              for (final request in recent)
+                Padding(
+                  padding: const EdgeInsets.only(bottom: AppSpacing.sm),
+                  child: ServiceRequestCard(
+                    request: request,
+                    onTap: () => Navigator.of(context).push(
+                      MaterialPageRoute<void>(
+                        builder: (_) => ServiceRequestDetailScreen(
+                          requestId: request.serviceRequestId,
+                        ),
                       ),
                     ),
                   ),
                 ),
-              ),
           ],
         ),
       ),

@@ -11,6 +11,7 @@ using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.AspNetCore.RateLimiting;
 using Microsoft.IdentityModel.Tokens;
 
 namespace AssistLK.Api.Tests;
@@ -38,10 +39,13 @@ public class AssistLKApiTestFactory : WebApplicationFactory<Program>
         Environment.SetEnvironmentVariable("Jwt__Issuer", TestIssuer);
         Environment.SetEnvironmentVariable("Jwt__Audience", TestAudience);
         Environment.SetEnvironmentVariable("Jwt__ExpirationMinutes", "60");
+        Environment.SetEnvironmentVariable("AuthOtp__OtpPepper", "TestPepperValue1234567890ForTestingPurposes!");
     }
 
     private readonly string _databaseName = Guid.NewGuid().ToString();
 
+
+    public TestSmsService TestSms { get; } = new();
 
     protected override void ConfigureWebHost(IWebHostBuilder builder)
     {
@@ -55,7 +59,8 @@ public class AssistLKApiTestFactory : WebApplicationFactory<Program>
                 ["Jwt:Key"] = TestJwtKey,
                 ["Jwt:Issuer"] = TestIssuer,
                 ["Jwt:Audience"] = TestAudience,
-                ["Jwt:ExpirationMinutes"] = "60"
+                ["Jwt:ExpirationMinutes"] = "60",
+                ["AuthOtp:OtpPepper"] = "TestPepperValue1234567890ForTestingPurposes!"
             });
         });
 
@@ -88,6 +93,13 @@ public class AssistLKApiTestFactory : WebApplicationFactory<Program>
             services.AddSingleton<IProblemUnderstandingClient>(FakeAgentClient);
             services.AddSingleton<AssistLK.Application.Attachments.IServiceRequestAttachmentStorage,
                 AssistLK.Tests.Shared.FakeAttachmentStorage>();
+
+            var smsDescriptor = services.SingleOrDefault(d => d.ServiceType == typeof(AssistLK.Application.Interfaces.ISmsService));
+            if (smsDescriptor != null)
+            {
+                services.Remove(smsDescriptor);
+            }
+            services.AddSingleton<AssistLK.Application.Interfaces.ISmsService>(TestSms);
         });
     }
 

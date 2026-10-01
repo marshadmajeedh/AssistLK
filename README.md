@@ -147,6 +147,27 @@ The service guide describes health checks, process reuse, shutdown, and manual e
 
 ---
 
+### 8b. Run the Integrated Multi-Agent Stack (C2 + C1 + ASP.NET)
+
+To start the full integrated stack with **Component 2 (Provider Matching Agent)**, **Component 1 (Problem Understanding Agent)**, and **ASP.NET Core**, use the integrated launcher from the repository root:
+
+```powershell
+.\scripts\start-integrated-dev.ps1
+```
+
+**Key guarantees provided by the integrated launcher:**
+1. **Strict Startup Dependency Ordering:** Launches C2 Provider Matching Agent on `127.0.0.1:8000` first, then C1 Problem Understanding Agent on `127.0.0.1:8001`, and finally ASP.NET Core on `http://localhost:5012`. This eliminates Windows SocketException `10061` (connection refused) caused by `ProviderMatchingBackgroundWorker` attempting to auto-dispatch matches before C2 is listening.
+2. **Readiness Probing:** Bounded polling verifies C2 readiness via `/openapi.json` (confirming `/match/start` is exposed) and C1 via `/health` before launching the backend.
+3. **Environment & Secret Safety:** Automatically extracts `GOOGLE_API_KEY` into the process environment for C2 startup without leaking secret values or modifying C2 files.
+4. **Unknown Process Protection:** Probes port occupants on 8000, 8001, and 5012; stops with a safety error rather than terminating any unrecognized process.
+
+To stop lingering background services cleanly:
+```powershell
+.\scripts\stop-integrated-dev.ps1
+```
+
+---
+
 ### 9. Component Boundaries & Ownership
 
 The system is strictly partitioned across 4 team members:

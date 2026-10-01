@@ -1,6 +1,6 @@
 # Component 3: Quotation and Booking
 
-> **Scope:** This overview describes planned component responsibilities and completion criteria, not verified implementation status.
+> **Scope:** This overview separates implemented ASP.NET/Python workflow integration from remaining component responsibilities.
 
 ## Responsibility
 
@@ -12,10 +12,12 @@ The Service Coordination Agent supports quotation and booking workflow coordinat
 
 ## Main integration points
 
-- Backend quotations and bookings
+- ASP.NET quotation endpoints start and resume the Python workflow. The start response includes a `threadId`, which the authenticated customer supplies when approving or rejecting.
+- ASP.NET validates the resumed quotation ID and decision, then owns quotation status changes and booking persistence.
 - React staff workflows
 - Flutter customer and provider workflows
-- Agent integration location is not established by this overview; follow the shared internal-service boundary.
+
+The Python checkpoint is currently in memory; pending workflows are lost if the service restarts. Python service setup and endpoint contracts are documented in the [Quotation & Booking Agent README](../../../agent-services/quotation-booking-agent/README.md).
 
 ## Completion criteria
 

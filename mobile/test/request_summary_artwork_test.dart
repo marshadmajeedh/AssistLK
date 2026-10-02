@@ -72,17 +72,16 @@ void main() {
             isTrue,
           );
           for (final text in [
-            'Unclassified',
             'Created',
-            'Unknown',
             'Service preference: ',
             'AssistLK AI classification: ',
-            'Not analyzed yet',
+            'Urgency pending',
           ]) {
             expect(find.text(text), findsOneWidget);
           }
+          expect(find.text('Pending AI analysis'), findsWidgets);
           expect(tester.takeException(), isNull);
-          final analyze = find.text('Analyze with AssistLK AI');
+          final analyze = find.text('Analyze Request with AssistLK AI');
           await tester.ensureVisible(analyze);
           await tester.tap(analyze);
           await tester.pump();

@@ -66,15 +66,16 @@ void main() {
       find.widgetWithText(TextFormField, 'Problem Description'),
       'Water is leaking under the sink',
     );
-    await tap(tester, 'Next: Location');
+    await tap(tester, 'Continue to Location');
+    await tap(tester, 'Enter Manually');
     await tester.enterText(
       find.widgetWithText(TextFormField, 'Location / Address'),
       'Colombo',
     );
-    await tap(tester, 'Next: Review');
+    await tap(tester, 'Review Request');
     if (find.text('Use This Location').evaluate().isNotEmpty) {
       await tap(tester, 'Use This Location');
-      await tap(tester, 'Next: Review');
+      await tap(tester, 'Review Request');
     }
   }
 
@@ -297,7 +298,7 @@ void main() {
       );
       await tester.pumpAndSettle();
       expect(find.text(request().description), findsOneWidget);
-      expect(find.text('Analyze with AssistLK AI'), findsOneWidget);
+      expect(find.text('Analyze Request with AssistLK AI'), findsOneWidget);
       expect(find.text('Retry photos'), findsOneWidget);
       api.failList = false;
       await tap(tester, 'Retry photos');

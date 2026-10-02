@@ -1,7 +1,7 @@
 import { act, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import AdminServiceRequestListPage from "../AdminServiceRequestListPage";
+import AdminServiceRequestListPage, { CreatedDateTime } from "../AdminServiceRequestListPage";
 import service from "../../services/adminServiceRequestService";
 
 vi.mock("../../services/adminServiceRequestService", () => ({ default: { getAll: vi.fn(), getById: vi.fn() } }));
@@ -36,7 +36,14 @@ describe("Admin monitoring list", () => {
     render(<AdminServiceRequestListPage />);
     expect(await screen.findByText("SR-A1B2C3D4")).toBeInTheDocument();
     const table = within(screen.getByRole("table"));
-    for (const text of ["Plumbing", "High", "Awaiting Information", "Colombo", "87%", new Date(request.createdAt).toLocaleString()]) {
+    const created = new Date(request.createdAt);
+    const dateText = created.toLocaleDateString();
+    const timeText = created.toLocaleTimeString([], {
+      hour: "numeric",
+      minute: "2-digit",
+      second: "2-digit",
+    });
+    for (const text of ["Plumbing", "High", "Awaiting Information", "Colombo", "87%", dateText, timeText]) {
       expect(table.getByText(text)).toBeInTheDocument();
     }
     expect(table.queryByText("Electrical")).not.toBeInTheDocument();
@@ -315,19 +322,27 @@ describe("Responsive layout and compact card presentation", () => {
 
   it("8. Created timestamp remains readable in both layouts", async () => {
     service.getAll.mockResolvedValue([request]);
-    const expectedDate = new Date(request.createdAt).toLocaleString();
+    const created = new Date(request.createdAt);
+    const dateText = created.toLocaleDateString();
+    const timeText = created.toLocaleTimeString([], {
+      hour: "numeric",
+      minute: "2-digit",
+      second: "2-digit",
+    });
 
     // Table Mode
     const { unmount } = render(<AdminServiceRequestListPage layoutMode="table" />);
     const table = await screen.findByRole("table");
-    expect(within(table).getByText(expectedDate)).toBeInTheDocument();
+    expect(within(table).getByText(dateText)).toBeInTheDocument();
+    expect(within(table).getByText(timeText)).toBeInTheDocument();
     unmount();
 
     // Card Mode
     render(<AdminServiceRequestListPage layoutMode="card" />);
     const card = await screen.findByTestId("admin-request-card");
     expect(within(card).getByText("Created")).toBeInTheDocument();
-    expect(within(card).getByText(expectedDate)).toBeInTheDocument();
+    expect(within(card).getByText(dateText)).toBeInTheDocument();
+    expect(within(card).getByText(timeText)).toBeInTheDocument();
   });
 
   it("9. View Details remains accessible and operable in card mode", async () => {
@@ -381,7 +396,6 @@ describe("Responsive layout and compact card presentation", () => {
 
   it("12. All-filter functionality remains unchanged in card mode", async () => {
     service.getAll.mockResolvedValue([request]);
-    const user = userEvent.setup();
     render(<AdminServiceRequestListPage layoutMode="card" />);
     await screen.findByTestId("admin-request-card");
     expect(service.getAll).toHaveBeenLastCalledWith({ status: "", category: "", urgency: "" });
@@ -481,5 +495,96 @@ describe("Responsive layout and compact card presentation", () => {
       "cell-created",
       "cell-action",
     ]);
+  });
+});
+
+describe("Created date and time column presentation", () => {
+  it("renders Created timestamp with date and time in separate DOM elements", async () => {
+    service.getAll.mockResolvedValue([request]);
+    const { container } = render(<AdminServiceRequestListPage layoutMode="table" />);
+    await screen.findByRole("table");
+    const containerEl = container.querySelector(".cell-created .created-date-time");
+    expect(containerEl).toBeInTheDocument();
+
+    const created = new Date(request.createdAt);
+    const expectedDate = created.toLocaleDateString();
+    const expectedTime = created.toLocaleTimeString([], {
+      hour: "numeric",
+      minute: "2-digit",
+      second: "2-digit",
+    });
+
+    const children = Array.from(containerEl.children);
+    expect(children).toHaveLength(2);
+    expect(children[0]).toHaveClass("created-date");
+    expect(children[1]).toHaveClass("created-time");
+    expect(children[0].textContent).toBe(expectedDate);
+    expect(children[1].textContent).toBe(expectedTime);
+  });
+
+  it("time renders separately from date and AM/PM remains attached to time", async () => {
+    service.getAll.mockResolvedValue([request]);
+    render(<AdminServiceRequestListPage layoutMode="table" />);
+    const table = await screen.findByRole("table");
+    const created = new Date(request.createdAt);
+    const expectedDate = created.toLocaleDateString();
+    const expectedTime = created.toLocaleTimeString([], {
+      hour: "numeric",
+      minute: "2-digit",
+      second: "2-digit",
+    });
+
+    const cell = within(table).getByRole("cell", { name: new RegExp(expectedDate) });
+    const dateSpan = within(cell).getByText(expectedDate);
+    const timeSpan = within(cell).getByText(expectedTime);
+
+    expect(dateSpan).toHaveClass("created-date");
+    expect(timeSpan).toHaveClass("created-time");
+    // Ensure AM/PM is inside the time span text without breaking off
+    expect(expectedTime).toMatch(/\b(AM|PM)\b/);
+    expect(timeSpan.textContent).toMatch(/\b(AM|PM)\b/);
+    // Ensure date span does not contain time and time span does not contain date
+    expect(dateSpan.textContent).not.toContain(expectedTime);
+    expect(timeSpan.textContent).not.toContain(expectedDate);
+  });
+
+  it("Created container enforces flex-direction column and nowrap across layout modes", async () => {
+    service.getAll.mockResolvedValue([request]);
+    const { container } = render(<AdminServiceRequestListPage layoutMode="table" />);
+    await screen.findByRole("table");
+    const cellDateTime = container.querySelector(".cell-created .created-date-time");
+    expect(cellDateTime).toBeInTheDocument();
+    expect(cellDateTime.querySelector(".created-date")).toHaveClass("created-date");
+    expect(cellDateTime.querySelector(".created-time")).toHaveClass("created-time");
+  });
+
+  it("CreatedDateTime component handles missing and invalid timestamps gracefully", () => {
+    const { rerender } = render(<CreatedDateTime value={null} />);
+    expect(screen.getByText("—")).toBeInTheDocument();
+
+    rerender(<CreatedDateTime value={undefined} />);
+    expect(screen.getByText("—")).toBeInTheDocument();
+
+    rerender(<CreatedDateTime value="invalid-timestamp" />);
+    expect(screen.getByText("—")).toBeInTheDocument();
+  });
+
+  it("existing service-request table behavior remains unchanged with all headers, badges, and actions", async () => {
+    service.getAll.mockResolvedValue([request]);
+    render(<AdminServiceRequestListPage layoutMode="table" />);
+    const table = await screen.findByRole("table");
+
+    const headers = within(table).getAllByRole("columnheader").map((th) => th.textContent);
+    expect(headers).toEqual(["Request", "Category", "Urgency", "Status", "Location", "Confidence", "Created", "Action"]);
+
+    const rows = within(table).getAllByRole("row").slice(1);
+    const row = rows[0];
+    expect(within(row).getByText("SR-A1B2C3D4")).toBeInTheDocument();
+    expect(within(row).getByText("Plumbing")).toBeInTheDocument();
+    expect(within(row).getByText("High")).toBeInTheDocument();
+    expect(within(row).getByText("Awaiting Information")).toBeInTheDocument();
+    expect(within(row).getByText("Colombo")).toBeInTheDocument();
+    expect(within(row).getByText("87%")).toBeInTheDocument();
+    expect(within(row).getByRole("button", { name: "View Details" })).toBeInTheDocument();
   });
 });

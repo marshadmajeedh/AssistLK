@@ -25,6 +25,7 @@ public static class DependencyInjection
             provider => provider.GetRequiredService<AssistLKDbContext>()
         );
         services.AddScoped<IUserRepository, UserRepository>();
+        services.AddScoped<IRegistrationChallengeRepository, RegistrationChallengeRepository>();
         services.AddScoped<IServiceRequestRepository, ServiceRequestRepository>();
         services.AddScoped<IServiceJobRepository, ServiceJobRepository>();
         services.AddScoped<ITrackingAccessService, Services.TrackingAccessService>();

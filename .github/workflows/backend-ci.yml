@@ -1,20 +1,27 @@
-name: Backend CI
+name: AssistLK CI
 
 on:
   push:
-    branches: [ main, develop ]
-    paths:
-      - "backend/**"
-      - ".github/workflows/backend-ci.yml"
+    branches:
+      - main
+      - develop
   pull_request:
-    branches: [ main, develop ]
-    paths:
-      - "backend/**"
-      - ".github/workflows/backend-ci.yml"
+    branches:
+      - main
+      - develop
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
 
 jobs:
+  # =========================================================================
+  # 1. ASP.NET Core Backend (Mandatory / Blocking)
+  # =========================================================================
   backend:
+    name: Backend (.NET 8 & PostgreSQL)
     runs-on: ubuntu-latest
+    timeout-minutes: 15
 
     services:
       postgres:
@@ -32,43 +39,60 @@ jobs:
           --health-retries=5
 
     steps:
-      - name: Checkout
+      - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Setup .NET
+      - name: Setup .NET 8
         uses: actions/setup-dotnet@v4
         with:
           dotnet-version: "8.0.x"
 
-      - name: Find solution
-        id: solution
-        shell: bash
-        run: |
-          SLN=$(find backend -maxdepth 3 -name "*.sln" | head -n 1)
-          if [ -z "$SLN" ]; then
-            echo "found=false" >> "$GITHUB_OUTPUT"
-            echo "No .sln exists yet. Scaffold the ASP.NET solution in Phase 1."
-          else
-            echo "found=true" >> "$GITHUB_OUTPUT"
-            echo "path=$SLN" >> "$GITHUB_OUTPUT"
-          fi
+      - name: Cache NuGet packages
+        uses: actions/cache@v4
+        with:
+          path: ~/.nuget/packages
+          key: ${{ runner.os }}-nuget-${{ hashFiles('backend/**/*.csproj') }}
+          restore-keys: |
+            ${{ runner.os }}-nuget-
 
-      - name: Restore
-        if: steps.solution.outputs.found == 'true'
-        run: dotnet restore "${{ steps.solution.outputs.path }}"
+      - name: Restore dependencies
+        run: dotnet restore backend/AssistLK.sln
 
-      - name: Build
-        if: steps.solution.outputs.found == 'true'
-        run: dotnet build "${{ steps.solution.outputs.path }}" --configuration Release --no-restore
+      - name: Build backend (Release)
+        run: dotnet build backend/AssistLK.sln --configuration Release --no-restore
 
-      - name: Test
-        if: steps.solution.outputs.found == 'true'
+      - name: Run unit tests (AssistLK.Api.Tests)
+        run: dotnet test backend/tests/AssistLK.Api.Tests/AssistLK.Api.Tests.csproj --configuration Release --no-build --verbosity normal
+
+      - name: Run integration tests (AssistLK.IntegrationTests)
         env:
           ASSISTLK_TEST_POSTGRESQL_CONNECTION: Host=localhost;Port=5432;Database=postgres;Username=postgres;Password=postgres
-        run: dotnet test "${{ steps.solution.outputs.path }}" --configuration Release --no-build --verbosity normal
+        run: dotnet test backend/tests/AssistLK.IntegrationTests/AssistLK.IntegrationTests.csproj --configuration Release --no-build --verbosity normal
 
-      - name: Placeholder notice
-        if: steps.solution.outputs.found != 'true'
-        run: |
-          echo "CI template is installed, but the backend solution has not been scaffolded yet."
-          echo "Before final evaluation this workflow must restore, build and run backend tests."
+  # =========================================================================
+  # 2. C1 Python Agentic AI Service (Encouraged / Blocking)
+  # =========================================================================
+  agent-ai:
+    name: Agentic AI (Problem Understanding)
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    defaults:
+      run:
+        working-directory: agent-services/problem-understanding-agent
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Python 3.11
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: "pip"
+          cache-dependency-path: agent-services/problem-understanding-agent/requirements.txt
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      - name: Run Pytest (Offline simulation)
+        run: pytest

@@ -3,6 +3,7 @@ import 'package:dio/dio.dart';
 import '../../../core/api/api_client.dart';
 import '../models/auth_result.dart';
 import '../models/auth_user.dart';
+import '../models/registration_challenge_result.dart';
 
 class AuthService {
   final ApiClient apiClient;
@@ -40,6 +41,60 @@ class AuthService {
     );
 
     return AuthResult.fromJson(Map<String, dynamic>.from(response.data));
+  }
+
+  Future<RegistrationChallengeResult> registerStart({
+    required String fullName,
+    required String email,
+    required String password,
+    required String phoneNumber,
+    required String role,
+  }) async {
+    final response = await apiClient.client.post(
+      '/auth/register/start',
+      data: {
+        'fullName': fullName.trim(),
+        'email': email.trim(),
+        'password': password,
+        'phoneNumber': phoneNumber.trim(),
+        'role': role,
+      },
+    );
+
+    return RegistrationChallengeResult.fromJson(
+      Map<String, dynamic>.from(response.data),
+    );
+  }
+
+  Future<AuthResult> verifyRegisterOtp({
+    required String challengeId,
+    required String otp,
+  }) async {
+    final response = await apiClient.client.post(
+      '/auth/register/verify-otp',
+      data: {
+        'challengeId': challengeId,
+        'otp': otp.trim(),
+      },
+    );
+
+    return AuthResult.fromJson(
+      Map<String, dynamic>.from(response.data),
+    );
+  }
+
+  Future<int> resendRegisterOtp({
+    required String challengeId,
+  }) async {
+    final response = await apiClient.client.post(
+      '/auth/register/resend-otp',
+      data: {
+        'challengeId': challengeId,
+      },
+    );
+
+    final data = Map<String, dynamic>.from(response.data);
+    return (data['cooldownSeconds'] as num?)?.toInt() ?? 45;
   }
 
   Future<AuthUser> getMe() async {

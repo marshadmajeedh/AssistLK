@@ -82,6 +82,17 @@ public class ServiceRequestRepository : IServiceRequestRepository
             .ToListAsync(cancellationToken);
     }
 
+    public async Task<IReadOnlyList<ServiceRequest>> GetStaleAnalyzingRequestsAsync(
+        DateTime cutoffTimeUtc,
+        CancellationToken cancellationToken = default)
+    {
+        return await _context.ServiceRequests
+            .Include(x => x.ProblemAnalyses)
+            .Include(x => x.Clarifications)
+            .Where(x => x.Status == ServiceRequestStatus.Analyzing && x.UpdatedAt <= cutoffTimeUtc)
+            .ToListAsync(cancellationToken);
+    }
+
     public async Task<IReadOnlyList<ServiceRequest>> GetAllForAdminAsync(
         ServiceRequestStatus? status = null,
         string? category = null,

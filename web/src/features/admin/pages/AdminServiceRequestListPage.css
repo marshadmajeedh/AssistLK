@@ -67,7 +67,17 @@
 .monitoring-table .cell-urgency span { white-space: nowrap; display: inline-flex; align-items: center; }
 .monitoring-table .cell-status span { white-space: nowrap; display: inline-flex; align-items: center; max-width: 100%; }
 .monitoring-table .cell-confidence { font-size: 13px; }
-.monitoring-table .cell-created { white-space: normal; line-height: 1.4; font-size: 13px; word-break: normal; }
+.monitoring-table .cell-created { font-size: 13px; }
+.created-date-time {
+  display: flex;
+  flex-direction: column;
+  line-height: 1.35;
+  font-variant-numeric: tabular-nums;
+}
+.created-date,
+.created-time {
+  white-space: nowrap;
+}
 .monitoring-table .cell-action button { padding: 6px 14px !important; min-height: 34px !important; font-size: 12px !important; white-space: nowrap; }
 
 /* Table Location Cell: spacious bounded multi-line clamp */

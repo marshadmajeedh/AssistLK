@@ -43,6 +43,21 @@ public interface IServiceRequestRepository
         ServiceRequestStatus status,
         CancellationToken cancellationToken = default);
 
+    Task<IReadOnlyList<ServiceRequest>> GetStaleAnalyzingRequestsAsync(
+        DateTime cutoffTimeUtc,
+        CancellationToken cancellationToken = default)
+    {
+        return GetStaleAnalyzingRequestsInternalAsync(cutoffTimeUtc, cancellationToken);
+    }
+
+    private async Task<IReadOnlyList<ServiceRequest>> GetStaleAnalyzingRequestsInternalAsync(
+        DateTime cutoffTimeUtc,
+        CancellationToken cancellationToken)
+    {
+        var list = await GetByStatusAsync(ServiceRequestStatus.Analyzing, cancellationToken);
+        return list.Where(x => x.UpdatedAt <= cutoffTimeUtc).ToList();
+    }
+
     Task<IReadOnlyList<ServiceRequest>> GetAllForAdminAsync(
         ServiceRequestStatus? status = null,
         string? category = null,

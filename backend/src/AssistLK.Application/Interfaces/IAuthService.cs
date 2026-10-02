@@ -8,6 +8,18 @@ public interface IAuthService
         RegisterRequest request,
         CancellationToken cancellationToken = default);
 
+    Task<RegisterStartResponse> RegisterStartAsync(
+        RegisterStartRequest request,
+        CancellationToken cancellationToken = default);
+
+    Task<AuthResponse> VerifyOtpAsync(
+        VerifyOtpRequest request,
+        CancellationToken cancellationToken = default);
+
+    Task<ResendOtpResponse> ResendOtpAsync(
+        ResendOtpRequest request,
+        CancellationToken cancellationToken = default);
+
     Task<AuthResponse> LoginAsync(
         LoginRequest request,
         CancellationToken cancellationToken = default);

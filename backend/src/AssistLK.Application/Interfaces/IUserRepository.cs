@@ -16,6 +16,10 @@ public interface IUserRepository
         string email,
         CancellationToken cancellationToken = default);
 
+    Task<bool> VerifiedCustomerPhoneExistsAsync(
+        string normalizedPhoneNumber,
+        CancellationToken cancellationToken = default);
+
     Task AddAsync(
         User user,
         CancellationToken cancellationToken = default);

@@ -9,8 +9,28 @@ import getApiErrorMessage from "../../serviceRequests/utils/getApiErrorMessage";
 import adminServiceRequestService from "../services/adminServiceRequestService";
 import RequestMonitoringDetails, { UrgencyBadge } from "../components/RequestMonitoringDetails";
 import RequestLocation from "../components/RequestLocation";
-import { formatDate, formatConfidence } from "../utils/monitoringFormatters";
+import { formatConfidence } from "../utils/monitoringFormatters";
 import "./AdminServiceRequestListPage.css";
+
+export function CreatedDateTime({ value }) {
+  if (!value) return "—";
+  const created = new Date(value);
+  if (Number.isNaN(created.getTime())) return "—";
+
+  const dateText = created.toLocaleDateString();
+  const timeText = created.toLocaleTimeString([], {
+    hour: "numeric",
+    minute: "2-digit",
+    second: "2-digit",
+  });
+
+  return (
+    <div className="created-date-time">
+      <span className="created-date">{dateText}</span>
+      <span className="created-time">{timeText}</span>
+    </div>
+  );
+}
 
 const emptyFilters = { status: "", category: "", urgency: "" };
 const options = {
@@ -175,7 +195,9 @@ export default function AdminServiceRequestListPage({ layoutMode = "auto" }) {
           <div className="card-footer-row">
             <div className="card-created-col">
               <span className="card-meta-label">Created</span>
-              <span className="card-meta-value card-created-value">{formatDate(request.createdAt)}</span>
+              <div className="card-meta-value card-created-value">
+                <CreatedDateTime value={request.createdAt} />
+              </div>
             </div>
             <div className="card-action-col">
               <AppButton variant="outline" onClick={(event) => openDetails(request.serviceRequestId, event)}>View Details</AppButton>
@@ -204,7 +226,9 @@ export default function AdminServiceRequestListPage({ layoutMode = "auto" }) {
           <td data-label="Status" className="cell-status"><StatusBadge status={request.status} /></td>
           <td data-label="Location" className="cell-location"><RequestLocation locationText={request.locationText} locationSource={request.locationSource} /></td>
           <td data-label="Confidence" className="cell-confidence">{formatConfidence(request.latestAnalysis)}</td>
-          <td data-label="Created" className="cell-created">{formatDate(request.createdAt)}</td>
+          <td data-label="Created" className="cell-created">
+            <CreatedDateTime value={request.createdAt} />
+          </td>
           <td data-label="Action" className="cell-action"><AppButton variant="outline" onClick={(event) => openDetails(request.serviceRequestId, event)}>View Details</AppButton></td>
         </tr>)}</tbody>
       </table>

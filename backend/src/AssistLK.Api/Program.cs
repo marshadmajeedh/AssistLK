@@ -8,21 +8,30 @@ using AssistLK.Agents.Tools;
 using AssistLK.Api.Authentication;
 using AssistLK.Api.Middleware;
 using AssistLK.Api.Seed;
+using AssistLK.Infrastructure;
+using System.Text;
+using System.Text.Json.Serialization;
 using AssistLK.Application.Interfaces;
+using AssistLK.Application.Auth;
+using AssistLK.Application.ServiceRequests;
 using AssistLK.Application.Services;
 using AssistLK.Application.Services.Auth;
+using AssistLK.Application.Quotations.DTOs;
+using AssistLK.Api.Features.ServiceRequests;
 using AssistLK.Domain.Entities;
-using AssistLK.Infrastructure;
 using AssistLK.Infrastructure.Data;
 using dotenv.net;
+using FluentValidation;
+using FluentValidation.AspNetCore;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using AssistLK.Api.Hubs;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.IdentityModel.Tokens;
 using Microsoft.OpenApi.Models;
-using System.Text;
-using System.Text.Json.Serialization;
+using Microsoft.AspNetCore.RateLimiting;
+using System.Threading.RateLimiting;
+using AssistLK.Infrastructure.Repositories;
 
 // Load local .env configuration into environment variables before builder initialization
 Program.LoadDotEnv();
@@ -55,6 +64,21 @@ var jwtAudience =
     builder.Configuration["Jwt:Audience"]
     ?? throw new InvalidOperationException(
         "JWT audience is not configured.");
+
+var otpPepper =
+    builder.Configuration["AuthOtp:OtpPepper"];
+
+if (string.IsNullOrWhiteSpace(otpPepper))
+{
+    throw new InvalidOperationException(
+        "AuthOtp:OtpPepper is not configured. An explicit pepper must be provided via dotnet user-secrets or environment variable 'AuthOtp__OtpPepper'.");
+}
+
+if (otpPepper.Trim().Length < 16)
+{
+    throw new InvalidOperationException(
+        "AuthOtp:OtpPepper is too weak. The pepper must contain at least 16 characters.");
+}
 
 
 // -----------------------------
@@ -103,6 +127,10 @@ builder.Services
     });
 
 builder.Services.AddSignalR();
+builder.Services
+    .AddFluentValidationAutoValidation()
+    .AddFluentValidationClientsideAdapters()
+    .AddValidatorsFromAssemblyContaining<CreateQuotationDtoValidator>();
 
 
 builder.Services.AddScoped<
@@ -123,6 +151,23 @@ builder.Services.AddScoped<
     IJwtTokenService,
     JwtTokenService>();
 
+builder.Services.AddScoped<
+    IOtpSecurityService,
+    OtpSecurityService>();
+
+if (builder.Environment.IsDevelopment())
+{
+    builder.Services.AddScoped<
+        ISmsService,
+        AssistLK.Infrastructure.ExternalServices.Sms.LocalDevSmsService>();
+}
+else
+{
+    builder.Services.AddScoped<
+        ISmsService,
+        AssistLK.Infrastructure.ExternalServices.Sms.FailingProductionSmsService>();
+}
+
 
 // -----------------------------
 // Agent Infrastructure
@@ -138,6 +183,11 @@ builder.Services.AddScoped<AgentMemoryService>();
 builder.Services.AddScoped<AgentContextService>();
 
 builder.Services.AddScoped<AgentSafetyService>();
+
+builder.Services.AddScoped<IQuotationRepository, QuotationRepository>();
+builder.Services.AddScoped<IBookingRepository, BookingRepository>();
+builder.Services.AddScoped<AssistLK.Application.Services.Quotations.IQuotationService,
+    AssistLK.Application.Services.Quotations.QuotationService>();
 
 builder.Services.AddSingleton<
     AgentSafetyPolicyEngine>();
@@ -172,15 +222,17 @@ builder.Services.AddHttpClient<ValidationSafetyAgent>((sp, client) =>
     var options = sp.GetRequiredService<AgentServicesOptions>();
     var baseUrl = !string.IsNullOrWhiteSpace(options.TrackingValidationUrl)
         ? options.TrackingValidationUrl.TrimEnd('/')
-        : "http://127.0.0.1:8001";
+        : "http://127.0.0.1:8003";
     client.BaseAddress = new Uri(baseUrl);
     client.Timeout = TimeSpan.FromSeconds(options.TimeoutSeconds > 0 ? options.TimeoutSeconds : 45);
 });
 
+builder.Services.AddHttpClient<IQuotationBookingAgentClient, QuotationBookingAgentClient>();
+
 // Provider Matching Microservice Client
 builder.Services.AddHttpClient<AssistLK.Application.Services.Providers.IProviderMatchingService, AssistLK.Application.Services.Providers.ProviderMatchingService>(client =>
 {
-    client.BaseAddress = new Uri("http://127.0.0.1:8002");
+    client.BaseAddress = new Uri("http://127.0.0.1:8000");
     client.Timeout = TimeSpan.FromSeconds(90);
 });
 builder.Services.AddScoped<AssistLK.Application.Services.Providers.IProviderMatchingCoordinator, AssistLK.Application.Services.Providers.ProviderMatchingCoordinator>();
@@ -246,9 +298,44 @@ builder.Services.AddScoped<
 builder.Services.AddScoped<
     ProblemUnderstandingWorkflowService>();
 
+// C1 Stale Analysis Recovery
+builder.Services.AddSingleton(sp =>
+{
+    var config = sp.GetRequiredService<IConfiguration>();
+    var options = new C1RecoveryOptions();
+    config.GetSection(C1RecoveryOptions.SectionName).Bind(options);
+    options.Validate();
+    return options;
+});
+builder.Services.AddScoped<IStaleAnalysisRecoveryService, StaleAnalysisRecoveryService>();
+builder.Services.AddHostedService<StaleAnalysisRecoveryBackgroundService>();
+
+// C1 Attachment Reconciliation
+builder.Services.AddSingleton(sp =>
+{
+    var config = sp.GetRequiredService<IConfiguration>();
+    var options = new AssistLK.Application.Attachments.AttachmentReconciliationOptions();
+    config.GetSection(AssistLK.Application.Attachments.AttachmentReconciliationOptions.SectionName).Bind(options);
+    options.Validate();
+    return options;
+});
+builder.Services.AddHostedService<AttachmentReconciliationBackgroundService>();
+
+// Challenge Retention Cleanup
+builder.Services.AddSingleton(sp =>
+{
+    var config = sp.GetRequiredService<IConfiguration>();
+    var options = new RegistrationChallengeRetentionOptions();
+    config.GetSection(RegistrationChallengeRetentionOptions.SectionName).Bind(options);
+    options.Validate();
+    return options;
+});
+builder.Services.AddScoped<IRegistrationChallengeCleanupService, RegistrationChallengeCleanupService>();
+builder.Services.AddHostedService<RegistrationChallengeCleanupBackgroundService>();
 
 builder.Services.AddScoped<
     DemoProviderSearchTool>();
+
 
 
 // -----------------------------
@@ -300,6 +387,17 @@ builder.Services
 
 builder.Services.AddAuthorization();
 
+builder.Services.AddRateLimiter(options =>
+{
+    options.RejectionStatusCode = StatusCodes.Status429TooManyRequests;
+    options.AddFixedWindowLimiter("OtpPolicy", opt =>
+    {
+        opt.Window = TimeSpan.FromMinutes(1);
+        opt.PermitLimit = builder.Environment.IsEnvironment("Testing") ? 10000 : 30;
+        opt.QueueLimit = 0;
+    });
+});
+
 
 // -----------------------------
 // Swagger
@@ -321,7 +419,6 @@ builder.Services.AddSwaggerGen(options =>
             Description =
                 "Enter JWT token."
         });
-
 
     options.AddSecurityRequirement(
         new OpenApiSecurityRequirement
@@ -376,6 +473,9 @@ builder.Services.AddCors(options =>
 
 builder.Services.AddHealthChecks();
 
+//component 3 - Service Request Lookup.
+builder.Services.AddScoped<IServiceRequestLookup, ServiceRequestLookup>();
+
 
 var app = builder.Build();
 // Test hosts substitute fake storage and must never create the developer's private directory.
@@ -415,6 +515,8 @@ app.UseStaticFiles();
 app.UseAuthentication();
 
 app.UseAuthorization();
+
+app.UseRateLimiter();
 
 
 // -----------------------------

@@ -12,7 +12,12 @@ public class AgentServicesOptions
     /// </summary>
     public string ProblemUnderstandingUrl { get; set; } = "http://127.0.0.1:8001";
 
-    public string TrackingValidationUrl { get; set; } = "http://127.0.0.1:8000";
+    public string TrackingValidationUrl { get; set; } = "http://127.0.0.1:8003";
+
+    /// <summary>
+    /// Base URL of the Python Quotation & Booking Agent service.
+    /// </summary>
+    public string QuotationBookingUrl { get; set; } = "http://127.0.0.1:8002";
 
     /// <summary>
     /// Optional shared secret header for internal service-to-service authentication (X-Internal-Api-Key).
@@ -44,6 +49,14 @@ public class AgentServicesOptions
         {
             throw new InvalidOperationException(
                 $"Invalid AgentServices:TrackingValidationUrl '{TrackingValidationUrl}'. It must be a valid absolute HTTP or HTTPS URL.");
+        }
+
+        if (string.IsNullOrWhiteSpace(QuotationBookingUrl) ||
+            !Uri.TryCreate(QuotationBookingUrl, UriKind.Absolute, out var quotationUri) ||
+            (quotationUri.Scheme != Uri.UriSchemeHttp && quotationUri.Scheme != Uri.UriSchemeHttps))
+        {
+            throw new InvalidOperationException(
+                $"Invalid AgentServices:QuotationBookingUrl '{QuotationBookingUrl}'. It must be a valid absolute HTTP or HTTPS URL.");
         }
 
         if (TimeoutSeconds <= 0)

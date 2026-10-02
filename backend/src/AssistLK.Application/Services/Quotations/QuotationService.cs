@@ -168,6 +168,14 @@ public class QuotationService : IQuotationService
                 "Agent service returned a response without a thread_id. " +
                 $"Raw body: {rawBody}");
 
+        // ------------------------------------------------------------------
+        // Persist the LangGraph thread ID so clients can resume the workflow.
+        // ------------------------------------------------------------------
+        quotation.WorkflowThreadId = result.ThreadId;
+        quotation.UpdatedAt = DateTime.UtcNow;
+        _quotationRepository.Update(quotation);
+        await _quotationRepository.SaveChangesAsync(cancellationToken);
+
         return new QuotationApprovalWorkflowDto(
             MapToDto(quotation),
             result.ThreadId,
@@ -241,10 +249,6 @@ public class QuotationService : IQuotationService
         if (!Guid.TryParse(customerUserId, out var customerId))
             throw new ArgumentException("customerUserId must be a valid GUID.");
 
-        // ------------------------------------------------------------------
-        // Read-only lookup of the linked ServiceRequest to capture a
-        // location snapshot. Component 3 never writes to ServiceRequests.
-        // ------------------------------------------------------------------
         var serviceRequest = await _serviceRequestLookup.GetByIdAsync(
             quotation.ServiceRequestId, cancellationToken);
 
@@ -261,7 +265,6 @@ public class QuotationService : IQuotationService
             Status = BookingStatus.Confirmed,
             ScheduledAt = now,
 
-            // Location snapshot — captured at booking time
             LocationText = serviceRequest?.LocationText,
             Latitude = serviceRequest?.Latitude,
             Longitude = serviceRequest?.Longitude,
@@ -353,6 +356,7 @@ public class QuotationService : IQuotationService
         q.TotalAmount,
         q.Items.Select(i => new QuotationItemDto(
             i.Id, i.Description, i.Amount, i.Quantity)).ToList(),
+        q.WorkflowThreadId,        // ← new
         q.CreatedAt,
         q.UpdatedAt);
 

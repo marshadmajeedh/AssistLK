@@ -30,6 +30,7 @@ public record QuotationDto(
     string Status,
     decimal TotalAmount,
     List<QuotationItemDto> Items,
+    string? WorkflowThreadId,        // ← new
     DateTime CreatedAt,
     DateTime UpdatedAt);
 

@@ -585,6 +585,10 @@ class ProviderDashboardProvider extends ChangeNotifier {
           await _onDispatchTimedOut();
           return;
         }
+        // Guard: If the provider is already on an Accepted ongoing job, do not clear it on 204!
+        if (activeJobMatch != null && activeJobMatch!['status'] == 'Accepted') {
+          return;
+        }
         _clearJobState();
         return;
       }

@@ -367,7 +367,10 @@ class _ServiceRequestDetailScreenState
                             style: AppTextStyles.sectionHeading,
                             overflow: TextOverflow.ellipsis,
                           ),
-                          StatusBadge(status: request.status),
+                          StatusBadge(
+                            status: request.status,
+                            isExpired: request.isMatchingExpired,
+                          ),
                         ],
                       ),
                       if (request.status != ServiceRequestStatus.analyzed &&
@@ -851,7 +854,9 @@ class _ServiceRequestDetailScreenState
               status: request.status,
             ),
             const SizedBox(height: AppSpacing.md),
-            const ReadyForMatchingSection(),
+            ReadyForMatchingSection(
+              isExpired: request.isMatchingExpired,
+            ),
           ],
         );
 

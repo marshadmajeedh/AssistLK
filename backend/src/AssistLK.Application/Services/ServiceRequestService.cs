@@ -1,10 +1,12 @@
 using System.ComponentModel.DataAnnotations;
 using AssistLK.Application.Common.Exceptions;
 using AssistLK.Application.Interfaces;
+using AssistLK.Application.ServiceRequests;
 using AssistLK.Application.ServiceRequests.DTOs;
 using AssistLK.Domain.Constants;
 using AssistLK.Domain.Entities;
 using AssistLK.Domain.Enums;
+using Microsoft.Extensions.Options;
 
 namespace AssistLK.Application.Services;
 
@@ -57,13 +59,20 @@ public class ServiceRequestService : IServiceRequestService
 
     private readonly IServiceRequestRepository _serviceRequestRepository;
     private readonly IProblemAnalysisRepository _problemAnalysisRepository;
+    private readonly ServiceRequestLifecycleOptions _lifecycleOptions;
+    private readonly TimeProvider _timeProvider;
 
     public ServiceRequestService(
         IServiceRequestRepository serviceRequestRepository,
-        IProblemAnalysisRepository problemAnalysisRepository)
+        IProblemAnalysisRepository problemAnalysisRepository,
+        ServiceRequestLifecycleOptions? lifecycleOptions = null,
+        IOptions<ServiceRequestLifecycleOptions>? optionsWrapper = null,
+        TimeProvider? timeProvider = null)
     {
         _serviceRequestRepository = serviceRequestRepository;
         _problemAnalysisRepository = problemAnalysisRepository;
+        _lifecycleOptions = lifecycleOptions ?? optionsWrapper?.Value ?? new ServiceRequestLifecycleOptions();
+        _timeProvider = timeProvider ?? TimeProvider.System;
     }
 
     public async Task<ServiceRequestResponse> CreateAsync(
@@ -388,6 +397,9 @@ public class ServiceRequestService : IServiceRequestService
             Latitude = serviceRequest.Latitude,
             Longitude = serviceRequest.Longitude,
             Status = serviceRequest.Status,
+            ReadyForMatchingAtUtc = serviceRequest.ReadyForMatchingAtUtc,
+            MatchingExpiresAtUtc = serviceRequest.MatchingExpiresAtUtc,
+            IsMatchingEligible = ComputeIsMatchingEligible(serviceRequest),
             CreatedAt = serviceRequest.CreatedAt,
             UpdatedAt = serviceRequest.UpdatedAt
         };
@@ -558,7 +570,10 @@ public class ServiceRequestService : IServiceRequestService
                 "Cannot mark service request ready for matching because the latest problem analysis has an invalid confidence score.");
         }
 
+        var nowUtc = _timeProvider.GetUtcNow().UtcDateTime;
         serviceRequest.Status = ServiceRequestStatus.ReadyForMatching;
+        serviceRequest.ReadyForMatchingAtUtc = nowUtc;
+        serviceRequest.MatchingExpiresAtUtc = nowUtc.AddHours(_lifecycleOptions.MatchingWindowHours);
         _serviceRequestRepository.Update(serviceRequest);
         await _serviceRequestRepository.SaveChangesAsync(cancellationToken);
 
@@ -846,7 +861,7 @@ public class ServiceRequestService : IServiceRequestService
         }
     }
 
-    private static ServiceRequestResponse MapResponse(ServiceRequest serviceRequest, bool includeVisualEvidence = false)
+    private ServiceRequestResponse MapResponse(ServiceRequest serviceRequest, bool includeVisualEvidence = false)
     {
         ProblemAnalysisSummaryDto? latestAnalysis = null;
         if (serviceRequest.ProblemAnalyses != null && serviceRequest.ProblemAnalyses.Any())
@@ -889,11 +904,22 @@ public class ServiceRequestService : IServiceRequestService
             Longitude = serviceRequest.Longitude,
             Urgency = serviceRequest.Urgency,
             Status = serviceRequest.Status,
+            ReadyForMatchingAtUtc = serviceRequest.ReadyForMatchingAtUtc,
+            MatchingExpiresAtUtc = serviceRequest.MatchingExpiresAtUtc,
+            IsMatchingEligible = ComputeIsMatchingEligible(serviceRequest),
             CreatedAt = serviceRequest.CreatedAt,
             UpdatedAt = serviceRequest.UpdatedAt,
             LatestAnalysis = latestAnalysis,
             Clarifications = clarifications
         };
+    }
+
+    private bool ComputeIsMatchingEligible(ServiceRequest request)
+    {
+        var nowUtc = _timeProvider.GetUtcNow().UtcDateTime;
+        return request.Status == ServiceRequestStatus.ReadyForMatching
+            && request.MatchingExpiresAtUtc.HasValue
+            && request.MatchingExpiresAtUtc.Value > nowUtc;
     }
 
     private static ServiceRequestClarificationDto MapClarificationResponse(ServiceRequestClarification clarification)

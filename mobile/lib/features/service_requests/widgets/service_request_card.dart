@@ -75,7 +75,10 @@ class ServiceRequestCard extends StatelessWidget {
                       _getDisplayCategory(),
                       style: AppTextStyles.cardHeading,
                     ),
-                    StatusBadge(status: request.status),
+                    StatusBadge(
+                      status: request.status,
+                      isExpired: request.isMatchingExpired,
+                    ),
                   ],
                 ),
                 const SizedBox(height: AppSpacing.sm),

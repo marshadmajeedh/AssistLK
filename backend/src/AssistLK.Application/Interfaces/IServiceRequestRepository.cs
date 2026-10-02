@@ -58,6 +58,21 @@ public interface IServiceRequestRepository
         return list.Where(x => x.UpdatedAt <= cutoffTimeUtc).ToList();
     }
 
+    Task<IReadOnlyList<ServiceRequest>> GetStaleAwaitingInformationRequestsAsync(
+        DateTime cutoffTimeUtc,
+        CancellationToken cancellationToken = default)
+    {
+        return GetStaleAwaitingInformationRequestsInternalAsync(cutoffTimeUtc, cancellationToken);
+    }
+
+    private async Task<IReadOnlyList<ServiceRequest>> GetStaleAwaitingInformationRequestsInternalAsync(
+        DateTime cutoffTimeUtc,
+        CancellationToken cancellationToken)
+    {
+        var list = await GetByStatusAsync(ServiceRequestStatus.AwaitingInformation, cancellationToken);
+        return list.Where(x => x.UpdatedAt <= cutoffTimeUtc).ToList();
+    }
+
     Task<IReadOnlyList<ServiceRequest>> GetAllForAdminAsync(
         ServiceRequestStatus? status = null,
         string? category = null,

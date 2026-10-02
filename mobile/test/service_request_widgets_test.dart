@@ -30,6 +30,19 @@ void main() {
         expect(find.text(status.displayName), findsOneWidget);
       }
     });
+
+    testWidgets('renders Matching Expired when isExpired is true', (tester) async {
+      await tester.pumpWidget(
+        buildTestable(
+          const StatusBadge(
+            status: ServiceRequestStatus.readyForMatching,
+            isExpired: true,
+          ),
+        ),
+      );
+
+      expect(find.text('Matching Expired'), findsOneWidget);
+    });
   });
 
   group('UrgencyChip', () {
@@ -260,12 +273,13 @@ void main() {
   });
 
   group('ReadyForMatchingSection', () {
-    testWidgets('renders confirmation messages and proceed button', (tester) async {
+    testWidgets('renders active presentation messages, proceed button, and no delete action', (tester) async {
       bool proceedTapped = false;
 
       await tester.pumpWidget(
         buildTestable(
           ReadyForMatchingSection(
+            isExpired: false,
             onProceedToMatching: () => proceedTapped = true,
           ),
         ),
@@ -273,9 +287,36 @@ void main() {
 
       expect(find.text('Request Understood'), findsOneWidget);
       expect(find.text('Ready for provider matching'), findsOneWidget);
+      expect(find.text('Find Matching Providers'), findsOneWidget);
+
+      // Verify no destructive delete button
+      expect(find.text('Delete'), findsNothing);
+      expect(find.text('Delete Request'), findsNothing);
+      expect(find.byIcon(Icons.delete), findsNothing);
 
       await tester.tap(find.text('Find Matching Providers'));
       expect(proceedTapped, true);
+    });
+
+    testWidgets('renders expired matching presentation and no delete action', (tester) async {
+      await tester.pumpWidget(
+        buildTestable(
+          const ReadyForMatchingSection(
+            isExpired: true,
+          ),
+        ),
+      );
+
+      expect(find.text('Matching Window Expired'), findsOneWidget);
+      expect(find.text('The matching window for this service request has expired.'), findsOneWidget);
+      expect(find.text('Matching window expired'), findsOneWidget);
+      expect(find.text('Create a new service request if you still need help.'), findsOneWidget);
+
+      // Verify no proceed button or delete button when expired
+      expect(find.text('Find Matching Providers'), findsNothing);
+      expect(find.text('Delete'), findsNothing);
+      expect(find.text('Delete Request'), findsNothing);
+      expect(find.byIcon(Icons.delete), findsNothing);
     });
   });
 }

@@ -1,4 +1,6 @@
+import 'dart:convert';
 import 'dart:async';
+import 'dart:io';
 
 import 'package:flutter/foundation.dart';
 import 'package:geolocator/geolocator.dart';
@@ -40,6 +42,12 @@ class ProviderDashboardProvider extends ChangeNotifier {
   String? _lastAnnouncedJobId;
   String? _dismissedActiveJobId;
   List<latlong.LatLng> routePoints = [];
+
+  List<Map<String, dynamic>> _inAppNotifications = [];
+  int _unreadNotificationCount = 0;
+
+  List<Map<String, dynamic>> get inAppNotifications => List.unmodifiable(_inAppNotifications);
+  int get unreadNotificationCount => _unreadNotificationCount;
 
   int? _remainingAcceptSeconds;
   int _totalTimeoutSeconds = 60;
@@ -83,9 +91,130 @@ class ProviderDashboardProvider extends ChangeNotifier {
     }
     return list;
   }
+  int get totalCompletedJobs => (profile?['totalCompletedJobs'] as num?)?.toInt() ?? 0;
+
+  String? _profileImagePath;
+  String? get profileImagePath => _profileImagePath;
+
+  String _getProfileImageKey() {
+    final id = profile?['providerId']?.toString() ?? profile?['id']?.toString() ?? profile?['userId']?.toString();
+    if (id != null && id.isNotEmpty) {
+      return 'provider_profile_image_$id';
+    }
+    return 'provider_profile_image_default';
+  }
+
+  String get defaultAvatarUrl {
+    final name = Uri.encodeComponent(fullName.isNotEmpty ? fullName : 'Provider');
+    return 'https://ui-avatars.com/api/?name=$name&background=1F4E78&color=ffffff&size=256&bold=true';
+  }
+
+  Future<void> updateProfileImage(String path) async {
+    _profileImagePath = path;
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setString(_getProfileImageKey(), path);
+    } catch (e) {
+      debugPrint('Failed to save profile image: $e');
+    }
+    notifyListeners();
+  }
+
+  Future<void> removeProfileImage() async {
+    _profileImagePath = null;
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.remove(_getProfileImageKey());
+    } catch (e) {
+      debugPrint('Failed to remove profile image: $e');
+    }
+    notifyListeners();
+  }
+
+  String _getNotificationKey() {
+    final id = profile?['providerId']?.toString() ?? profile?['id']?.toString() ?? profile?['userId']?.toString();
+    if (id != null && id.isNotEmpty) {
+      return 'provider_in_app_notifications_$id';
+    }
+    return 'provider_in_app_notifications_default';
+  }
+
+  Future<void> _saveNotifications() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      if (_inAppNotifications.length > 50) {
+        _inAppNotifications = _inAppNotifications.sublist(0, 50);
+      }
+      await prefs.setString(_getNotificationKey(), jsonEncode(_inAppNotifications));
+    } catch (e) {
+      debugPrint('Failed to save in-app notifications: $e');
+    }
+  }
+
+  void addInAppNotification({
+    required String title,
+    required String message,
+    required String type,
+    String? jobId,
+  }) {
+    final newNotif = {
+      'id': DateTime.now().millisecondsSinceEpoch.toString(),
+      'title': title,
+      'message': message,
+      'type': type,
+      'jobId': jobId,
+      'timestamp': DateTime.now().toIso8601String(),
+      'isRead': false,
+    };
+    _inAppNotifications.insert(0, newNotif);
+    _unreadNotificationCount = _inAppNotifications.where((n) => n['isRead'] == false).length;
+    _saveNotifications();
+    notifyListeners();
+  }
+
+  void markAllNotificationsAsRead() {
+    bool hasUnread = false;
+    for (var n in _inAppNotifications) {
+      if (n['isRead'] == false) {
+        n['isRead'] = true;
+        hasUnread = true;
+      }
+    }
+    if (hasUnread) {
+      _unreadNotificationCount = 0;
+      _saveNotifications();
+      notifyListeners();
+    }
+  }
+
+  void deleteInAppNotification(String id) {
+    _inAppNotifications.removeWhere((n) => n['id']?.toString() == id);
+    _unreadNotificationCount = _inAppNotifications.where((n) => n['isRead'] == false).length;
+    _saveNotifications();
+    notifyListeners();
+  }
+
+  void clearAllInAppNotifications() {
+    _inAppNotifications.clear();
+    _unreadNotificationCount = 0;
+    _saveNotifications();
+    notifyListeners();
+  }
 
   StreamSubscription<Position>? _positionStreamSubscription;
   Timer? _pollingTimer;
+
+  Future<void> _initTts() async {
+    try {
+      await flutterTts.setLanguage('en-US');
+      await flutterTts.setSpeechRate(0.5);
+      await flutterTts.setVolume(1.0);
+      await flutterTts.setPitch(1.0);
+      await flutterTts.awaitSynthCompletion(true);
+    } catch (e) {
+      debugPrint('TTS initialization warning: $e');
+    }
+  }
 
   Future<void> init() async {
     try {
@@ -98,6 +227,7 @@ class ProviderDashboardProvider extends ChangeNotifier {
       debugPrint('Failed to load persisted provider preferences: $e');
     }
 
+    unawaited(_initTts());
     unawaited(NotificationService().init());
 
     await fetchProfile();
@@ -116,6 +246,35 @@ class ProviderDashboardProvider extends ChangeNotifier {
           data['averageRating'] as num? ?? data['rating'] as num?;
       _averageRating = averageRating?.toDouble() ?? 0.0;
       _totalReviews = (data['totalReviews'] as num?)?.toInt() ?? 0;
+
+      try {
+        final prefs = await SharedPreferences.getInstance();
+        final savedImage = prefs.getString(_getProfileImageKey());
+        if (savedImage != null && savedImage.isNotEmpty && File(savedImage).existsSync()) {
+          _profileImagePath = savedImage;
+        } else {
+          _profileImagePath = null;
+        }
+      } catch (e) {
+        debugPrint('Failed to load profile image for provider: $e');
+      }
+
+      try {
+        final prefs = await SharedPreferences.getInstance();
+        final rawNotifs = prefs.getString(_getNotificationKey());
+        if (rawNotifs != null && rawNotifs.isNotEmpty) {
+          final decoded = jsonDecode(rawNotifs) as List<dynamic>;
+          _inAppNotifications = decoded.map((e) => Map<String, dynamic>.from(e as Map)).toList();
+          _unreadNotificationCount = _inAppNotifications.where((n) => n['isRead'] == false).length;
+        } else {
+          _inAppNotifications = [];
+          _unreadNotificationCount = 0;
+        }
+      } catch (e) {
+        debugPrint('Failed to load notifications for provider: $e');
+        _inAppNotifications = [];
+        _unreadNotificationCount = 0;
+      }
 
       final num? rad = data['operatingRadiusKm'] as num?;
       if (rad != null && rad > 0) {
@@ -410,6 +569,16 @@ class ProviderDashboardProvider extends ChangeNotifier {
             status != 'Accepted') {
           _lastAnnouncedJobId = jobId;
           unawaited(_announceJob(data));
+
+          final shortId = jobId.length > 8 ? jobId.substring(0, 8) : jobId;
+          final category = data['category']?.toString() ?? 'Service';
+          final dist = _liveDistanceKm?.toStringAsFixed(1) ?? data['distanceKm']?.toString() ?? 'nearby';
+          addInAppNotification(
+            title: 'New Service Dispatch',
+            message: 'Incoming $category request #$shortId ($dist km away). Review details and accept or decline.',
+            type: 'alert',
+            jobId: jobId,
+          );
         }
 
         // Manage acceptance countdown timer for pending recommended dispatch
@@ -435,7 +604,15 @@ class ProviderDashboardProvider extends ChangeNotifier {
         notifyListeners();
         return;
       } else if (response.statusCode == 204) {
-        // Only clear if server explicitly reports no active dispatch
+        // If a recommended match was pending and server reports 204, it timed out on server!
+        if (activeJobMatch != null && activeJobMatch!['status'] != 'Accepted') {
+          await _onDispatchTimedOut();
+          return;
+        }
+        // Guard: If the provider is already on an Accepted ongoing job, do not clear it on 204!
+        if (activeJobMatch != null && activeJobMatch!['status'] == 'Accepted') {
+          return;
+        }
         _clearJobState();
         return;
       }
@@ -543,14 +720,35 @@ class ProviderDashboardProvider extends ChangeNotifier {
       debugPrint(
         'Job acceptance timer expired. Auto-declining and releasing to next provider.',
       );
+      final currentJobId = activeJobMatch?['jobId']?.toString();
+      final shortId = currentJobId != null && currentJobId.length > 8
+          ? currentJobId.substring(0, 8)
+          : (currentJobId ?? '');
+
+      _stopAcceptCountdown();
+      activeJobMatch = null;
+      routePoints = [];
+      _lastAnnouncedJobId = null;
+      notifyListeners();
+
+      addInAppNotification(
+        title: 'Dispatch Expired',
+        message: 'You missed service request #$shortId. Acceptance timer expired.',
+        type: 'timeout',
+        jobId: currentJobId,
+      );
+
       if (_isVoiceAlertEnabled) {
-        unawaited(
-          flutterTts.speak(
-            'Dispatch request expired. Re-dispatching to next available provider.',
-          ),
-        );
+        try {
+          await flutterTts.speak('Dispatch request expired. Re-dispatching to next available provider.');
+        } catch (e) {
+          debugPrint('TTS speak timeout alert error: $e');
+        }
       }
-      await declineJob();
+
+      try {
+        await providerService.declineActiveDispatch();
+      } catch (_) {}
     } catch (e) {
       debugPrint('Error triggering timeout decline: $e');
       _clearJobState();
@@ -584,8 +782,32 @@ class ProviderDashboardProvider extends ChangeNotifier {
     notifyListeners();
   }
 
+  Future<void> acceptJob() async {
+    _stopAcceptCountdown();
+    final currentJobId = activeJobMatch?['jobId']?.toString();
+    final shortId = currentJobId != null && currentJobId.length > 8 ? currentJobId.substring(0, 8) : (currentJobId ?? '');
+    try {
+      await providerService.acceptActiveDispatch('/api/providers/active-dispatch/accept');
+      if (activeJobMatch != null) {
+        activeJobMatch!['status'] = 'Accepted';
+      }
+      addInAppNotification(
+        title: 'Job Accepted',
+        message: 'You accepted request #$shortId. Customer location and driving route are locked.',
+        type: 'accepted',
+        jobId: currentJobId,
+      );
+      notifyListeners();
+    } catch (e) {
+      debugPrint('Failed to accept job: $e');
+      rethrow;
+    }
+  }
+
   Future<void> completeJob() async {
     _stopAcceptCountdown();
+    final currentJobId = activeJobMatch?['jobId']?.toString();
+    final shortId = currentJobId != null && currentJobId.length > 8 ? currentJobId.substring(0, 8) : (currentJobId ?? '');
     try {
       await providerService.apiClient.client.post(
         '/providers/active-dispatch/complete',
@@ -593,19 +815,35 @@ class ProviderDashboardProvider extends ChangeNotifier {
     } catch (e) {
       debugPrint('Error marking dispatch completed on backend: $e');
     }
+    addInAppNotification(
+      title: 'Job Completed',
+      message: 'You completed service request #$shortId. Great job!',
+      type: 'completed',
+      jobId: currentJobId,
+    );
     _clearJobState();
     _lastAnnouncedJobId = null;
   }
 
-  Future<void> declineJob() async {
+  Future<void> declineJob({bool logNotification = true}) async {
     _stopAcceptCountdown();
+    final currentJobId = activeJobMatch?['jobId']?.toString();
+    final shortId = currentJobId != null && currentJobId.length > 8 ? currentJobId.substring(0, 8) : (currentJobId ?? '');
     try {
       await providerService.declineActiveDispatch();
-      _clearJobState();
-      _lastAnnouncedJobId = null;
     } catch (e) {
       debugPrint('Failed to decline match: $e');
     }
+    if (logNotification) {
+      addInAppNotification(
+        title: 'Dispatch Declined',
+        message: 'You declined service request #$shortId. Request returned to dispatch.',
+        type: 'declined',
+        jobId: currentJobId,
+      );
+    }
+    _clearJobState();
+    _lastAnnouncedJobId = null;
   }
 
   Future<void> onLogout() async {

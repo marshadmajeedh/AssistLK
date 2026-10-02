@@ -197,7 +197,7 @@ public class ProvidersController : ControllerBase
             fullName = profile.User?.FullName ?? string.Empty,
             businessName = profile.BusinessName,
             verificationStatus = profile.VerificationStatus.ToString(),
-            rating = profile.Rating > 0 ? profile.Rating : 5.0m,
+            rating = profile.Rating,
             isOnline = profile.IsOnline,
             category = primarySkill?.Category ?? "Plumbing",
             skillName = primarySkill?.SkillName ?? string.Empty,
@@ -420,6 +420,7 @@ await strategy.ExecuteAsync(async () =>
             .FirstOrDefaultAsync(p => p.UserId == userId, cancellationToken);
         if (profile == null) return NotFound("Provider profile not found.");
 
+        // 1. Check for an active ongoing accepted job first
         var latestMatch = await _dbContext.MatchedCandidates
             .Include(m => m.MatchingExecution)
             .Where(m => m.ProviderId == profile.Id 
@@ -429,6 +430,20 @@ await strategy.ExecuteAsync(async () =>
                      && m.MatchingExecution.Status == MatchingExecutionStatus.Completed)
             .OrderByDescending(m => m.CreatedAt)
             .FirstOrDefaultAsync(cancellationToken);
+
+        // 2. If no ongoing accepted job, check for an incoming recommended dispatch
+        if (latestMatch == null)
+        {
+            latestMatch = await _dbContext.MatchedCandidates
+                .Include(m => m.MatchingExecution)
+                .Where(m => m.ProviderId == profile.Id 
+                         && m.Status == MatchedCandidateStatus.Recommended
+                         && m.MatchingExecution != null
+                         && m.MatchingExecution.Status == MatchingExecutionStatus.Completed)
+                .OrderByDescending(m => m.CreatedAt)
+                .FirstOrDefaultAsync(cancellationToken);
+        }
+
         if (latestMatch == null) return NoContent(); 
 
         var serviceJob = await _applicationDbContext.ServiceJobs

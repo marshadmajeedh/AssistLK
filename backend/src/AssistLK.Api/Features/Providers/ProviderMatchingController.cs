@@ -197,6 +197,34 @@ public class ProviderMatchingController : ControllerBase
                     ? topCandidate.Provider.BusinessName
                     : "Assigned Specialist");
 
+            // Evaluate provider occupancy status across pending and active jobs
+            var hasOngoingJob = await _dbContext.MatchedCandidates.AnyAsync(m =>
+                m.ProviderId == topCandidate.ProviderId &&
+                m.Status == MatchedCandidateStatus.Accepted,
+                cancellationToken);
+
+            var hasReviewingDispatch = await _dbContext.MatchedCandidates.AnyAsync(m =>
+                m.ProviderId == topCandidate.ProviderId &&
+                m.Id != topCandidate.Id &&
+                m.Status == MatchedCandidateStatus.Recommended &&
+                m.MatchingExecution != null &&
+                m.MatchingExecution.Status == MatchingExecutionStatus.Completed &&
+                m.CreatedAt >= DateTime.UtcNow.AddSeconds(-65),
+                cancellationToken);
+
+            string occupancyStatus = "Available";
+            string? occupancyReason = null;
+            if (hasOngoingJob)
+            {
+                occupancyStatus = "BusyOnJob";
+                occupancyReason = "Provider is currently attending to an active job in progress. Cannot dispatch another request until completed.";
+            }
+            else if (hasReviewingDispatch)
+            {
+                occupancyStatus = "ReviewingDispatch";
+                occupancyReason = "Provider is currently reviewing a dispatched request countdown. Awaiting provider response (accept/decline).";
+            }
+
             results.Add(new
             {
                 threadId = e.ThreadId,
@@ -208,10 +236,13 @@ public class ProviderMatchingController : ControllerBase
                 },
                 candidate = new 
                 {
+                    providerId = topCandidate.ProviderId,
                     technicianName = techName,
                     businessName = topCandidate.Provider?.BusinessName ?? techName,
-                    rating = topCandidate.Provider?.Rating ?? 5.0m,
-                    distanceKm = topCandidate.DistanceKm
+                    rating = topCandidate.Provider?.Rating ?? 0.0m,
+                    distanceKm = topCandidate.DistanceKm,
+                    occupancyStatus = occupancyStatus,
+                    occupancyReason = occupancyReason
                 },
                 aiRationale = !string.IsNullOrWhiteSpace(topCandidate.MatchRationale)
                     ? topCandidate.MatchRationale
@@ -237,10 +268,47 @@ public class ProviderMatchingController : ControllerBase
             return NotFound("Matching execution thread not found.");
         }
 
+        var isApproved = request.Action.Equals("Approve", StringComparison.OrdinalIgnoreCase);
+
+        // Guard: Prevent approving if the candidate provider is occupied with an active job or reviewing another dispatch
+        if (isApproved)
+        {
+            var topCandidate = execution.Candidates?
+                .Where(c => c.ProviderId != Guid.Empty)
+                .OrderBy(c => c.Rank)
+                .FirstOrDefault();
+
+            if (topCandidate != null)
+            {
+                var isBusy = await _dbContext.MatchedCandidates.AnyAsync(m =>
+                    m.ProviderId == topCandidate.ProviderId &&
+                    m.Id != topCandidate.Id &&
+                    m.Status == MatchedCandidateStatus.Accepted,
+                    cancellationToken);
+
+                if (isBusy)
+                {
+                    return Conflict(new { message = "Provider is currently busy attending an active job. Cannot dispatch another request until the active job is completed." });
+                }
+
+                var isReviewing = await _dbContext.MatchedCandidates.AnyAsync(m =>
+                    m.ProviderId == topCandidate.ProviderId &&
+                    m.Id != topCandidate.Id &&
+                    m.Status == MatchedCandidateStatus.Recommended &&
+                    m.MatchingExecution != null &&
+                    m.MatchingExecution.Status == MatchingExecutionStatus.Completed &&
+                    m.CreatedAt >= DateTime.UtcNow.AddSeconds(-65),
+                    cancellationToken);
+
+                if (isReviewing)
+                {
+                    return Conflict(new { message = "Provider is currently reviewing another pending dispatch. Please wait until the provider accepts or declines." });
+                }
+            }
+        }
+
         try
         {
-            var isApproved = request.Action.Equals("Approve", StringComparison.OrdinalIgnoreCase);
-
             var matchedCandidate = execution.Candidates
                 .Where(candidate => candidate.ProviderId != Guid.Empty)
                 .OrderBy(candidate => candidate.Rank)
@@ -250,7 +318,6 @@ public class ProviderMatchingController : ControllerBase
             {
                 return BadRequest("Cannot approve a match without a provider candidate.");
             }
-
             var response = await _matchingService.ResumeMatchingAsync(threadId, request.Action, adminId);
 
             execution.Status = isApproved

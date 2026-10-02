@@ -209,6 +209,10 @@ function MatchCard({ match, onDecision }) {
   const [processing, setProcessing] = useState(false);
   const [localError, setLocalError] = useState(null);
 
+  const isOccupied = match.candidate?.occupancyStatus && match.candidate.occupancyStatus !== "Available";
+  const isReviewing = match.candidate?.occupancyStatus === "ReviewingDispatch";
+  const isBusy = match.candidate?.occupancyStatus === "BusyOnJob";
+
   const categoryPalette =
     CATEGORY_COLORS[match.serviceRequest?.tradeCategory] ?? null;
   const urgencyPalette =
@@ -410,7 +414,56 @@ function MatchCard({ match, onDecision }) {
                     }}
                   />
                 )}
+                {isReviewing && (
+                  <Badge
+                    label="⏳ Reviewing Dispatch"
+                    palette={{
+                      bg: "#fef3c7",
+                      text: "#b45309",
+                      border: "#fde68a",
+                    }}
+                  />
+                )}
+                {isBusy && (
+                  <Badge
+                    label="🛠️ Busy On Active Job"
+                    palette={{
+                      bg: "#fee2e2",
+                      text: "#b91c1c",
+                      border: "#fecaca",
+                    }}
+                  />
+                )}
               </div>
+
+              {isOccupied && (
+                <div
+                  style={{
+                    marginTop: spacing.sm,
+                    padding: `${spacing.xs + 2}px ${spacing.sm}px`,
+                    borderRadius: radius.small,
+                    backgroundColor: isBusy ? "rgba(185, 28, 28, 0.08)" : "rgba(180, 83, 9, 0.08)",
+                    border: `1px solid ${isBusy ? "#fecaca" : "#fde68a"}`,
+                    display: "flex",
+                    alignItems: "center",
+                    gap: spacing.xs,
+                  }}
+                >
+                  <span
+                    style={{
+                      fontSize: typography.small.fontSize,
+                      fontWeight: 600,
+                      color: isBusy ? "#b91c1c" : "#b45309",
+                      lineHeight: 1.3,
+                    }}
+                  >
+                    {match.candidate?.occupancyReason ||
+                      (isBusy
+                        ? "Provider is busy on an active job. Approval locked until job is completed."
+                        : "Provider is currently reviewing a dispatch. Approval locked until they accept or decline.")}
+                  </span>
+                </div>
+              )}
             </>
           ) : (
             <div>
@@ -469,15 +522,22 @@ function MatchCard({ match, onDecision }) {
 
         <AppButton
           variant="secondary"
-          disabled={processing || !hasValidCandidate}
+          disabled={processing || !hasValidCandidate || isOccupied}
           onClick={() => handleAction("Approve")}
+          title={isOccupied ? match.candidate?.occupancyReason : undefined}
           style={{
             minWidth: 160,
-            opacity: !hasValidCandidate ? 0.5 : 1,
-            cursor: !hasValidCandidate ? "not-allowed" : "pointer",
+            opacity: !hasValidCandidate || isOccupied ? 0.5 : 1,
+            cursor: !hasValidCandidate || isOccupied ? "not-allowed" : "pointer",
           }}
         >
-          {processing ? "Processing…" : "✓  Approve Match"}
+          {processing
+            ? "Processing…"
+            : isReviewing
+            ? "⏳ Review Pending"
+            : isBusy
+            ? "🛠️ Provider Busy"
+            : "✓  Approve Match"}
         </AppButton>
       </div>
     </article>
@@ -559,6 +619,27 @@ function MatchApprovalsPage() {
 
   useEffect(() => {
     fetchQueue();
+
+    // Auto-poll every 5 seconds to keep occupancy status and approvals fresh in real time
+    const pollInterval = setInterval(() => {
+      getMatchApprovals()
+        .then((data) => {
+          const raw = Array.isArray(data) ? data : [];
+          const validMatches = raw.filter(
+            (m) =>
+              m &&
+              m.threadId &&
+              m.candidate &&
+              m.candidate.technicianName &&
+              m.candidate.technicianName.trim() !== "" &&
+              m.candidate.technicianName !== "—"
+          );
+          setMatches(validMatches);
+        })
+        .catch(() => {});
+    }, 5000);
+
+    return () => clearInterval(pollInterval);
   }, [fetchQueue]);
 
   const handleDecision = useCallback((threadId, action) => {

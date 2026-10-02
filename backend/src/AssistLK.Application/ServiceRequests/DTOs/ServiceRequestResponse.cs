@@ -19,6 +19,9 @@ public class ServiceRequestResponse
     public decimal? Longitude { get; set; }
     public ServiceRequestUrgency Urgency { get; set; }
     public ServiceRequestStatus Status { get; set; }
+    public DateTime? ReadyForMatchingAtUtc { get; set; }
+    public DateTime? MatchingExpiresAtUtc { get; set; }
+    public bool IsMatchingEligible { get; set; }
     public DateTime CreatedAt { get; set; }
     public DateTime UpdatedAt { get; set; }
 

@@ -28,6 +28,10 @@ public class ServiceRequest : BaseEntity
 
     public ServiceRequestStatus Status { get; set; } = ServiceRequestStatus.Created;
 
+    public DateTime? ReadyForMatchingAtUtc { get; set; }
+
+    public DateTime? MatchingExpiresAtUtc { get; set; }
+
     public ICollection<ServiceRequestAttachment> Attachments { get; set; } = new List<ServiceRequestAttachment>();
 
     public ICollection<ProblemAnalysis> ProblemAnalyses { get; set; }

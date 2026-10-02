@@ -12,11 +12,13 @@ import '../../../../shared/widgets/app_image_asset.dart';
 class ReadyForMatchingSection extends StatelessWidget {
   final VoidCallback? onProceedToMatching;
   final bool isLoading;
+  final bool isExpired;
 
   const ReadyForMatchingSection({
     super.key,
     this.onProceedToMatching,
     this.isLoading = false,
+    this.isExpired = false,
   });
 
   @override
@@ -26,19 +28,19 @@ class ReadyForMatchingSection extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.center,
         children: [
           // Ready for Matching illustration
-          const AppImageAsset(
+          AppImageAsset(
             assetPath: AppAssets.readyForMatching,
             width: 88,
             height: 88,
             fit: BoxFit.contain,
-            fallbackIcon: Icons.verified_rounded,
-            semanticLabel: 'Ready for matching',
+            fallbackIcon: isExpired ? Icons.schedule_rounded : Icons.verified_rounded,
+            semanticLabel: isExpired ? 'Matching window expired' : 'Ready for matching',
           ),
           const SizedBox(height: AppSpacing.sm + 2),
 
           // Headline
-          const Text(
-            'Request Understood',
+          Text(
+            isExpired ? 'Matching Window Expired' : 'Request Understood',
             style: AppTextStyles.sectionHeading,
             textAlign: TextAlign.center,
           ),
@@ -46,7 +48,9 @@ class ReadyForMatchingSection extends StatelessWidget {
 
           // Subtitle / Ready for matching message
           Text(
-            'Your request has been clearly analyzed and is ready for provider matching.',
+            isExpired
+                ? 'The matching window for this service request has expired.'
+                : 'Your request has been clearly analyzed and is ready for provider matching.',
             style: AppTextStyles.body.copyWith(color: AppColors.textSecondary),
             textAlign: TextAlign.center,
           ),
@@ -59,26 +63,28 @@ class ReadyForMatchingSection extends StatelessWidget {
               vertical: AppSpacing.xs + 2,
             ),
             decoration: BoxDecoration(
-              color: const Color(0xFFF0FDF4),
+              color: isExpired ? const Color(0xFFFFFBEB) : const Color(0xFFF0FDF4),
               borderRadius: BorderRadius.circular(AppRadius.pill),
-              border: Border.all(color: const Color(0xFFBBF7D0)),
+              border: Border.all(
+                color: isExpired ? const Color(0xFFFDE68A) : const Color(0xFFBBF7D0),
+              ),
             ),
-            child: const Row(
+            child: Row(
               mainAxisSize: MainAxisSize.min,
               children: [
                 Icon(
-                  Icons.verified_rounded,
+                  isExpired ? Icons.schedule_rounded : Icons.verified_rounded,
                   size: 16,
-                  color: AppColors.success,
+                  color: isExpired ? AppColors.warning : AppColors.success,
                 ),
-                SizedBox(width: AppSpacing.xs + 2),
+                const SizedBox(width: AppSpacing.xs + 2),
                 Flexible(
                   child: Text(
-                    'Ready for provider matching',
+                    isExpired ? 'Matching window expired' : 'Ready for provider matching',
                     style: TextStyle(
                       fontSize: 13,
                       fontWeight: FontWeight.w600,
-                      color: AppColors.success,
+                      color: isExpired ? AppColors.warning : AppColors.success,
                     ),
                   ),
                 ),
@@ -86,7 +92,19 @@ class ReadyForMatchingSection extends StatelessWidget {
             ),
           ),
 
-          if (onProceedToMatching != null) ...[
+          if (isExpired) ...[
+            const SizedBox(height: AppSpacing.md),
+            Text(
+              'Create a new service request if you still need help.',
+              style: AppTextStyles.small.copyWith(
+                color: AppColors.textSecondary,
+                fontStyle: FontStyle.italic,
+              ),
+              textAlign: TextAlign.center,
+            ),
+          ],
+
+          if (!isExpired && onProceedToMatching != null) ...[
             const SizedBox(height: AppSpacing.lg),
             AppButton(
               text: 'Find Matching Providers',

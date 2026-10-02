@@ -4,6 +4,7 @@ import 'package:provider/provider.dart';
 
 import 'package:mobile/core/auth/token_storage.dart';
 import 'package:mobile/features/auth/models/auth_user.dart';
+import 'package:mobile/features/auth/models/registration_challenge_result.dart';
 import 'package:mobile/features/auth/providers/auth_provider.dart';
 import 'package:mobile/features/auth/screens/account_type_selection_screen.dart';
 import 'package:mobile/features/auth/screens/customer_register_screen.dart';
@@ -82,6 +83,42 @@ class FakeAuthProvider extends ChangeNotifier implements AuthProvider {
     lastRegisterPhone = phoneNumber;
     lastRegisterRole = role;
     return registerResult;
+  }
+
+  @override
+  Future<RegistrationChallengeResult?> registerStart({
+    required String fullName,
+    required String email,
+    required String password,
+    required String phoneNumber,
+    required String role,
+  }) async {
+    lastRegisterFullName = fullName;
+    lastRegisterEmail = email;
+    lastRegisterPassword = password;
+    lastRegisterPhone = phoneNumber;
+    lastRegisterRole = role;
+    return RegistrationChallengeResult(
+      challengeId: 'test-challenge-id',
+      maskedPhoneNumber: '+94 77 *** *567',
+      expiresAtUtc: DateTime.now().add(const Duration(minutes: 5)),
+      cooldownSeconds: 45,
+    );
+  }
+
+  @override
+  Future<bool> verifyRegisterOtp({
+    required String challengeId,
+    required String otp,
+  }) async {
+    return true;
+  }
+
+  @override
+  Future<int?> resendRegisterOtp({
+    required String challengeId,
+  }) async {
+    return 45;
   }
 
   @override
@@ -292,16 +329,8 @@ void main() {
         // Does NOT navigate to customer registration
         expect(find.byType(CustomerRegisterScreen), findsNothing);
 
-        // Shows neutral provider onboarding notice
+        // Shows Provider registration screen
         expect(find.text('Provider Registration'), findsOneWidget);
-        expect(
-          find.textContaining('Provider registration is being prepared'),
-          findsOneWidget,
-        );
-        expect(
-          find.textContaining('Provider onboarding will be available soon'),
-          findsOneWidget,
-        );
 
         // Ensure internal assignment terminology is NOT exposed to users
         expect(find.textContaining('Component 2'), findsNothing);

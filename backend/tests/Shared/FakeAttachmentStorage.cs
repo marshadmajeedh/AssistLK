@@ -23,6 +23,11 @@ public sealed class FakeAttachmentStorage : IServiceRequestAttachmentStorage
         Files.TryRemove(key, out _);
         return Task.CompletedTask;
     }
+    public ConcurrentDictionary<string, DateTime> CustomTimestamps { get; } = new();
+
     public IReadOnlyList<StoredAttachmentFile> GetCleanupCandidates(DateTime olderThanUtc)
-        => Files.Keys.Select(k => new StoredAttachmentFile(k, DateTime.UtcNow.AddDays(-2))).ToArray();
+        => Files.Keys
+            .Select(k => new StoredAttachmentFile(k, CustomTimestamps.TryGetValue(k, out var dt) ? dt : DateTime.UtcNow.AddDays(-2)))
+            .Where(f => f.LastModifiedUtc < olderThanUtc)
+            .ToArray();
 }

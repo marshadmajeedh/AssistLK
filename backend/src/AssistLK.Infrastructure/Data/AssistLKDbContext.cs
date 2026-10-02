@@ -16,6 +16,8 @@ public class AssistLKDbContext : DbContext, IAgentWorkflowDbContext
 
     public DbSet<User> Users => Set<User>();
 
+    public DbSet<RegistrationChallenge> RegistrationChallenges => Set<RegistrationChallenge>();
+
     public DbSet<ServiceRequest> ServiceRequests => Set<ServiceRequest>();
 
     public DbSet<ServiceRequestAttachment> ServiceRequestAttachments => Set<ServiceRequestAttachment>();
@@ -268,6 +270,7 @@ public class AssistLKDbContext : DbContext, IAgentWorkflowDbContext
         ConfigureProviderAvailability(modelBuilder);
         ConfigureMatchingExecution(modelBuilder);
         ConfigureMatchedCandidate(modelBuilder);
+        ConfigureRegistrationChallenge(modelBuilder);
     }
 
     private static void ConfigureUser(ModelBuilder modelBuilder)
@@ -304,11 +307,83 @@ public class AssistLKDbContext : DbContext, IAgentWorkflowDbContext
         user.Property(x => x.IsActive)
             .HasDefaultValue(true);
 
+        user.Property(x => x.IsPhoneVerified)
+            .HasDefaultValue(false);
+
+        user.Property(x => x.PhoneVerifiedAtUtc);
+
+        user.HasIndex(x => x.PhoneNumber)
+            .HasDatabaseName("IX_Users_VerifiedCustomerPhoneNumber")
+            .IsUnique()
+            .HasFilter("\"Role\" = 'Customer' AND \"IsPhoneVerified\" = TRUE AND \"PhoneNumber\" IS NOT NULL");
+
         user.Property(x => x.CreatedAt)
             .IsRequired();
 
         user.Property(x => x.UpdatedAt)
             .IsRequired();
+    }
+
+    private static void ConfigureRegistrationChallenge(ModelBuilder modelBuilder)
+    {
+        var challenge = modelBuilder.Entity<RegistrationChallenge>();
+
+        challenge.ToTable("RegistrationChallenges");
+
+        challenge.HasKey(x => x.Id);
+
+        challenge.Property(x => x.PhoneNumber)
+            .IsRequired()
+            .HasMaxLength(20);
+
+        challenge.Property(x => x.Email)
+            .IsRequired()
+            .HasMaxLength(255);
+
+        challenge.Property(x => x.FullName)
+            .IsRequired()
+            .HasMaxLength(150);
+
+        challenge.Property(x => x.PasswordHash)
+            .IsRequired()
+            .HasMaxLength(500);
+
+        challenge.Property(x => x.Role)
+            .HasConversion<string>()
+            .IsRequired()
+            .HasMaxLength(30);
+
+        challenge.Property(x => x.OtpHash)
+            .IsRequired()
+            .HasMaxLength(128);
+
+        challenge.Property(x => x.ExpiresAtUtc)
+            .IsRequired();
+
+        challenge.Property(x => x.AttemptCount)
+            .HasDefaultValue(0);
+
+        challenge.Property(x => x.MaxAttempts)
+            .HasDefaultValue(5);
+
+        challenge.Property(x => x.ResendCount)
+            .HasDefaultValue(0);
+
+        challenge.Property(x => x.LastSentAtUtc)
+            .IsRequired();
+
+        challenge.Property(x => x.IsConsumed)
+            .HasDefaultValue(false);
+
+        challenge.Property(x => x.CreatedAt)
+            .IsRequired();
+
+        challenge.Property(x => x.UpdatedAt)
+            .IsRequired();
+
+        challenge.HasIndex(x => x.PhoneNumber);
+        challenge.HasIndex(x => x.Email);
+        challenge.HasIndex(x => x.ExpiresAtUtc);
     }
 
     private static void ConfigureServiceRequest(ModelBuilder modelBuilder)

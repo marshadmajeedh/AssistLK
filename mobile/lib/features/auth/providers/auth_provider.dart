@@ -2,6 +2,7 @@ import 'package:flutter/foundation.dart';
 
 import '../../../core/auth/token_storage.dart';
 import '../models/auth_user.dart';
+import '../models/registration_challenge_result.dart';
 import '../services/auth_service.dart';
 
 class AuthProvider extends ChangeNotifier {
@@ -151,6 +152,114 @@ class AuthProvider extends ChangeNotifier {
       _error = authService.getErrorMessage(error);
 
       return false;
+    } finally {
+      if (generation == _generation) _setLoading(false);
+    }
+  }
+
+  Future<RegistrationChallengeResult?> registerStart({
+    required String fullName,
+    required String email,
+    required String password,
+    required String phoneNumber,
+    required String role,
+  }) async {
+    final generation = ++_generation;
+    _setLoading(true);
+
+    _error = null;
+
+    try {
+      await _cleanup;
+      if (generation != _generation) return null;
+      if (role != 'Customer') {
+        _error = 'Only Customer registration uses phone verification.';
+
+        return null;
+      }
+
+      final result = await authService.registerStart(
+        fullName: fullName,
+        email: email,
+        password: password,
+        phoneNumber: phoneNumber,
+        role: role,
+      );
+      if (generation != _generation) return null;
+
+      // Registration challenge created.
+      // Must NOT store JWT, set _user, or authenticate session.
+      return result;
+    } catch (error) {
+      if (generation != _generation) return null;
+      _error = authService.getErrorMessage(error);
+
+      return null;
+    } finally {
+      if (generation == _generation) _setLoading(false);
+    }
+  }
+
+  Future<bool> verifyRegisterOtp({
+    required String challengeId,
+    required String otp,
+  }) async {
+    final generation = ++_generation;
+    _setLoading(true);
+
+    _error = null;
+
+    try {
+      await _cleanup;
+      if (generation != _generation) return false;
+
+      final result = await authService.verifyRegisterOtp(
+        challengeId: challengeId,
+        otp: otp,
+      );
+      if (generation != _generation) return false;
+
+      await (_tokenWrite = tokenStorage.saveToken(result.token));
+      if (generation != _generation) return false;
+      authService.apiClient.invalidateSession();
+
+      _user = result.user;
+      _sessionGeneration++;
+
+      return true;
+    } catch (error) {
+      if (generation != _generation) return false;
+      _error = authService.getErrorMessage(error);
+
+      return false;
+    } finally {
+      if (generation == _generation) _setLoading(false);
+    }
+  }
+
+  Future<int?> resendRegisterOtp({
+    required String challengeId,
+  }) async {
+    final generation = ++_generation;
+    _setLoading(true);
+
+    _error = null;
+
+    try {
+      await _cleanup;
+      if (generation != _generation) return null;
+
+      final cooldown = await authService.resendRegisterOtp(
+        challengeId: challengeId,
+      );
+      if (generation != _generation) return null;
+
+      return cooldown;
+    } catch (error) {
+      if (generation != _generation) return null;
+      _error = authService.getErrorMessage(error);
+
+      return null;
     } finally {
       if (generation == _generation) _setLoading(false);
     }

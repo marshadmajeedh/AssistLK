@@ -54,6 +54,8 @@ public class ExceptionHandlingMiddleware
                     StatusCodes.Status503ServiceUnavailable,
                 ConflictException =>
                     StatusCodes.Status409Conflict,
+                ServiceUnavailableException =>
+                    StatusCodes.Status503ServiceUnavailable,
                 _ =>
                     StatusCodes.Status500InternalServerError
             };

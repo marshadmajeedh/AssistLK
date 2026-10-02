@@ -15,4 +15,8 @@ public class User : BaseEntity
     public UserRole Role { get; set; }
 
     public bool IsActive { get; set; } = true;
+
+    public bool IsPhoneVerified { get; set; } = false;
+
+    public DateTime? PhoneVerifiedAtUtc { get; set; }
 }

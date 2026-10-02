@@ -3,6 +3,7 @@ using AssistLK.Application.Auth.DTOs;
 using AssistLK.Application.Interfaces;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.RateLimiting;
 
 namespace AssistLK.Api.Controllers;
 
@@ -33,6 +34,56 @@ public class AuthController : ControllerBase
         return StatusCode(
             StatusCodes.Status201Created,
             response);
+    }
+
+    [AllowAnonymous]
+    [EnableRateLimiting("OtpPolicy")]
+    [HttpPost("register/start")]
+    public async Task<ActionResult<RegisterStartResponse>>
+        RegisterStart(
+            RegisterStartRequest request,
+            CancellationToken cancellationToken)
+    {
+        var response =
+            await _authService.RegisterStartAsync(
+                request,
+                cancellationToken);
+
+        return Ok(response);
+    }
+
+    [AllowAnonymous]
+    [EnableRateLimiting("OtpPolicy")]
+    [HttpPost("register/verify-otp")]
+    public async Task<ActionResult<AuthResponse>>
+        VerifyOtp(
+            VerifyOtpRequest request,
+            CancellationToken cancellationToken)
+    {
+        var response =
+            await _authService.VerifyOtpAsync(
+                request,
+                cancellationToken);
+
+        return StatusCode(
+            StatusCodes.Status201Created,
+            response);
+    }
+
+    [AllowAnonymous]
+    [EnableRateLimiting("OtpPolicy")]
+    [HttpPost("register/resend-otp")]
+    public async Task<ActionResult<ResendOtpResponse>>
+        ResendOtp(
+            ResendOtpRequest request,
+            CancellationToken cancellationToken)
+    {
+        var response =
+            await _authService.ResendOtpAsync(
+                request,
+                cancellationToken);
+
+        return Ok(response);
     }
 
     [AllowAnonymous]

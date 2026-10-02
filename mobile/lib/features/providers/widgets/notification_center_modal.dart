@@ -109,14 +109,17 @@ class NotificationCenterModal extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final notifications = dashboard.inAppNotifications;
-    final hasOngoing = dashboard.activeJobMatch != null &&
-        dashboard.activeJobMatch!['status'] == 'Accepted';
+    return ListenableBuilder(
+      listenable: dashboard,
+      builder: (context, _) {
+        final notifications = dashboard.inAppNotifications;
+        final hasOngoing = dashboard.activeJobMatch != null &&
+            dashboard.activeJobMatch!['status'] == 'Accepted';
 
-    return Container(
-      constraints: BoxConstraints(
-        maxHeight: MediaQuery.of(context).size.height * 0.78,
-      ),
+        return Container(
+          constraints: BoxConstraints(
+            maxHeight: MediaQuery.of(context).size.height * 0.78,
+          ),
       decoration: const BoxDecoration(
         color: Colors.white,
         borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
@@ -364,6 +367,8 @@ class NotificationCenterModal extends StatelessWidget {
           ),
         ],
       ),
+    );
+      },
     );
   }
 }

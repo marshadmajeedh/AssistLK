@@ -29,6 +29,7 @@ class LocationSelectionController extends ChangeNotifier {
   LocationSuggestion? _suggestion;
   LocationSource _previewSource = LocationSource.openStreetMap;
   bool _fromForwardGeocode = false;
+  bool _isManualEntryActive = false;
   final DateTime Function() clock;
 
   bool get isSuggested => preview != null && _suggestion != null;
@@ -36,6 +37,7 @@ class LocationSelectionController extends ChangeNotifier {
   bool get fromGps => !_fromForwardGeocode && hasGps;
   bool get fromForwardGeocode => _fromForwardGeocode;
   bool get hasForwardCandidates => candidates.isNotEmpty;
+  bool get isManualEntryActive => _isManualEntryActive;
   bool get hasConfirmedCoordinates =>
       latitude != null &&
       longitude != null &&
@@ -116,6 +118,7 @@ class LocationSelectionController extends ChangeNotifier {
     _previewSource = LocationSource.openStreetMap;
     candidates = [];
     selectedCandidate = null;
+    _isManualEntryActive = false;
     final generation = ++_generation;
     busy = true;
     preview = null;
@@ -171,6 +174,7 @@ class LocationSelectionController extends ChangeNotifier {
     candidates = [];
     selectedCandidate = null;
     needsGpsChoice = false;
+    _isManualEntryActive = false;
     message = 'Location confirmed';
     notifyListeners();
   }
@@ -244,6 +248,7 @@ class LocationSelectionController extends ChangeNotifier {
     preview = null;
     _suggestion = null;
     needsGpsChoice = false;
+    _isManualEntryActive = false;
     message = 'Location confirmed';
     notifyListeners();
   }
@@ -268,8 +273,13 @@ class LocationSelectionController extends ChangeNotifier {
     _fromForwardGeocode = false;
     source = LocationSource.manual;
     needsGpsChoice = hasGps;
+    _isManualEntryActive = true;
     message = null;
     notifyListeners();
+  }
+
+  void changeAddress() {
+    enterManually();
   }
 
   void keepGps() {

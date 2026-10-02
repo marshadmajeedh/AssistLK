@@ -14,12 +14,14 @@ import '../../../../shared/theme/app_colors.dart';
 import '../../../../shared/theme/app_radius.dart';
 import '../../../../shared/theme/app_spacing.dart';
 import '../../../../shared/theme/app_text_styles.dart';
+import '../../../../shared/widgets/animated_border_trail.dart';
 import '../../../../shared/widgets/app_button.dart';
 import '../../../../shared/widgets/app_card.dart';
 import '../models/canonical_service_category.dart';
 import '../models/problem_understanding_result_model.dart';
 import '../models/service_request_model.dart';
 import '../models/service_request_status.dart';
+import '../models/service_request_urgency.dart';
 import '../providers/service_request_provider.dart';
 import '../widgets/analysis_result_card.dart';
 import '../widgets/clarification_section.dart';
@@ -86,7 +88,7 @@ class _ServiceRequestDetailScreenState
   String _getAiClassificationText(ServiceRequestModel request) {
     switch (request.status) {
       case ServiceRequestStatus.created:
-        return 'Not analyzed yet';
+        return 'Pending AI analysis';
       case ServiceRequestStatus.analyzing:
         return 'Analysis in progress';
       case ServiceRequestStatus.awaitingInformation:
@@ -352,12 +354,16 @@ class _ServiceRequestDetailScreenState
                         runSpacing: AppSpacing.sm,
                         children: [
                           Text(
-                            request.category.isEmpty
-                                ? 'Unclassified Request'
+                            request.status == ServiceRequestStatus.created &&
+                                    (request.category.isEmpty ||
+                                        request.category == 'Unclassified')
+                                ? 'Pending AI analysis'
                                 : (CanonicalServiceCategory.fromCanonicalOrDisplayName(
                                         request.category,
                                       )?.displayName ??
-                                      request.category),
+                                      (request.category.isEmpty
+                                          ? 'Pending AI analysis'
+                                          : request.category)),
                             style: AppTextStyles.sectionHeading,
                             overflow: TextOverflow.ellipsis,
                           ),
@@ -429,7 +435,15 @@ class _ServiceRequestDetailScreenState
                               color: AppColors.textSecondary,
                             ),
                           ),
-                          UrgencyChip(urgency: request.urgency),
+                          UrgencyChip(
+                            urgency: request.urgency,
+                            label: request.status ==
+                                        ServiceRequestStatus.created &&
+                                    request.urgency ==
+                                        ServiceRequestUrgency.unknown
+                                ? 'Urgency pending'
+                                : null,
+                          ),
                         ],
                       ),
                     ],
@@ -689,7 +703,7 @@ class _ServiceRequestDetailScreenState
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             const Text(
-              'Next Step: AssistLK AI Analysis',
+              'Ready for AI Analysis',
               style: AppTextStyles.cardHeading,
             ),
             const SizedBox(height: AppSpacing.xs),
@@ -700,10 +714,12 @@ class _ServiceRequestDetailScreenState
               ),
             ),
             const SizedBox(height: AppSpacing.md),
-            AppButton(
-              text: 'Analyze with AssistLK AI',
-              isLoading: provider.isAnalyzing,
-              onPressed: () => _triggerAnalysis(request.serviceRequestId),
+            AnimatedBorderTrail(
+              child: AppButton(
+                text: 'Analyze Request with AssistLK AI',
+                isLoading: provider.isAnalyzing,
+                onPressed: () => _triggerAnalysis(request.serviceRequestId),
+              ),
             ),
           ],
         );

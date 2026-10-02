@@ -6,6 +6,8 @@ import '../../../../shared/theme/app_spacing.dart';
 import '../../../../shared/theme/app_text_styles.dart';
 import '../../../../shared/widgets/app_card.dart';
 import '../models/service_request_model.dart';
+import '../models/service_request_status.dart';
+import '../models/service_request_urgency.dart';
 import 'status_badge.dart';
 import 'urgency_chip.dart';
 import 'service_request_category_asset.dart';
@@ -70,9 +72,7 @@ class ServiceRequestCard extends StatelessWidget {
                   runSpacing: AppSpacing.sm,
                   children: [
                     Text(
-                      request.category.isEmpty
-                          ? 'General Request'
-                          : request.category,
+                      _getDisplayCategory(),
                       style: AppTextStyles.cardHeading,
                     ),
                     StatusBadge(status: request.status),
@@ -102,7 +102,10 @@ class ServiceRequestCard extends StatelessWidget {
                   spacing: AppSpacing.xs,
                   runSpacing: AppSpacing.xs,
                   children: [
-                    UrgencyChip(urgency: request.urgency),
+                    UrgencyChip(
+                      urgency: request.urgency,
+                      label: _getUrgencyLabel(),
+                    ),
                     Row(
                       mainAxisSize: MainAxisSize.min,
                       children: [
@@ -128,6 +131,22 @@ class ServiceRequestCard extends StatelessWidget {
         ),
       ),
     );
+  }
+
+  String _getDisplayCategory() {
+    if (request.status == ServiceRequestStatus.created &&
+        (request.category.isEmpty || request.category == 'Unclassified')) {
+      return 'Pending AI analysis';
+    }
+    return request.category.isEmpty ? 'General Request' : request.category;
+  }
+
+  String? _getUrgencyLabel() {
+    if (request.status == ServiceRequestStatus.created &&
+        request.urgency == ServiceRequestUrgency.unknown) {
+      return 'Urgency pending';
+    }
+    return null;
   }
 
   String _formatDate(DateTime date) {

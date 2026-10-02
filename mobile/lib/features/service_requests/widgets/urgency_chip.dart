@@ -7,10 +7,12 @@ import '../models/service_request_urgency.dart';
 
 class UrgencyChip extends StatelessWidget {
   final ServiceRequestUrgency urgency;
+  final String? label;
 
   const UrgencyChip({
     super.key,
     required this.urgency,
+    this.label,
   });
 
   @override
@@ -42,7 +44,7 @@ class UrgencyChip extends StatelessWidget {
           const SizedBox(width: AppSpacing.xs),
           Flexible(
             child: Text(
-              urgency.displayName,
+              label ?? urgency.displayName,
               style: TextStyle(
                 fontSize: 12,
                 fontWeight: FontWeight.w600,

@@ -205,7 +205,7 @@ void main() {
       await tester.pumpAndSettle();
 
       expect(find.text('Create Service Request'), findsOneWidget);
-      expect(find.text('Next: Location'), findsOneWidget);
+      expect(find.text('Continue to Location'), findsOneWidget);
 
       await simulateMouseHoverSweep(tester);
 
@@ -214,26 +214,28 @@ void main() {
         find.widgetWithText(TextFormField, 'Problem Description'),
         'Major ceiling leak in the living room after heavy rain',
       );
-      await tester.ensureVisible(find.text('Next: Location'));
-      await tester.tap(find.text('Next: Location'));
+      await tester.ensureVisible(find.text('Continue to Location'));
+      await tester.tap(find.text('Continue to Location'));
       await tester.pumpAndSettle();
 
-      expect(find.text('Next: Review'), findsOneWidget);
+      expect(find.text('Review Request'), findsOneWidget);
       await simulateMouseHoverSweep(tester);
 
       // Step to Review
+      await tester.tap(find.text('Enter Manually'));
+      await tester.pumpAndSettle();
       await tester.enterText(
         find.widgetWithText(TextFormField, 'Location / Address'),
         '123 Galle Road, Colombo 03',
       );
-      await tester.ensureVisible(find.text('Next: Review'));
-      await tester.tap(find.text('Next: Review'));
+      await tester.ensureVisible(find.text('Review Request'));
+      await tester.tap(find.text('Review Request'));
       await tester.pumpAndSettle();
       await tester.ensureVisible(find.text('Use This Location'));
       await tester.tap(find.text('Use This Location'));
       await tester.pumpAndSettle();
-      await tester.ensureVisible(find.text('Next: Review'));
-      await tester.tap(find.text('Next: Review'));
+      await tester.ensureVisible(find.text('Review Request'));
+      await tester.tap(find.text('Review Request'));
       await tester.pumpAndSettle();
 
       expect(find.text('Submit Request'), findsOneWidget);
@@ -261,7 +263,7 @@ void main() {
       );
       await tester.pumpAndSettle();
 
-      expect(find.text('Analyze with AssistLK AI'), findsOneWidget);
+      expect(find.text('Analyze Request with AssistLK AI'), findsOneWidget);
       expect(find.textContaining('Gemini'), findsNothing);
       await simulateMouseHoverSweep(tester);
     });
@@ -525,8 +527,8 @@ void main() {
         await tester.pumpAndSettle();
 
         expect(tester.takeException(), isNull);
-        expect(find.text('Next Step: AssistLK AI Analysis'), findsOneWidget);
-        expect(find.text('Analyze with AssistLK AI'), findsOneWidget);
+        expect(find.text('Ready for AI Analysis'), findsOneWidget);
+        expect(find.text('Analyze Request with AssistLK AI'), findsOneWidget);
         expect(find.textContaining('Gemini'), findsNothing);
 
         tester.view.resetPhysicalSize();

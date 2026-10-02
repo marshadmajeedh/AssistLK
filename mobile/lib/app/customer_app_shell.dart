@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
+import '../shared/theme/app_colors.dart';
 import 'customer_bottom_navigation.dart';
 
 import '../features/auth/screens/customer_account_screen.dart';
@@ -40,8 +41,13 @@ class _CustomerAppShellState extends State<CustomerAppShell> {
       },
       child: Scaffold(
         appBar: AppBar(
+          backgroundColor: AppColors.primary,
+          foregroundColor: AppColors.surface,
+          iconTheme: const IconThemeData(color: AppColors.surface),
+          actionsIconTheme: const IconThemeData(color: AppColors.surface),
           title: Text(
-            _selectedIndex == 0 ? 'AssistLK Customer' : _titles[_selectedIndex],
+            _selectedIndex == 0 ? 'AssistLK' : _titles[_selectedIndex],
+            style: const TextStyle(color: AppColors.surface),
           ),
         ),
         body: SafeArea(

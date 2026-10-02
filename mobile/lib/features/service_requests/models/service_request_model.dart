@@ -18,6 +18,9 @@ class ServiceRequestModel {
   final double? longitude;
   final ServiceRequestUrgency urgency;
   final ServiceRequestStatus status;
+  final DateTime? readyForMatchingAtUtc;
+  final DateTime? matchingExpiresAtUtc;
+  final bool isMatchingEligible;
   final DateTime createdAt;
   final DateTime updatedAt;
   final ProblemAnalysisSummaryModel? latestAnalysis;
@@ -35,11 +38,20 @@ class ServiceRequestModel {
     this.longitude,
     required this.urgency,
     required this.status,
+    this.readyForMatchingAtUtc,
+    this.matchingExpiresAtUtc,
+    this.isMatchingEligible = false,
     required this.createdAt,
     required this.updatedAt,
     this.latestAnalysis,
     this.clarifications = const [],
   });
+
+  bool get isMatchingExpired {
+    if (status != ServiceRequestStatus.readyForMatching) return false;
+    if (matchingExpiresAtUtc == null) return false;
+    return DateTime.now().toUtc().isAfter(matchingExpiresAtUtc!);
+  }
 
   int get currentClarificationRound => clarifications.isEmpty
       ? 0
@@ -94,6 +106,13 @@ class ServiceRequestModel {
           : null,
       urgency: ServiceRequestUrgency.fromJson(json['urgency']),
       status: ServiceRequestStatus.fromJson(json['status']),
+      readyForMatchingAtUtc: json['readyForMatchingAtUtc'] != null
+          ? DateTime.parse(json['readyForMatchingAtUtc'] as String)
+          : null,
+      matchingExpiresAtUtc: json['matchingExpiresAtUtc'] != null
+          ? DateTime.parse(json['matchingExpiresAtUtc'] as String)
+          : null,
+      isMatchingEligible: json['isMatchingEligible'] as bool? ?? false,
       createdAt: json['createdAt'] != null
           ? DateTime.parse(json['createdAt'] as String)
           : DateTime.now(),
@@ -130,6 +149,9 @@ class ServiceRequestModel {
       'longitude': longitude,
       'urgency': urgency.toJson(),
       'status': status.toJson(),
+      'readyForMatchingAtUtc': readyForMatchingAtUtc?.toIso8601String(),
+      'matchingExpiresAtUtc': matchingExpiresAtUtc?.toIso8601String(),
+      'isMatchingEligible': isMatchingEligible,
       'createdAt': createdAt.toIso8601String(),
       'updatedAt': updatedAt.toIso8601String(),
       'latestAnalysis': latestAnalysis?.toJson(),
@@ -149,6 +171,9 @@ class ServiceRequestModel {
     double? longitude,
     ServiceRequestUrgency? urgency,
     ServiceRequestStatus? status,
+    Object? readyForMatchingAtUtc = _sentinel,
+    Object? matchingExpiresAtUtc = _sentinel,
+    bool? isMatchingEligible,
     DateTime? createdAt,
     DateTime? updatedAt,
     Object? latestAnalysis = _sentinel,
@@ -168,6 +193,13 @@ class ServiceRequestModel {
       longitude: longitude ?? this.longitude,
       urgency: urgency ?? this.urgency,
       status: status ?? this.status,
+      readyForMatchingAtUtc: identical(readyForMatchingAtUtc, _sentinel)
+          ? this.readyForMatchingAtUtc
+          : readyForMatchingAtUtc as DateTime?,
+      matchingExpiresAtUtc: identical(matchingExpiresAtUtc, _sentinel)
+          ? this.matchingExpiresAtUtc
+          : matchingExpiresAtUtc as DateTime?,
+      isMatchingEligible: isMatchingEligible ?? this.isMatchingEligible,
       createdAt: createdAt ?? this.createdAt,
       updatedAt: updatedAt ?? this.updatedAt,
       latestAnalysis: identical(latestAnalysis, _sentinel)

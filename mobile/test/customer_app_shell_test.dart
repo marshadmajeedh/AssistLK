@@ -228,14 +228,15 @@ void main() {
         find.widgetWithText(TextFormField, 'Problem Description'),
         'A leaking pipe needs attention in the kitchen',
       );
-      await tapText(tester, 'Next: Location');
+      await tapText(tester, 'Continue to Location');
+      await tapText(tester, 'Enter Manually');
       await tester.enterText(
         find.widgetWithText(TextFormField, 'Location / Address'),
         'Colombo 03',
       );
-      await tapText(tester, 'Next: Review');
+      await tapText(tester, 'Review Request');
       await tapText(tester, 'Use This Location');
-      await tapText(tester, 'Next: Review');
+      await tapText(tester, 'Review Request');
       await tapText(tester, 'Submit Request');
       expect(requests.submitted!.categoryHint, entry.value);
       expect(find.byType(ServiceRequestDetailScreen), findsOneWidget);

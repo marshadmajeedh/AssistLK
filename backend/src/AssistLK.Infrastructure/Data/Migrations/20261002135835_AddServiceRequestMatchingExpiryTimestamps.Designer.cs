@@ -3,6 +3,7 @@ using System;
 using AssistLK.Infrastructure.Data;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 
@@ -11,9 +12,11 @@ using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 namespace AssistLK.Infrastructure.Data.Migrations
 {
     [DbContext(typeof(AssistLKDbContext))]
-    partial class AssistLKDbContextModelSnapshot : ModelSnapshot
+    [Migration("20261002135835_AddServiceRequestMatchingExpiryTimestamps")]
+    partial class AddServiceRequestMatchingExpiryTimestamps
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
@@ -709,9 +712,6 @@ namespace AssistLK.Infrastructure.Data.Migrations
 
                     b.Property<DateTime>("UpdatedAt")
                         .HasColumnType("timestamp with time zone");
-
-                    b.Property<string>("WorkflowThreadId")
-                        .HasColumnType("text");
 
                     b.HasKey("Id");
 

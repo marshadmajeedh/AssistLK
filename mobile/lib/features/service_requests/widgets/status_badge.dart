@@ -7,12 +7,20 @@ import '../models/service_request_status.dart';
 
 class StatusBadge extends StatelessWidget {
   final ServiceRequestStatus status;
+  final bool isExpired;
 
-  const StatusBadge({super.key, required this.status});
+  const StatusBadge({
+    super.key,
+    required this.status,
+    this.isExpired = false,
+  });
 
   @override
   Widget build(BuildContext context) {
-    final colors = _getStatusColors(status);
+    final colors = _getStatusColors(status, isExpired);
+    final label = (status == ServiceRequestStatus.readyForMatching && isExpired)
+        ? 'Matching Expired'
+        : status.displayName;
 
     return Container(
       padding: const EdgeInsets.symmetric(
@@ -38,7 +46,7 @@ class StatusBadge extends StatelessWidget {
           const SizedBox(width: AppSpacing.xs + 2),
           Flexible(
             child: Text(
-              status.displayName,
+              label,
               style: TextStyle(
                 fontSize: 12,
                 fontWeight: FontWeight.w600,
@@ -52,7 +60,15 @@ class StatusBadge extends StatelessWidget {
     );
   }
 
-  _BadgeColors _getStatusColors(ServiceRequestStatus status) {
+  _BadgeColors _getStatusColors(ServiceRequestStatus status, bool isExpired) {
+    if (status == ServiceRequestStatus.readyForMatching && isExpired) {
+      return const _BadgeColors(
+        background: Color(0xFFFFFBEB),
+        border: Color(0xFFFDE68A),
+        foreground: AppColors.warning,
+      );
+    }
+
     switch (status) {
       case ServiceRequestStatus.created:
         return const _BadgeColors(

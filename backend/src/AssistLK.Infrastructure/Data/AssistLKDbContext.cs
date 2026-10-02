@@ -446,6 +446,12 @@ public class AssistLKDbContext : DbContext, IAgentWorkflowDbContext
             .IsRequired()
             .HasMaxLength(40);
 
+        request.Property(x => x.ReadyForMatchingAtUtc)
+            .IsRequired(false);
+
+        request.Property(x => x.MatchingExpiresAtUtc)
+            .IsRequired(false);
+
         request.Property(x => x.CreatedAt)
             .IsRequired();
 

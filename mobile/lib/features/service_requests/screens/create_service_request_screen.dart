@@ -358,7 +358,10 @@ class _CreateServiceRequestScreenState
       return const SizedBox.shrink();
     }
     if (_currentStep == 0) {
-      return AppButton(text: 'Next: Location', onPressed: _nextFromDetails);
+      return AppButton(
+        text: 'Continue to Location',
+        onPressed: _nextFromDetails,
+      );
     }
     final back = OutlinedButton(
       onPressed: _currentStep == 1
@@ -367,7 +370,7 @@ class _CreateServiceRequestScreenState
       child: const Text('Back'),
     );
     final next = AppButton(
-      text: _currentStep == 1 ? 'Next: Review' : 'Submit Request',
+      text: _currentStep == 1 ? 'Review Request' : 'Submit Request',
       isLoading: (_currentStep == 1 && _location.busy) ||
           (_currentStep == 2 && (provider.isLoading || _photos.busy)),
       onPressed: _currentStep == 1 ? _nextFromLocation : _submit,

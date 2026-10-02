@@ -394,17 +394,17 @@ void main() {
         find.widgetWithText(TextFormField, 'Problem Description'),
         'Water leaking beneath kitchen sink',
       );
-      await tester.ensureVisible(find.text('Next: Location'));
-      await tester.tap(find.text('Next: Location'));
+      await tester.ensureVisible(find.text('Continue to Location'));
+      await tester.tap(find.text('Continue to Location'));
       await tester.pumpAndSettle();
       await tester.tap(find.text('Use Current Location'));
       await tester.pumpAndSettle();
       await tester.ensureVisible(find.text('Use This Location'));
       await tester.tap(find.text('Use This Location'));
       await tester.pumpAndSettle();
-      await tester.ensureVisible(find.text('Next: Review'));
-      await tester.ensureVisible(find.text('Next: Review'));
-      await tester.tap(find.text('Next: Review'));
+      await tester.ensureVisible(find.text('Review Request'));
+      await tester.ensureVisible(find.text('Review Request'));
+      await tester.tap(find.text('Review Request'));
       await tester.pumpAndSettle();
       expect(find.text('\u00a9 OpenStreetMap contributors'), findsOneWidget);
       await tester.ensureVisible(find.text('Submit Request'));

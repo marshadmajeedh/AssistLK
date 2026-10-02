@@ -9,7 +9,14 @@ import 'package:dio/dio.dart';
 import 'services/provider_registration_service.dart';
 
 class ProviderRegistrationScreen extends StatefulWidget {
-  const ProviderRegistrationScreen({super.key});
+  final int initialStep;
+  final ProviderRegistrationService? apiService;
+
+  const ProviderRegistrationScreen({
+    super.key,
+    this.initialStep = 0,
+    this.apiService,
+  });
 
   @override
   State<ProviderRegistrationScreen> createState() =>
@@ -57,7 +64,8 @@ class _ProviderRegistrationScreenState
   @override
   void initState() {
     super.initState();
-    _apiService = ProviderRegistrationService();
+    _currentStep = widget.initialStep;
+    _apiService = widget.apiService ?? ProviderRegistrationService();
     _skills = [
       _RegistrationSkillItem(category: 'Plumbing'),
     ];

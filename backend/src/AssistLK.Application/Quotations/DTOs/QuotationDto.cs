@@ -30,7 +30,7 @@ public record QuotationDto(
     string Status,
     decimal TotalAmount,
     List<QuotationItemDto> Items,
-    string? WorkflowThreadId,        // ← new
+    string? WorkflowThreadId,
     DateTime CreatedAt,
     DateTime UpdatedAt);
 
@@ -57,7 +57,24 @@ public record QuotationApprovalRequestDto(
     Guid? ProviderId,
     decimal? TotalAmount,
     List<string> AllowedActions,
-    string Message);
+    string Message,
+    QuotationRiskAssessmentDto? RiskAssessment);   // ← NEW
+
+/// <summary>
+/// LLM-generated risk assessment of a quotation, produced by the Python
+/// Quotation &amp; Booking Agent. Surfaced to the customer before they
+/// approve or reject the quotation.
+/// </summary>
+public record QuotationRiskAssessmentDto(
+    string? RiskLevel,
+    double? Confidence,
+    string? Rationale,
+    List<string>? SuggestedConcerns,
+    string? Recommendation,
+    string? Model,
+    int? PromptTokens,
+    int? CompletionTokens,
+    int? TotalTokens);
 
 // ----------------------------------------------------------------
 // Decision DTOs

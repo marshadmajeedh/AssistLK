@@ -168,13 +168,27 @@ public class QuotationService : IQuotationService
                 "Agent service returned a response without a thread_id. " +
                 $"Raw body: {rawBody}");
 
-        // ------------------------------------------------------------------
         // Persist the LangGraph thread ID so clients can resume the workflow.
-        // ------------------------------------------------------------------
         quotation.WorkflowThreadId = result.ThreadId;
         quotation.UpdatedAt = DateTime.UtcNow;
         _quotationRepository.Update(quotation);
         await _quotationRepository.SaveChangesAsync(cancellationToken);
+
+        // Build the risk assessment DTO if the Python agent returned one.
+        QuotationRiskAssessmentDto? riskDto = null;
+        if (result.ApprovalRequest?.RiskAssessment is { } ra)
+        {
+            riskDto = new QuotationRiskAssessmentDto(
+                ra.RiskLevel,
+                ra.Confidence,
+                ra.Rationale,
+                ra.SuggestedConcerns,
+                ra.Recommendation,
+                ra.Model,
+                ra.PromptTokens,
+                ra.CompletionTokens,
+                ra.TotalTokens);
+        }
 
         return new QuotationApprovalWorkflowDto(
             MapToDto(quotation),
@@ -187,8 +201,8 @@ public class QuotationService : IQuotationService
                 quotation.ProviderId,
                 quotation.TotalAmount,
                 result.ApprovalRequest?.AllowedActions ?? new List<string> { "approve", "reject" },
-                result.ApprovalRequest?.Message ?? "Customer must approve or reject this quotation."
-            ));
+                result.ApprovalRequest?.Message ?? "Customer must approve or reject this quotation.",
+                riskDto));                                   // ← NEW
     }
 
     // ------------------------------------------------------------------
@@ -356,7 +370,7 @@ public class QuotationService : IQuotationService
         q.TotalAmount,
         q.Items.Select(i => new QuotationItemDto(
             i.Id, i.Description, i.Amount, i.Quantity)).ToList(),
-        q.WorkflowThreadId,        // ← new
+        q.WorkflowThreadId,
         q.CreatedAt,
         q.UpdatedAt);
 
@@ -376,6 +390,7 @@ public class QuotationService : IQuotationService
 
 // ------------------------------------------------------------------
 // Internal helper records for the Python agent responses.
+// The Python service uses snake_case. We map via JsonPropertyName.
 // ------------------------------------------------------------------
 internal sealed record StartWorkflowResponse(
     [property: JsonPropertyName("thread_id")]
@@ -395,4 +410,35 @@ internal sealed record ApprovalRequestResponse(
     List<string>? AllowedActions,
 
     [property: JsonPropertyName("message")]
-    string? Message);
+    string? Message,
+
+    [property: JsonPropertyName("risk_assessment")]
+    RiskAssessmentResponse? RiskAssessment);            // ← NEW
+
+internal sealed record RiskAssessmentResponse(
+    [property: JsonPropertyName("risk_level")]
+    string? RiskLevel,
+
+    [property: JsonPropertyName("confidence")]
+    double? Confidence,
+
+    [property: JsonPropertyName("rationale")]
+    string? Rationale,
+
+    [property: JsonPropertyName("suggested_concerns")]
+    List<string>? SuggestedConcerns,
+
+    [property: JsonPropertyName("recommendation")]
+    string? Recommendation,
+
+    [property: JsonPropertyName("model")]
+    string? Model,
+
+    [property: JsonPropertyName("prompt_tokens")]
+    int? PromptTokens,
+
+    [property: JsonPropertyName("completion_tokens")]
+    int? CompletionTokens,
+
+    [property: JsonPropertyName("total_tokens")]
+    int? TotalTokens);

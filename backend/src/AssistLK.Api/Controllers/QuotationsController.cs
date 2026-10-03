@@ -111,6 +111,11 @@ public class QuotationsController : ControllerBase
         [FromBody] ApproveQuotationDto dto,
         CancellationToken cancellationToken)
     {
+        if (dto is null)
+        {
+            return BadRequest("Request body is required.");
+        }
+
         if (string.IsNullOrWhiteSpace(dto.ThreadId))
         {
             return BadRequest("threadId is required; start the quotation workflow first.");
@@ -142,6 +147,11 @@ public class QuotationsController : ControllerBase
         [FromBody] RejectQuotationDto dto,
         CancellationToken cancellationToken)
     {
+        if (dto is null)
+        {
+            return BadRequest("Request body is required.");
+        }
+
         if (string.IsNullOrWhiteSpace(dto.ThreadId))
         {
             return BadRequest("threadId is required; start the quotation workflow first.");

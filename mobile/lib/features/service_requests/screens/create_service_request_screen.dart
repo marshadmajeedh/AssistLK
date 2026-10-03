@@ -11,6 +11,7 @@ import '../services/location_geocoding_service.dart';
 import '../widgets/location_selection.dart';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 
 import '../../../../shared/theme/app_assets.dart';
@@ -324,7 +325,14 @@ class _CreateServiceRequestScreenState
     return PopScope(
       canPop: !_photos.busy,
       child: Scaffold(
-        appBar: AppBar(title: const Text('Create Service Request')),
+        appBar: AppBar(
+          backgroundColor: AppColors.primary,
+          foregroundColor: Colors.white,
+          elevation: 0,
+          systemOverlayStyle: SystemUiOverlayStyle.light,
+          iconTheme: const IconThemeData(color: Colors.white),
+          title: const Text('Create Service Request'),
+        ),
         body: SafeArea(
           child: Column(
             children: [

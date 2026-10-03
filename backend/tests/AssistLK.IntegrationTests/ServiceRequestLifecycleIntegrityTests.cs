@@ -69,6 +69,7 @@ public class ServiceRequestLifecycleIntegrityTests
         Assert.DoesNotContain("Failed", statusNames);
         Assert.DoesNotContain("Matched", statusNames);
         Assert.DoesNotContain("Assigned", statusNames);
+        Assert.DoesNotContain("ProviderAssigned", statusNames);
         Assert.DoesNotContain("Booked", statusNames);
         Assert.DoesNotContain("InProgress", statusNames);
         Assert.DoesNotContain("PendingApproval", statusNames);
@@ -341,5 +342,79 @@ public class ServiceRequestLifecycleIntegrityTests
         var retrievedCandidate = await db.MatchedCandidates.FindAsync(candidate.Id);
         Assert.NotNull(retrievedCandidate);
         Assert.Equal(MatchedCandidateStatus.Accepted, retrievedCandidate.Status);
+    }
+
+    [Fact]
+    public async Task C3_QuotationApprovalAndBooking_DoesNotMutateServiceRequestStatus()
+    {
+        await using var db = CreateInMemoryDbContext();
+        var customerId = Guid.NewGuid();
+        var providerId = Guid.NewGuid();
+        var serviceRequestId = Guid.NewGuid();
+
+        // 1. ServiceRequest reaches ReadyForMatching at end of C1
+        var serviceRequest = new ServiceRequest
+        {
+            Id = serviceRequestId,
+            CustomerId = customerId,
+            Description = "Electrical short circuit in living room",
+            LocationText = "Colombo 07",
+            Category = "Electrical",
+            Urgency = ServiceRequestUrgency.High,
+            Status = ServiceRequestStatus.ReadyForMatching,
+            CreatedAt = DateTime.UtcNow.AddMinutes(-30),
+            UpdatedAt = DateTime.UtcNow.AddMinutes(-25)
+        };
+        await db.ServiceRequests.AddAsync(serviceRequest);
+
+        // 2. C3 Quotation is created and submitted for approval
+        var quotation = new Quotation
+        {
+            Id = 1,
+            ServiceRequestId = serviceRequestId,
+            ProviderId = providerId,
+            Status = QuotationStatus.WaitingForCustomerApproval,
+            TotalAmount = 5000m,
+            CreatedAt = DateTime.UtcNow.AddMinutes(-20),
+            UpdatedAt = DateTime.UtcNow.AddMinutes(-15)
+        };
+        await db.Quotations.AddAsync(quotation);
+        await db.SaveChangesAsync();
+
+        // 3. Customer approves quotation -> Booking is created with Confirmed status
+        quotation.Status = QuotationStatus.Approved;
+        quotation.UpdatedAt = DateTime.UtcNow.AddMinutes(-5);
+
+        var booking = new Booking
+        {
+            Id = 1,
+            QuotationId = quotation.Id,
+            CustomerId = customerId,
+            ProviderId = providerId,
+            Status = BookingStatus.Confirmed,
+            ScheduledAt = DateTime.UtcNow.AddDays(1),
+            LocationText = serviceRequest.LocationText,
+            Latitude = serviceRequest.Latitude,
+            Longitude = serviceRequest.Longitude,
+            CreatedAt = DateTime.UtcNow.AddMinutes(-5),
+            UpdatedAt = DateTime.UtcNow.AddMinutes(-5)
+        };
+        await db.Bookings.AddAsync(booking);
+        await db.SaveChangesAsync();
+
+        // 4. Assert that ServiceRequest.Status strictly remains ReadyForMatching
+        var retrievedRequest = await db.ServiceRequests.FindAsync(serviceRequestId);
+        Assert.NotNull(retrievedRequest);
+        Assert.Equal(ServiceRequestStatus.ReadyForMatching, retrievedRequest.Status);
+
+        // And C3 Quotation is Approved
+        var retrievedQuotation = await db.Quotations.FindAsync(quotation.Id);
+        Assert.NotNull(retrievedQuotation);
+        Assert.Equal(QuotationStatus.Approved, retrievedQuotation.Status);
+
+        // And C3 Booking is Confirmed
+        var retrievedBooking = await db.Bookings.FindAsync(booking.Id);
+        Assert.NotNull(retrievedBooking);
+        Assert.Equal(BookingStatus.Confirmed, retrievedBooking.Status);
     }
 }

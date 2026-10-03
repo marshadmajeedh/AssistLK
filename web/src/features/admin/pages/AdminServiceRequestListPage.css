@@ -1,4 +1,4 @@
-.request-monitoring { container-type: inline-size; text-align: left; min-width: 0; overflow-wrap: anywhere; display: grid; gap: var(--monitoring-gap); }
+.request-monitoring { container-type: inline-size; text-align: left; min-width: 0; overflow-wrap: anywhere; display: grid; gap: var(--monitoring-gap); width: 100%; }
 .request-monitoring h1 { margin: 0; letter-spacing: normal; }
 .request-monitoring h2, .request-monitoring h3, .request-monitoring h4 { color: inherit; margin: 0 0 var(--monitoring-gap); }
 .request-monitoring h2 { font-size: 20px; }
@@ -11,16 +11,15 @@
 .request-monitoring select { margin-top: 8px; }
 .request-monitoring select:focus-visible, .request-monitoring button:focus-visible { outline: 2px solid var(--monitoring-focus); outline-offset: 2px; }
 
-/* Section max-width hierarchy: reading width for hero/filters, near-full workspace for results */
+/* All main cards share identical width and fill the available content area */
 .request-monitoring .page-hero,
 .request-monitoring .section-card,
-.request-monitoring section[aria-labelledby="request-details-heading"] {
-  max-width: 1200px;
-}
 .request-monitoring .table-shell,
-.request-monitoring .monitoring-cards-shell {
+.request-monitoring .monitoring-cards-shell,
+.request-monitoring section[aria-labelledby="request-details-heading"] {
   width: 100%;
-  max-width: 100%;
+  max-width: none;
+  box-sizing: border-box;
 }
 
 .table-shell {

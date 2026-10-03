@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:provider/provider.dart';
 import 'package:mobile/app/app.dart';
@@ -119,6 +120,12 @@ void main() {
       // Step 0: Continue to Location
       expect(find.text('Continue to Location'), findsOneWidget);
       expect(find.text('Next: Location'), findsNothing);
+      expect(find.text('Create Service Request'), findsOneWidget);
+      final appBar = tester.widget<AppBar>(find.byType(AppBar));
+      expect(appBar.backgroundColor, AppColors.primary);
+      expect(appBar.foregroundColor, Colors.white);
+      expect(appBar.elevation, 0);
+      expect(appBar.systemOverlayStyle, SystemUiOverlayStyle.light);
 
       await tester.enterText(
         find.widgetWithText(TextFormField, 'Problem Description'),
@@ -130,6 +137,76 @@ void main() {
       // Step 1: Review Request
       expect(find.text('Review Request'), findsOneWidget);
       expect(find.text('Next: Review'), findsNothing);
+    });
+
+    testWidgets(
+        'Create Service Request flow maintains consistent navy primary AppBar across all 3 steps',
+        (tester) async {
+      await tester.pumpWidget(
+        buildApp(
+          CreateServiceRequestScreen(
+            locationService: gps,
+            geocodingService: geocoding,
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      // Step 0: Details
+      expect(find.text('Create Service Request'), findsOneWidget);
+      final appBarDetails = tester.widget<AppBar>(find.byType(AppBar));
+      expect(appBarDetails.backgroundColor, AppColors.primary);
+      expect(appBarDetails.foregroundColor, Colors.white);
+      expect(appBarDetails.elevation, 0);
+      expect(appBarDetails.systemOverlayStyle, SystemUiOverlayStyle.light);
+
+      // Advance to Step 1: Location
+      await tester.enterText(
+        find.widgetWithText(TextFormField, 'Problem Description'),
+        'Ceiling pipe leaking severely into hallway',
+      );
+      await tester.tap(find.text('Continue to Location'));
+      await tester.pumpAndSettle();
+
+      // Step 1: Location
+      expect(find.text('Create Service Request'), findsOneWidget);
+      final appBarLocation = tester.widget<AppBar>(find.byType(AppBar));
+      expect(appBarLocation.backgroundColor, AppColors.primary);
+      expect(appBarLocation.foregroundColor, Colors.white);
+      expect(appBarLocation.elevation, 0);
+      expect(appBarLocation.systemOverlayStyle, SystemUiOverlayStyle.light);
+
+      // Advance to Step 2: Review
+      geocoding.forwardReply = (addr) async => [
+        ForwardGeocodeCandidate(
+          displayAddress: '123 Galle Road, Colombo 03',
+          latitude: 6.91,
+          longitude: 79.85,
+          placeId: 'cand-123',
+          source: 'OpenStreetMap',
+        ),
+      ];
+      await tester.tap(find.text('Enter Manually'));
+      await tester.pumpAndSettle();
+      await tester.enterText(
+        find.widgetWithText(TextFormField, 'Location / Address'),
+        '123 Galle Road, Colombo 03',
+      );
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const Key('resolve_address_button')));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const Key('use_forward_location_button')));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Review Request'));
+      await tester.pumpAndSettle();
+
+      // Step 2: Review
+      expect(find.text('Create Service Request'), findsOneWidget);
+      final appBarReview = tester.widget<AppBar>(find.byType(AppBar));
+      expect(appBarReview.backgroundColor, AppColors.primary);
+      expect(appBarReview.foregroundColor, Colors.white);
+      expect(appBarReview.elevation, 0);
+      expect(appBarReview.systemOverlayStyle, SystemUiOverlayStyle.light);
     });
 
     testWidgets('Detail screen displays "Ready for AI Analysis" and "Analyze Request with AssistLK AI"',

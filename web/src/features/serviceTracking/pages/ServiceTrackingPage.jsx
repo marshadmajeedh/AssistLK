@@ -5,33 +5,30 @@ import ErrorMessage from "../../../shared/components/ErrorMessage";
 import LoadingSpinner from "../../../shared/components/LoadingSpinner";
 import StatusBadge from "../../../shared/components/StatusBadge";
 import { colors, typography } from "../../../shared/theme";
+import ComplaintsTable from "../components/ComplaintsTable";
 import serviceTrackingService from "../services/serviceTrackingService";
 
-function formatCreatedDate(value) {
-  if (!value) return "—";
-
-  const date = new Date(value);
-  return Number.isNaN(date.getTime()) ? "—" : date.toLocaleString();
-}
-
-function getErrorMessage(error) {
+function getErrorMessage(error, subject = "complaints") {
   if (error.response?.status === 401) {
     return "Your session has expired. Please log in again.";
   }
 
   if (error.response?.status === 403) {
-    return "You do not have permission to view complaints.";
+    return `You do not have permission to view ${subject}.`;
   }
 
-  return "Failed to load complaints. Please try again.";
+  return `Failed to load ${subject}. Please try again.`;
 }
 
 export default function ServiceTrackingPage() {
   const [complaints, setComplaints] = useState([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState("");
+  const [suspiciousJobs, setSuspiciousJobs] = useState([]);
+  const [complaintsLoading, setComplaintsLoading] = useState(true);
+  const [suspiciousJobsLoading, setSuspiciousJobsLoading] = useState(true);
+  const [complaintsError, setComplaintsError] = useState("");
+  const [suspiciousJobsError, setSuspiciousJobsError] = useState("");
   const [pendingAction, setPendingAction] = useState("");
-  const [attempt, setAttempt] = useState(0);
+  const [attempt, setAttempt] = useState({ complaints: 0, suspiciousJobs: 0 });
 
   useEffect(() => {
     let ignore = false;
@@ -44,37 +41,58 @@ export default function ServiceTrackingPage() {
 
         if (!ignore) {
           setComplaints(data);
-          setLoading(false);
+          setComplaintsLoading(false);
         }
       })
       .catch((requestError) => {
         if (!ignore) {
           setComplaints([]);
-          setError(getErrorMessage(requestError));
-          setLoading(false);
+          setComplaintsError(getErrorMessage(requestError, "complaints"));
+          setComplaintsLoading(false);
+        }
+      });
+
+    serviceTrackingService.getSuspiciousJobs()
+      .then((data) => {
+        if (!Array.isArray(data)) {
+          throw new Error("Invalid suspicious jobs response");
+        }
+
+        if (!ignore) {
+          setSuspiciousJobs(data);
+          setSuspiciousJobsLoading(false);
+        }
+      })
+      .catch((requestError) => {
+        if (!ignore) {
+          setSuspiciousJobs([]);
+          setSuspiciousJobsError(getErrorMessage(requestError, "suspicious jobs"));
+          setSuspiciousJobsLoading(false);
         }
       });
 
     return () => {
       ignore = true;
     };
-  }, [attempt]);
+  }, [attempt.complaints, attempt.suspiciousJobs]);
 
-  const retry = () => {
-    setLoading(true);
-    setError("");
-    setAttempt((value) => value + 1);
+  const retryComplaints = () => {
+    setComplaintsLoading(true);
+    setComplaintsError("");
+    setAttempt((value) => ({ ...value, complaints: value.complaints + 1 }));
   };
 
-  const refreshComplaints = () => {
-    setAttempt((value) => value + 1);
+  const retrySuspiciousJobs = () => {
+    setSuspiciousJobsLoading(true);
+    setSuspiciousJobsError("");
+    setAttempt((value) => ({ ...value, suspiciousJobs: value.suspiciousJobs + 1 }));
   };
 
   const handleAction = async (complaint, action) => {
     const ticketId = complaint.ticketId || complaint.id;
     const actionKey = `${ticketId}:${action}`;
     setPendingAction(actionKey);
-    setError("");
+    setComplaintsError("");
 
     try {
       const statusByAction = {
@@ -87,14 +105,18 @@ export default function ServiceTrackingPage() {
         notes: `${action}d by administrator`,
       });
 
-      refreshComplaints();
+      setComplaints((currentComplaints) => currentComplaints.map((item) => (
+        item.id === complaint.id
+          ? { ...item, status: statusByAction[action] }
+          : item
+      )));
     } catch (error) {
       console.error("Failed to process complaint action", {
         action,
         ticketId,
         error,
       });
-      setError(
+      setComplaintsError(
         error.response?.data?.message ||
           error.message ||
           "Failed to process action. Please try again.",
@@ -117,68 +139,56 @@ export default function ServiceTrackingPage() {
           </div>
           <div className="page-hero-meta">
             <div className="page-stat">
-              <strong>{loading ? "—" : complaints.length}</strong>
+              <strong>{complaintsLoading ? "—" : complaints.length}</strong>
               <span>Complaints loaded</span>
             </div>
           </div>
         </div>
       </section>
 
-      {loading ? <LoadingSpinner message="Loading complaints..." /> : error ? (
+      {complaintsLoading ? <LoadingSpinner message="Loading complaints..." /> : complaintsError ? (
         <div>
-          <ErrorMessage message={error} />
-          <AppButton variant="outline" onClick={retry}>Retry Complaints</AppButton>
+          <ErrorMessage message={complaintsError} />
+          <AppButton variant="outline" onClick={retryComplaints}>Retry Complaints</AppButton>
         </div>
       ) : (
-        <AppCard className="table-shell">
-          <h2 style={typography.cardHeading}>Complaints</h2>
-          {complaints.length === 0 ? <p>No complaints found.</p> : (
-            <table className="dashboard-table">
-              <caption>Customer complaints from tracked service jobs</caption>
-              <thead>
-                <tr>
-                  {["Ticket ID", "Job ID", "Customer", "Type", "Description", "AI Sentiment", "Status", "Created", "Actions"].map((label) => (
-                    <th scope="col" key={label}>{label}</th>
-                  ))}
-                </tr>
-              </thead>
-              <tbody>
-                {complaints.map((complaint) => (
-                  <tr key={complaint.id}>
-                    <td data-label="Ticket ID">{complaint.ticketId || complaint.id || "—"}</td>
-                    <td data-label="Job ID">{complaint.jobId || complaint.serviceJobId || "—"}</td>
-                    <td data-label="Customer">{complaint.customerName || complaint.customerId || "—"}</td>
-                    <td data-label="Type">{complaint.type || "—"}</td>
-                    <td data-label="Description">{complaint.customerComment || complaint.description || "—"}</td>
-                    <td data-label="AI Sentiment">{complaint.aiSentiment || "—"}</td>
-                    <td data-label="Status"><StatusBadge status={complaint.status} /></td>
-                    <td data-label="Created">{formatCreatedDate(complaint.createdAt)}</td>
-                    <td data-label="Actions">
-                      {complaint.isSuspicious && complaint.serviceJobId ? (
-                        <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-                          {["Approve", "Reject", "Resolve"].map((action) => {
-                            const actionKey = `${complaint.id}:${action}`;
-                            return (
-                              <AppButton
-                                key={action}
-                                variant={action === "Approve" ? "secondary" : "outline"}
-                                disabled={Boolean(pendingAction)}
-                                onClick={() => handleAction(complaint, action)}
-                              >
-                                {pendingAction === actionKey ? "Processing..." : action}
-                              </AppButton>
-                            );
-                          })}
-                        </div>
-                      ) : "—"}
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          )}
-        </AppCard>
+        <ComplaintsTable
+          complaints={complaints}
+          pendingAction={pendingAction}
+          onAction={handleAction}
+        />
       )}
+
+      <AppCard className="table-shell">
+        <h2 style={typography.cardHeading}>Rapid Completion Flags</h2>
+        {suspiciousJobsLoading ? <LoadingSpinner message="Loading suspicious jobs..." /> : suspiciousJobsError ? (
+          <div>
+            <ErrorMessage message={suspiciousJobsError} />
+            <AppButton variant="outline" onClick={retrySuspiciousJobs}>Retry Suspicious Jobs</AppButton>
+          </div>
+        ) : suspiciousJobs.length === 0 ? <p>No suspicious jobs found.</p> : (
+          <table className="dashboard-table">
+            <caption>Jobs flagged by Agent 4 for rapid completion review</caption>
+            <thead>
+              <tr>
+                {['Job ID', 'Status', 'Reason', 'Flagged'].map((label) => (
+                  <th scope="col" key={label}>{label}</th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {suspiciousJobs.map((job) => (
+                <tr key={job.serviceJobId}>
+                  <td data-label="Job ID">{job.serviceJobId || "—"}</td>
+                  <td data-label="Status"><StatusBadge status={job.status} /></td>
+                  <td data-label="Reason">{job.reason || "Rapid completion flagged for review."}</td>
+                  <td data-label="Flagged">{job.flaggedAt ? new Date(job.flaggedAt).toLocaleString() : "—"}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        )}
+      </AppCard>
     </div>
   );
 }

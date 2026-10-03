@@ -1,4 +1,8 @@
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
+
+import '../../providers/providers/provider_dashboard_provider.dart';
+import '../../tracking/provider_job_tracking_screen.dart';
 
 class BookingManagementTab extends StatelessWidget {
   const BookingManagementTab({super.key});
@@ -7,6 +11,7 @@ class BookingManagementTab extends StatelessWidget {
   Widget build(BuildContext context) {
     const primaryColor = Color(0xFF1F4E78);
     const primaryDark = Color(0xFF173B5E);
+    final dashboard = context.watch<ProviderDashboardProvider>();
 
     return Scaffold(
       backgroundColor: const Color(0xFFF8FAFC),
@@ -128,7 +133,7 @@ class BookingManagementTab extends StatelessWidget {
             Expanded(
               child: TabBarView(
                 children: [
-                  _buildBookingList(primaryColor),
+                  _buildBookingList(context, primaryColor, dashboard),
                   _buildEmptyState(),
                 ],
               ),
@@ -139,10 +144,16 @@ class BookingManagementTab extends StatelessWidget {
     );
   }
 
-  Widget _buildBookingList(Color themeColor) {
+  Widget _buildBookingList(
+    BuildContext context,
+    Color themeColor,
+    ProviderDashboardProvider dashboard,
+  ) {
     return ListView(
       padding: const EdgeInsets.all(16.0),
       children: [
+        _buildTestTrackingButton(context, dashboard),
+        const SizedBox(height: 16),
         _buildBookingCard(
           themeColor,
           customerName: 'Kamal Gunaratne',
@@ -164,6 +175,48 @@ class BookingManagementTab extends StatelessWidget {
           isPending: true,
         ),
       ],
+    );
+  }
+
+  Widget _buildTestTrackingButton(
+    BuildContext context,
+    ProviderDashboardProvider dashboard,
+  ) {
+    return OutlinedButton.icon(
+      icon: const Icon(Icons.route),
+      label: const Text('Test C4 (Provider Tracking)'),
+      onPressed: () {
+        final activeJob = dashboard.activeJobMatch;
+        final jobId = activeJob?['jobId']?.toString();
+
+        if (jobId == null || jobId.isEmpty) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('No active service job available for tracking'),
+            ),
+          );
+          return;
+        }
+
+        final initialStatus = activeJob?['jobStatus']?.toString() ??
+            activeJob?['status']?.toString() ??
+            'Assigned';
+
+        Navigator.of(context).push(
+          MaterialPageRoute<void>(
+            builder: (_) => ProviderJobTrackingScreen(
+              jobId: jobId,
+              initialStatus: initialStatus,
+              customerLatitude:
+                  (activeJob?['customerLatitude'] as num?)?.toDouble(),
+              customerLongitude:
+                  (activeJob?['customerLongitude'] as num?)?.toDouble(),
+              customerAddress: activeJob?['locationText']?.toString(),
+              serviceDescription: activeJob?['description']?.toString(),
+            ),
+          ),
+        );
+      },
     );
   }
 

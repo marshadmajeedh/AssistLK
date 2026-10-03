@@ -99,6 +99,40 @@ public class ReportsController : ControllerBase
             Message = "Complaint resolved successfully."
         });
     }
+
+    [HttpGet("suspicious-jobs")]
+    public async Task<ActionResult<IReadOnlyList<SuspiciousJobResponse>>> GetSuspiciousJobs(
+        CancellationToken cancellationToken)
+    {
+        var suspiciousJobs = await _context.ServiceJobs
+            .AsNoTracking()
+            .Where(job => job.StatusHistories.Any(history =>
+                history.Note != null &&
+                history.Note.Contains("Rapid Completion Flagged")))
+            .Select(job => new SuspiciousJobResponse
+            {
+                ServiceJobId = job.Id,
+                Status = job.Status.ToString(),
+                FlaggedAt = job.StatusHistories
+                    .Where(history =>
+                        history.Note != null &&
+                        history.Note.Contains("Rapid Completion Flagged"))
+                    .OrderByDescending(history => history.ChangedAt)
+                    .Select(history => history.ChangedAt)
+                    .FirstOrDefault(),
+                Reason = job.StatusHistories
+                    .Where(history =>
+                        history.Note != null &&
+                        history.Note.Contains("Rapid Completion Flagged"))
+                    .OrderByDescending(history => history.ChangedAt)
+                    .Select(history => history.Note)
+                    .FirstOrDefault() ?? "Rapid completion flagged for review."
+            })
+            .OrderByDescending(job => job.FlaggedAt)
+            .ToListAsync(cancellationToken);
+
+        return Ok(suspiciousJobs);
+    }
 }
 
 public sealed class ComplaintResponse
@@ -124,4 +158,12 @@ public sealed class ComplaintStatusUpdateRequest
 {
     public string Status { get; init; } = string.Empty;
     public string? Notes { get; init; }
+}
+
+public sealed class SuspiciousJobResponse
+{
+    public Guid ServiceJobId { get; init; }
+    public string Status { get; init; } = string.Empty;
+    public DateTime FlaggedAt { get; init; }
+    public string Reason { get; init; } = string.Empty;
 }

@@ -63,10 +63,19 @@ class ProviderService {
   }
   
   Future<void> updateJobStatus(String jobId, String newStatus) async {
-    await apiClient.client.put(
+    final response = await apiClient.client.put(
       '/service-jobs/$jobId/status',
       data: {'newStatus': newStatus},
     );
+
+    final statusCode = response.statusCode;
+    if (statusCode == null || statusCode < 200 || statusCode >= 300) {
+      throw DioException(
+        requestOptions: response.requestOptions,
+        response: response,
+        message: 'Status update failed with HTTP $statusCode.',
+      );
+    }
   }
 
   Future<Map<String, dynamic>> completeJob(

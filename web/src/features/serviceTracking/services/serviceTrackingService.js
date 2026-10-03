@@ -5,6 +5,10 @@ const serviceTrackingService = {
     const response = await apiClient.get("/api/reports/complaints");
     return response.data;
   },
+  getSuspiciousJobs: async () => {
+    const response = await apiClient.get("/api/reports/suspicious-jobs");
+    return response.data;
+  },
   updateJobStatus: async (jobId, payload) => {
     const response = await apiClient.put(`/api/service-jobs/${jobId}/status`, payload);
     return response.data;

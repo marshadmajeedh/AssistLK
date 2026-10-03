@@ -14,6 +14,7 @@ using AssistLK.Domain.Entities;
 using AssistLK.Domain.Enums;
 using AssistLK.Api.Hubs;
 using Microsoft.AspNetCore.SignalR;
+using Microsoft.Extensions.Logging;
 using Npgsql;
 
 namespace AssistLK.Api.Controllers
@@ -30,6 +31,7 @@ namespace AssistLK.Api.Controllers
         private readonly FeedbackApplicationService _feedbackApplicationService;
         private readonly AgentWorkflowService _agentWorkflowService;
         private readonly AgentMonitoringService _agentMonitoringService;
+        private readonly ILogger<ServiceJobsController> _logger;
 
         public ServiceJobsController(
             ApplicationDbContext context,
@@ -39,7 +41,8 @@ namespace AssistLK.Api.Controllers
             IHubContext<TrackingHub> trackingHubContext,
             FeedbackApplicationService feedbackApplicationService,
             AgentWorkflowService agentWorkflowService,
-            AgentMonitoringService agentMonitoringService)
+            AgentMonitoringService agentMonitoringService,
+            ILogger<ServiceJobsController> logger)
         {
             _applicationDbContext = context;
             _assistLkDbContext = serviceRequestContext;
@@ -49,6 +52,7 @@ namespace AssistLK.Api.Controllers
             _feedbackApplicationService = feedbackApplicationService;
             _agentWorkflowService = agentWorkflowService;
             _agentMonitoringService = agentMonitoringService;
+            _logger = logger;
         }
 
         [HttpPut("{id:guid}/status")]
@@ -216,20 +220,24 @@ namespace AssistLK.Api.Controllers
             try
             {
                 using var response = await _httpClient.PostAsJsonAsync(
-                    "http://localhost:8000/agent/validate",
+                    "http://localhost:8003/agent/validate",
                     payload,
                     cancellationToken);
 
                 if (!response.IsSuccessStatusCode)
                 {
-                    await CompleteValidationExecutionAsync(
+                    _logger.LogWarning(
+                        "Tracking validation agent returned HTTP {StatusCode}; bypassing validation for job {JobId}.",
+                        (int)response.StatusCode,
+                        payload.GetType().GetProperty("job_id")?.GetValue(payload));
+                    await TryCompleteValidationExecutionAsync(
                         workflow.Id,
                         execution.Id,
                         agentName,
                         false,
                         new { statusCode = (int)response.StatusCode },
                         stopwatch);
-                    return (null, false);
+                    return (null, true);
                 }
 
                 var content = await response.Content.ReadAsStringAsync(cancellationToken);
@@ -247,16 +255,45 @@ namespace AssistLK.Api.Controllers
                     stopwatch);
                 return (result, true);
             }
-            catch
+            catch (Exception ex)
             {
-                await CompleteValidationExecutionAsync(
+                _logger.LogWarning(
+                    ex,
+                    "Tracking validation agent is unavailable; bypassing validation for the status update.");
+                await TryCompleteValidationExecutionAsync(
                     workflow.Id,
                     execution.Id,
                     agentName,
                     false,
                     null,
                     stopwatch);
-                throw;
+                return (null, true);
+            }
+        }
+
+        private async Task TryCompleteValidationExecutionAsync(
+            Guid workflowId,
+            Guid executionId,
+            string agentName,
+            bool success,
+            object? output,
+            Stopwatch stopwatch)
+        {
+            try
+            {
+                await CompleteValidationExecutionAsync(
+                    workflowId,
+                    executionId,
+                    agentName,
+                    success,
+                    output,
+                    stopwatch);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogWarning(
+                    ex,
+                    "Failed to record the tracking validation result; continuing with the status update.");
             }
         }
 
@@ -317,6 +354,11 @@ namespace AssistLK.Api.Controllers
                     return Forbid();
                 }
 
+                if (proofOfWorkImage == null || proofOfWorkImage.Length == 0)
+                {
+                    return BadRequest(new { message = "A proof-of-work image is required to complete the job." });
+                }
+
                 if (proofOfWorkImage != null && proofOfWorkImage.Length > 10 * 1024 * 1024)
                 {
                     return BadRequest(new { message = "Proof of work image must be 10 MB or smaller." });
@@ -346,6 +388,10 @@ namespace AssistLK.Api.Controllers
                 }
 
                 var validationResult = validation.Result;
+                var rapidCompletionFlagged = string.Equals(
+                    validationResult?.Status,
+                    "SUSPICIOUS",
+                    StringComparison.OrdinalIgnoreCase);
 
                 if (validationResult?.Status == "INVALID")
                 {
@@ -356,10 +402,9 @@ namespace AssistLK.Api.Controllers
                     });
                 }
 
-                string? proofOfWorkImageUrl = null;
-                if (proofOfWorkImage != null)
+                string? proofOfWorkImageUrl;
+                await using (var imageStream = proofOfWorkImage!.OpenReadStream())
                 {
-                    await using var imageStream = proofOfWorkImage.OpenReadStream();
                     proofOfWorkImageUrl = await _proofOfWorkStorage.UploadAsync(
                         imageStream,
                         proofOfWorkImage.FileName,
@@ -377,7 +422,9 @@ namespace AssistLK.Api.Controllers
                     ServiceJobId = id,
                     OldStatus = oldStatus,
                     NewStatus = ServiceJobStatus.Completed,
-                    Note = $"[AI Validation: {validationResult?.Status}] {form.Notes}",
+                    Note = $"[AI Validation: {validationResult?.Status}]" +
+                        (rapidCompletionFlagged ? " [Rapid Completion Flagged]" : string.Empty) +
+                        $" {form.Notes}",
                     ChangedAt = DateTime.UtcNow
                 });
 
@@ -418,7 +465,8 @@ namespace AssistLK.Api.Controllers
                     message = "Job completed successfully.",
                     current_status = job.Status.ToString(),
                     proofOfWorkImageUrl,
-                    ai_validation = validationResult
+                    ai_validation = validationResult,
+                    rapid_completion_flagged = rapidCompletionFlagged
                 });
             }
             catch (Exception ex)
@@ -446,91 +494,6 @@ namespace AssistLK.Api.Controllers
                 await _assistLkDbContext.ProviderProfiles.AnyAsync(
                     profile => profile.Id == job.ProviderId.Value && profile.UserId == userId,
                     cancellationToken);
-        }
-
-        [HttpPost("seed-from-request/{serviceRequestId:guid}")]
-        [Authorize(Roles = "Provider")]
-        public async Task<IActionResult> SeedFromRequest(Guid serviceRequestId)
-        {
-            try
-            {
-                var userIdClaim = User.FindFirstValue(ClaimTypes.NameIdentifier);
-                if (!Guid.TryParse(userIdClaim, out var userId))
-                {
-                    return Unauthorized(new { message = "Authenticated provider identity is missing or invalid." });
-                }
-
-                var providerId = await _assistLkDbContext.ProviderProfiles
-                    .Where(profile => profile.UserId == userId)
-                    .Select(profile => (Guid?)profile.Id)
-                    .FirstOrDefaultAsync();
-
-                if (!providerId.HasValue)
-                {
-                    return Forbid();
-                }
-
-                var existingJob = await _applicationDbContext.ServiceJobs
-                    .FirstOrDefaultAsync(j => j.ServiceRequestId == serviceRequestId);
-
-                if (existingJob != null)
-                {
-                    if (!existingJob.ProviderId.HasValue)
-                    {
-                        existingJob.ProviderId = providerId.Value;
-                        await _applicationDbContext.SaveChangesAsync();
-                    }
-                    else if (existingJob.ProviderId.Value != providerId.Value)
-                    {
-                        return Conflict(new
-                        {
-                            message = "This service request is already assigned to another provider."
-                        });
-                    }
-
-                    return Ok(new
-                    {
-                        Message = "Job tya request sathi adhiich ahe.",
-                        JobId = existingJob.Id,
-                        Status = existingJob.Status.ToString()
-                    });
-                }
-
-                var newJob = new ServiceJob
-                {
-                    Id = Guid.NewGuid(),
-                    ServiceRequestId = serviceRequestId,
-                    ProviderId = providerId.Value,
-                    Status = ServiceJobStatus.Assigned,
-                    CreatedAt = DateTime.UtcNow
-                };
-
-                var initialHistory = new ServiceStatusHistory
-                {
-                    Id = Guid.NewGuid(),
-                    ServiceJobId = newJob.Id,
-                    OldStatus = null,
-                    NewStatus = ServiceJobStatus.Assigned,
-                    Note = "Component 1 ServiceRequest kadun auto-seed kela.",
-                    ChangedAt = DateTime.UtcNow
-                };
-
-                _applicationDbContext.ServiceJobs.Add(newJob);
-                _applicationDbContext.ServiceStatusHistories.Add(initialHistory);
-                await _applicationDbContext.SaveChangesAsync();
-
-                return Ok(new
-                {
-                    JobId = newJob.Id,
-                    ServiceRequestId = newJob.ServiceRequestId,
-                    Status = newJob.Status.ToString(),
-                    Message = "ServiceJob yashasviretya create zala."
-                });
-            }
-            catch (Exception ex)
-            {
-                return StatusCode(500, new { message = "Error seeding job from request", error = ex.Message });
-            }
         }
 
         [HttpPost("{id:guid}/feedback")]
@@ -573,13 +536,17 @@ namespace AssistLK.Api.Controllers
                 }
                 await _assistLkDbContext.Database.UseTransactionAsync(transaction.GetDbTransaction());
 
-                var sentimentResult = new SentimentResponse { IsNegative = false, Sentiment = "NEUTRAL" };
+                var sentimentResult = new SentimentResponse
+                {
+                    Sentiment = "NEUTRAL",
+                    ShouldRouteToComplaint = false
+                };
 
                 try
                 {
                     var response = await _httpClient.PostAsJsonAsync(
-                        "http://localhost:8000/agent/analyze-sentiment",
-                        new { comment = dto.Comment },
+                        "http://localhost:8003/agent/analyze-sentiment",
+                        new { feedback_text = dto.Comment },
                         cancellationToken);
                     if (response.IsSuccessStatusCode)
                     {
@@ -605,8 +572,12 @@ namespace AssistLK.Api.Controllers
                         customerId,
                         dto.Rating,
                         dto.Comment,
-                        sentimentResult.IsNegative || dto.Rating <= 2,
+                            sentimentResult.ShouldRouteToComplaint || dto.Rating <= 2,
                         sentimentResult.Sentiment),
+                    cancellationToken);
+
+                await SyncCompletedServiceRequestAndProviderRatingAsync(
+                    job,
                     cancellationToken);
 
                 await transaction.CommitAsync(cancellationToken);
@@ -644,6 +615,56 @@ namespace AssistLK.Api.Controllers
             {
                 return StatusCode(500, new { message = "Error submitting feedback", error = ex.Message });
             }
+        }
+
+        private async Task SyncCompletedServiceRequestAndProviderRatingAsync(
+            ServiceJob job,
+            CancellationToken cancellationToken)
+        {
+            if (job.ServiceRequestId.HasValue)
+            {
+                var serviceRequest = await _assistLkDbContext.ServiceRequests
+                    .FirstOrDefaultAsync(
+                        request => request.Id == job.ServiceRequestId.Value,
+                        cancellationToken);
+
+                if (serviceRequest != null)
+                {
+                    serviceRequest.Status = ServiceRequestStatus.Completed;
+                    serviceRequest.UpdatedAt = DateTime.UtcNow;
+                }
+            }
+
+            if (!job.ProviderId.HasValue)
+            {
+                return;
+            }
+
+            var provider = await _assistLkDbContext.ProviderProfiles
+                .FirstOrDefaultAsync(
+                    profile => profile.Id == job.ProviderId.Value,
+                    cancellationToken);
+
+            if (provider == null)
+            {
+                return;
+            }
+
+            var providerRatings = _applicationDbContext.Feedbacks
+                .Join(
+                    _applicationDbContext.ServiceJobs,
+                    feedback => feedback.ServiceJobId,
+                    serviceJob => serviceJob.Id,
+                    (feedback, serviceJob) => new { feedback, serviceJob })
+                .Where(item => item.serviceJob.ProviderId == job.ProviderId.Value)
+                .Select(item => item.feedback.Rating);
+
+            provider.TotalReviews = await providerRatings.CountAsync(cancellationToken);
+            provider.Rating = Math.Round(
+                await providerRatings.Select(rating => (decimal)rating).AverageAsync(cancellationToken),
+                2);
+
+            await _assistLkDbContext.SaveChangesAsync(cancellationToken);
         }
 
         private static bool IsUniqueConstraintViolation(DbUpdateException exception)
@@ -693,10 +714,13 @@ namespace AssistLK.Api.Controllers
 
     public class SentimentResponse
     {
-        [JsonPropertyName("is_negative")]
-        public bool IsNegative { get; set; }
-
         [JsonPropertyName("sentiment")]
         public string Sentiment { get; set; } = string.Empty;
+
+        [JsonPropertyName("should_route_to_complaint")]
+        public bool ShouldRouteToComplaint { get; set; }
+
+        [JsonPropertyName("summary")]
+        public string Summary { get; set; } = string.Empty;
     }
 }

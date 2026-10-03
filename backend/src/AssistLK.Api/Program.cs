@@ -413,8 +413,39 @@ builder.Services.AddCors(options =>
                         return false;
                     }
 
-                    return (uri.Scheme == Uri.UriSchemeHttp || uri.Scheme == Uri.UriSchemeHttps)
-                           && (uri.Host == "localhost" || uri.Host == "127.0.0.1");
+                    if (uri.Scheme != Uri.UriSchemeHttp && uri.Scheme != Uri.UriSchemeHttps)
+                    {
+                        return false;
+                    }
+
+                    // Local development (localhost, 127.0.0.1)
+                    if (uri.Host == "localhost" || uri.Host == "127.0.0.1")
+                    {
+                        return true;
+                    }
+
+                    // Vercel deployment domains (*.vercel.app)
+                    if (uri.Host.EndsWith(".vercel.app", StringComparison.OrdinalIgnoreCase))
+                    {
+                        return true;
+                    }
+
+                    // Railway deployment domains (*.railway.app, *.up.railway.app)
+                    if (uri.Host.EndsWith(".railway.app", StringComparison.OrdinalIgnoreCase))
+                    {
+                        return true;
+                    }
+
+                    // Optional custom configured origins via Cors:AllowedOrigins
+                    var configuredOrigins = builder.Configuration["Cors:AllowedOrigins"];
+                    if (!string.IsNullOrWhiteSpace(configuredOrigins))
+                    {
+                        var allowedList = configuredOrigins
+                            .Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+                        return allowedList.Any(allowed => string.Equals(allowed.TrimEnd('/'), origin.TrimEnd('/'), StringComparison.OrdinalIgnoreCase));
+                    }
+
+                    return false;
                 })
                 .AllowAnyHeader()
                 .AllowAnyMethod();
@@ -441,7 +472,10 @@ if (!app.Environment.IsEnvironment("Testing"))
 app.UseMiddleware<ExceptionHandlingMiddleware>();
 
 
-if(app.Environment.IsDevelopment())
+var enableSwagger = app.Environment.IsDevelopment()
+    || app.Configuration.GetValue<bool>("ENABLE_SWAGGER", true);
+
+if (enableSwagger)
 {
     app.UseSwagger();
     app.UseSwaggerUI();

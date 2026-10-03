@@ -94,12 +94,22 @@ public class ServiceRequestModelConfigurationTests
     [Fact]
     public void ServiceRequest_HasTheExpectedCheckConstraints()
     {
-        var constraintNames = EntityType.GetCheckConstraints()
+        var constraints = EntityType.GetCheckConstraints().ToArray();
+        var constraintNames = constraints
             .Select(constraint => constraint.Name)
             .ToArray();
 
         Assert.Contains("CK_ServiceRequests_Latitude", constraintNames);
         Assert.Contains("CK_ServiceRequests_Longitude", constraintNames);
+        Assert.Contains("CK_ServiceRequests_Status_Valid", constraintNames);
+
+        var statusConstraint = constraints.Single(c => c.Name == "CK_ServiceRequests_Status_Valid");
+        Assert.Contains("'Created'", statusConstraint.Sql);
+        Assert.Contains("'Analyzing'", statusConstraint.Sql);
+        Assert.Contains("'AwaitingInformation'", statusConstraint.Sql);
+        Assert.Contains("'Analyzed'", statusConstraint.Sql);
+        Assert.Contains("'ReadyForMatching'", statusConstraint.Sql);
+        Assert.Contains("'Cancelled'", statusConstraint.Sql);
     }
 
     private static IModel CreateModel()

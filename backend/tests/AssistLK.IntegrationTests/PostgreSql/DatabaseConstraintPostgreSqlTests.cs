@@ -238,4 +238,61 @@ public class DatabaseConstraintPostgreSqlTests : PostgreSqlIntegrationTestBase
         var ex = await Assert.ThrowsAsync<DbUpdateException>(() => context.SaveChangesAsync());
         Assert.NotNull(ex.InnerException);
     }
+
+    [Theory]
+    [InlineData(ServiceRequestStatus.Created)]
+    [InlineData(ServiceRequestStatus.Analyzing)]
+    [InlineData(ServiceRequestStatus.AwaitingInformation)]
+    [InlineData(ServiceRequestStatus.Analyzed)]
+    [InlineData(ServiceRequestStatus.ReadyForMatching)]
+    [InlineData(ServiceRequestStatus.Cancelled)]
+    public async Task ServiceRequest_Status_ValidEnumStatuses_PersistSuccessfully(ServiceRequestStatus status)
+    {
+        var customer = await CreateUserAsync();
+
+        await using var context = CreateDbContext();
+        var request = new ServiceRequest
+        {
+            CustomerId = customer.Id,
+            Category = "Plumbing",
+            Description = $"Status test for {status}",
+            LocationText = "Colombo",
+            Urgency = ServiceRequestUrgency.Medium,
+            Status = status
+        };
+
+        await context.ServiceRequests.AddAsync(request);
+        await context.SaveChangesAsync();
+
+        var retrieved = await context.ServiceRequests.AsNoTracking().SingleOrDefaultAsync(r => r.Id == request.Id);
+        Assert.NotNull(retrieved);
+        Assert.Equal(status, retrieved.Status);
+    }
+
+    [Theory]
+    [InlineData("Assigned")]
+    [InlineData("Completed")]
+    [InlineData("Booked")]
+    [InlineData("InProgress")]
+    public async Task ServiceRequest_Status_InvalidStatus_ThrowsCheckConstraintViolation(string invalidStatus)
+    {
+        var customer = await CreateUserAsync();
+        await using var context = CreateDbContext();
+
+        var requestId = Guid.NewGuid();
+        var sql = $@"
+            INSERT INTO ""ServiceRequests"" (
+                ""Id"", ""CustomerId"", ""Category"", ""Description"", ""LocationText"", ""Urgency"", ""Status"", ""CreatedAt"", ""UpdatedAt"", ""EvidenceRevision""
+            ) VALUES (
+                '{requestId}', '{customer.Id}', 'Plumbing', 'Invalid status test', 'Colombo', 'Medium', '{invalidStatus}', NOW(), NOW(), 1
+            )";
+
+        var ex = await Assert.ThrowsAnyAsync<Exception>(() =>
+            context.Database.ExecuteSqlRawAsync(sql));
+
+        var isConstraintViolation = ex.ToString().Contains("CK_ServiceRequests_Status_Valid") ||
+            (ex is Npgsql.PostgresException pgEx && pgEx.SqlState == "23514");
+
+        Assert.True(isConstraintViolation, $"Expected check constraint violation for status '{invalidStatus}', but got: {ex.Message}");
+    }
 }

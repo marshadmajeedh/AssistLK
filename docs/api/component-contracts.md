@@ -16,6 +16,40 @@
 
 ---
 
+## 1.1 SERVICE REQUEST OWNERSHIP CONTRACT
+
+Component 1 exclusively owns `ServiceRequest` lifecycle status.
+
+### Valid ServiceRequest.Status Values
+- `Created`
+- `Analyzing`
+- `AwaitingInformation`
+- `Analyzed`
+- `ReadyForMatching`
+- `Cancelled`
+
+### Handoff and Downstream Ownership
+- `ReadyForMatching` is the C1 -> C2 handoff milestone.
+- C1 active workflow terminates when the request reaches `ReadyForMatching` or `Cancelled`.
+- After handoff:
+  - **Component 2** records matching state in `MatchingExecution` / `MatchedCandidate` (`MatchingExecutionStatus`, `MatchedCandidateStatus`).
+  - **Component 3** records quotation/booking state in `Quotation` / `Booking` (`QuotationStatus`, `BookingStatus`).
+  - **Component 4** records service execution state in `ServiceJob` / `ServiceStatusHistory` (`ServiceJobStatus`).
+
+### Downstream Invariants & Mutation Rules
+- Downstream components **MUST NOT** encode their states into `ServiceRequests.Status`.
+- Downstream states (such as `Assigned`, `ProviderAssigned`, `Matched`, `Booked`, `InProgress`, `Completed`) belong strictly to downstream entities (`ServiceJob`, `Booking`, `MatchingExecution`).
+- If another component needs a new cross-component state:
+  1. Discuss with C1 owner.
+  2. Update contract deliberately.
+  3. Update enum (`ServiceRequestStatus`).
+  4. Update migration / PostgreSQL CHECK constraint (`CK_ServiceRequests_Status_Valid`).
+  5. Update tests.
+  6. Update API clients.
+- **Do not bypass the contract with direct database writes or out-of-band test seeds.**
+
+---
+
 ## 2. Major Component Handoffs
 
 ```mermaid

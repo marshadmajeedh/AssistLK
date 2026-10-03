@@ -112,3 +112,22 @@ When opening a PR targeting `develop`:
 3. **Automated Verification:** Confirm all CI checks pass.
 4. **Peer Review:** Request review from at least one other team member.
 5. **Merge Strategy:** Prefer **Squash and Merge** or **Rebase and Merge** to keep the `develop` commit history clean.
+
+---
+
+## 5. Branch Protection Rules & Code Owners Enforcement
+
+To prevent accidental breaks and protect component lifecycle boundaries, the `main` and `develop` branches must have branch protection enabled in GitHub:
+
+### Required Settings for `develop` & `main`:
+1. **Require a pull request before merging:**
+   - Require approvals: Minimum 1 approval.
+   - Dismiss stale pull request approvals when new commits are pushed.
+   - **Require review from Code Owners:** Enabled (enforces that `.github/CODEOWNERS` reviewers must approve changes to their owned files).
+2. **Require status checks to pass before merging:**
+   - Require branches to be up to date before merging.
+   - Status checks required:
+     - `Backend CI` (builds and runs unit/integration tests).
+     - `Agentic AI CI` (verifies agent tools and schemas).
+3. **Prevent direct pushes:**
+   - "Do not allow bypassing the above settings" (or restrict pushes to admins only for emergency hotfixes).

@@ -94,8 +94,8 @@ public class ProviderMatchingCoordinator : IProviderMatchingCoordinator
 
         // Validate matching window eligibility per Component 1 contract (24-hour window)
         var nowUtc = DateTime.UtcNow;
-        bool is24hExpired = sr.CreatedAt < nowUtc.AddHours(-24) ||
-                            (sr.MatchingExpiresAtUtc.HasValue && sr.MatchingExpiresAtUtc.Value <= nowUtc);
+        bool is24hExpired = (sr.MatchingExpiresAtUtc.HasValue && sr.MatchingExpiresAtUtc.Value <= nowUtc) ||
+                            (!sr.MatchingExpiresAtUtc.HasValue && sr.CreatedAt != default && sr.CreatedAt < nowUtc.AddHours(-24));
 
         if (!sr.IsMatchingEligible || is24hExpired)
         {

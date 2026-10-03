@@ -71,15 +71,16 @@ void main() {
       find.widgetWithText(TextFormField, 'Problem Description'),
       'Water is leaking under the sink',
     );
-    await tap(tester, 'Next: Location');
+    await tap(tester, 'Continue to Location');
+    await tap(tester, 'Enter Manually');
     await tester.enterText(
       find.widgetWithText(TextFormField, 'Location / Address'),
       'Colombo',
     );
-    await tap(tester, 'Next: Review');
+    await tap(tester, 'Review Request');
     if (find.text('Use This Location').evaluate().isNotEmpty) {
       await tap(tester, 'Use This Location');
-      await tap(tester, 'Next: Review');
+      await tap(tester, 'Review Request');
     }
     expect(find.byType(PrivatePhotoImage), findsOneWidget);
     expect(find.byKey(const Key('wizard_actions')), findsOneWidget);
@@ -100,8 +101,8 @@ void main() {
       await tap(tester, 'Back');
       await tap(tester, 'Back');
       expect(find.byType(PrivatePhotoImage), findsOneWidget);
-      await tap(tester, 'Next: Location');
-      await tap(tester, 'Next: Review');
+      await tap(tester, 'Continue to Location');
+      await tap(tester, 'Review Request');
       await tap(tester, 'Submit Request');
       expect(find.byType(ServiceRequestDetailScreen), findsOneWidget);
       expect(find.byType(RequestProblemPhotos), findsOneWidget);

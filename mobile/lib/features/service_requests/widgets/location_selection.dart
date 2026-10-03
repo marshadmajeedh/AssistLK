@@ -11,9 +11,10 @@ import '../models/location_source.dart';
 import '../providers/location_selection_controller.dart';
 import 'location_attribution.dart';
 
-class LocationSelection extends StatelessWidget {
+class LocationSelection extends StatefulWidget {
   final LocationSelectionController controller;
   final bool editing;
+
   const LocationSelection({
     super.key,
     required this.controller,
@@ -21,10 +22,56 @@ class LocationSelection extends StatelessWidget {
   });
 
   @override
+  State<LocationSelection> createState() => _LocationSelectionState();
+}
+
+class _LocationSelectionState extends State<LocationSelection> {
+  final FocusNode _focusNode = FocusNode();
+
+  @override
+  void initState() {
+    super.initState();
+    widget.controller.addListener(_onControllerChanged);
+  }
+
+  @override
+  void didUpdateWidget(covariant LocationSelection oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.controller != widget.controller) {
+      oldWidget.controller.removeListener(_onControllerChanged);
+      widget.controller.addListener(_onControllerChanged);
+    }
+  }
+
+  @override
+  void dispose() {
+    widget.controller.removeListener(_onControllerChanged);
+    _focusNode.dispose();
+    super.dispose();
+  }
+
+  void _onControllerChanged() {
+    if (widget.controller.isManualEntryActive && !_focusNode.hasFocus) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted && widget.controller.isManualEntryActive) {
+          _focusNode.requestFocus();
+        }
+      });
+    }
+  }
+
+  @override
   Widget build(BuildContext context) => ListenableBuilder(
-    listenable: controller,
+    listenable: widget.controller,
     builder: (context, _) {
-      final c = controller;
+      final c = widget.controller;
+      final isManual = widget.editing || c.isManualEntryActive;
+      final hasConfirmed =
+          c.hasConfirmedCoordinates &&
+          c.text.text.trim().isNotEmpty &&
+          c.preview == null &&
+          c.candidates.isEmpty;
+
       return Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -93,7 +140,10 @@ class LocationSelection extends StatelessWidget {
                     SizedBox(
                       width: double.infinity,
                       child: OutlinedButton(
-                        onPressed: c.enterManually,
+                        onPressed: () {
+                          c.enterManually();
+                          _focusNode.requestFocus();
+                        },
                         child: const Text('Change Location'),
                       ),
                     ),
@@ -195,101 +245,175 @@ class LocationSelection extends StatelessWidget {
           if (c.message != null)
             Padding(
               padding: const EdgeInsets.symmetric(vertical: AppSpacing.sm),
-              child: Text(c.message!, style: AppTextStyles.body),
-            ),
-          if (c.candidates.isEmpty)
-            const SizedBox(height: AppSpacing.sm),
-          AppTextField(
-            controller: c.text,
-            label: 'Location / Address',
-            hint: 'Enter the service address or a nearby landmark',
-            validator: (_) => c.validate(),
-          ),
-          if (!c.hasConfirmedCoordinates &&
-              c.text.text.trim().isNotEmpty &&
-              c.candidates.isEmpty &&
-              c.preview == null &&
-              !c.busy) ...[
-            const SizedBox(height: AppSpacing.xs),
-            Align(
-              alignment: Alignment.centerRight,
-              child: TextButton.icon(
-                key: const Key('resolve_address_button'),
-                onPressed: c.resolveAddress,
-                icon: const Icon(Icons.travel_explore_rounded, size: 18),
-                label: const Text('Resolve Address'),
+              child: Text(
+                c.message!,
+                style: AppTextStyles.body.copyWith(
+                  color: c.message!.contains('confirmed') ||
+                          c.message!.contains('retained')
+                      ? AppColors.success
+                      : AppColors.error,
+                ),
               ),
             ),
-          ],
-          if (c.hasConfirmedCoordinates) ...[
+
+          // CONFIRMED LOCATION STATE (when confirmed and not currently in manual edit mode)
+          if (hasConfirmed && !isManual) ...[
             const SizedBox(height: AppSpacing.sm),
-            Row(
-              children: [
-                const Icon(
-                  Icons.check_circle_rounded,
-                  size: 16,
-                  color: AppColors.success,
-                ),
-                const SizedBox(width: AppSpacing.xs),
-                Expanded(
-                  child: Text(
-                    c.source == LocationSource.openStreetMap && !c.fromGps
-                        ? 'Address resolved & coordinates confirmed'
-                        : 'GPS location captured',
-                    style: AppTextStyles.small.copyWith(
-                      color: AppColors.success,
-                      fontWeight: FontWeight.w600,
-                    ),
+            AppCard(
+              key: const Key('confirmed_location_card'),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  LayoutBuilder(
+                    builder: (context, constraints) {
+                      final scale = MediaQuery.textScalerOf(context).scale(14) / 14;
+                      final isNarrow = constraints.maxWidth < 240 * scale;
+                      final addressText = Text(
+                        c.text.text,
+                        style: AppTextStyles.body.copyWith(
+                          fontWeight: FontWeight.w600,
+                        ),
+                      );
+                      final changeBtn = Align(
+                        alignment: Alignment.centerLeft,
+                        child: TextButton(
+                          key: const Key('change_address_button'),
+                          style: TextButton.styleFrom(
+                            padding: isNarrow ? EdgeInsets.zero : null,
+                            minimumSize: const Size(48, 36),
+                          ),
+                          onPressed: () {
+                            c.enterManually();
+                            _focusNode.requestFocus();
+                          },
+                          child: const Text('Change address'),
+                        ),
+                      );
+                      if (isNarrow) {
+                        return Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            addressText,
+                            changeBtn,
+                          ],
+                        );
+                      }
+                      return Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        crossAxisAlignment: CrossAxisAlignment.center,
+                        children: [
+                          Expanded(child: addressText),
+                          const SizedBox(width: AppSpacing.sm),
+                          changeBtn,
+                        ],
+                      );
+                    },
                   ),
-                ),
-              ],
+                  const SizedBox(height: AppSpacing.xs),
+                  Row(
+                    children: [
+                      const Icon(
+                        Icons.check_circle_rounded,
+                        size: 16,
+                        color: AppColors.success,
+                      ),
+                      const SizedBox(width: AppSpacing.xs),
+                      Expanded(
+                        child: Text(
+                          c.source == LocationSource.openStreetMap && !c.fromGps
+                              ? 'Address resolved & coordinates confirmed'
+                              : 'GPS location captured',
+                          style: AppTextStyles.small.copyWith(
+                            color: AppColors.success,
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                  if (c.source == LocationSource.openStreetMap) ...[
+                    const SizedBox(height: AppSpacing.xs),
+                    const LocationAttribution(),
+                  ],
+                ],
+              ),
             ),
           ],
-          if (c.source == LocationSource.openStreetMap)
-            const LocationAttribution(),
-          if (c.hasGps && c.fromGps) ...[
-            const SizedBox(height: AppSpacing.sm + AppSpacing.xs),
-            if (c.preview == null)
-              const Text('GPS location captured', style: AppTextStyles.small),
-            if (c.needsGpsChoice && c.preview == null && !c.busy) ...[
-              const SizedBox(height: AppSpacing.md),
-              const Text(
-                'Address changed with attached GPS',
-                key: Key('edit_gps_confirmation_prompt'),
-                style: AppTextStyles.cardHeading,
-              ),
+
+          // MANUAL LOCATION INPUT (revealed only when manual entry mode is active)
+          if (isManual) ...[
+            if (c.candidates.isEmpty)
               const SizedBox(height: AppSpacing.sm),
-              const Text(
-                'Confirm whether the captured GPS belongs to this address.',
-              ),
-              const SizedBox(height: AppSpacing.md),
-              OutlinedButton(
-                key: const Key('edit_keep_gps_button'),
-                onPressed: c.keepGps,
-                child: const Text('Keep captured GPS for this edited address'),
+            AppTextField(
+              controller: c.text,
+              focusNode: _focusNode,
+              label: 'Location / Address',
+              hint: 'Enter the service address or a nearby landmark',
+              validator: (_) => c.validate(),
+            ),
+            if (!c.hasConfirmedCoordinates &&
+                c.text.text.trim().isNotEmpty &&
+                c.candidates.isEmpty &&
+                c.preview == null &&
+                !c.busy) ...[
+              const SizedBox(height: AppSpacing.xs),
+              Align(
+                alignment: Alignment.centerRight,
+                child: TextButton.icon(
+                  key: const Key('resolve_address_button'),
+                  onPressed: c.resolveAddress,
+                  icon: const Icon(Icons.travel_explore_rounded, size: 18),
+                  label: const Text('Resolve Address'),
+                ),
               ),
             ],
-            const SizedBox(height: AppSpacing.sm + AppSpacing.xs),
-            SizedBox(
-              width: double.infinity,
-              child: TextButton(
-                key: const Key('edit_remove_gps_button'),
-                style: TextButton.styleFrom(
-                  alignment: Alignment.centerLeft,
-                  padding: EdgeInsets.zero,
-                  minimumSize: const Size(48, 48),
+            if (c.source == LocationSource.openStreetMap)
+              const LocationAttribution(),
+            if (c.hasGps && c.fromGps) ...[
+              const SizedBox(height: AppSpacing.sm + AppSpacing.xs),
+              if (c.preview == null)
+                const Text('GPS location captured', style: AppTextStyles.small),
+              if (c.needsGpsChoice && c.preview == null && !c.busy) ...[
+                const SizedBox(height: AppSpacing.md),
+                const Text(
+                  'Address changed with attached GPS',
+                  key: Key('edit_gps_confirmation_prompt'),
+                  style: AppTextStyles.cardHeading,
                 ),
-                onPressed: c.removeGps,
-                child: const Text('Remove captured GPS'),
+                const SizedBox(height: AppSpacing.sm),
+                const Text(
+                  'Confirm whether the captured GPS belongs to this address.',
+                ),
+                const SizedBox(height: AppSpacing.md),
+                OutlinedButton(
+                  key: const Key('edit_keep_gps_button'),
+                  onPressed: c.keepGps,
+                  child: const Text('Keep captured GPS for this edited address'),
+                ),
+              ],
+              const SizedBox(height: AppSpacing.sm + AppSpacing.xs),
+              SizedBox(
+                width: double.infinity,
+                child: TextButton(
+                  key: const Key('edit_remove_gps_button'),
+                  style: TextButton.styleFrom(
+                    alignment: Alignment.centerLeft,
+                    padding: EdgeInsets.zero,
+                    minimumSize: const Size(48, 48),
+                  ),
+                  onPressed: c.removeGps,
+                  child: const Text('Remove captured GPS'),
+                ),
               ),
-            ),
+            ],
           ],
         ],
       );
     },
   );
+
   Widget _buildActions(BuildContext context, LocationSelectionController c) {
-    final label = editing || (c.hasGps && c.fromGps)
+    final label = widget.editing || (c.hasGps && c.fromGps)
         ? 'Refresh Location'
         : 'Use Current Location';
     double textWidth(String value) {
@@ -303,7 +427,6 @@ class LocationSelection extends StatelessWidget {
       return width;
     }
 
-    // Reserve the themed padding and icon space; respect accessibility text size.
     final refreshWidth = textWidth(label) + 2 * AppSpacing.md + 32;
     final manualWidth = textWidth('Enter Manually') + 2 * AppSpacing.md;
     final minimumButtonWidth = refreshWidth > manualWidth
@@ -313,14 +436,19 @@ class LocationSelection extends StatelessWidget {
       builder: (context, constraints) {
         final refresh = OutlinedButton.icon(
           key: Key(
-            editing ? 'edit_update_gps_button' : 'use_current_location_button',
+            widget.editing
+                ? 'edit_update_gps_button'
+                : 'use_current_location_button',
           ),
           onPressed: c.capture,
           icon: const Icon(Icons.my_location_rounded),
           label: Text(label, textAlign: TextAlign.center),
         );
         final manual = OutlinedButton(
-          onPressed: c.enterManually,
+          onPressed: () {
+            c.enterManually();
+            _focusNode.requestFocus();
+          },
           child: const Text('Enter Manually', textAlign: TextAlign.center),
         );
         if (constraints.maxWidth < minimumButtonWidth * 2 + AppSpacing.sm) {

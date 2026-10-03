@@ -692,5 +692,53 @@ void main() {
       expect(model.pendingQuestions.first.id, 'c-r2-1');
       expect(model.hasReachedMaxRounds, isTrue);
     });
+
+    test('ServiceRequestModel parses matching expiry fields and computes isMatchingExpired', () {
+      final now = DateTime.now().toUtc();
+      final activeJson = {
+        'serviceRequestId': 'req-active',
+        'customerId': 'cust-1',
+        'category': 'Plumbing',
+        'description': 'Water leaking',
+        'locationText': 'Colombo',
+        'urgency': 'Medium',
+        'status': 'ReadyForMatching',
+        'readyForMatchingAtUtc': now.subtract(const Duration(hours: 2)).toIso8601String(),
+        'matchingExpiresAtUtc': now.add(const Duration(hours: 22)).toIso8601String(),
+        'isMatchingEligible': true,
+        'createdAt': now.subtract(const Duration(days: 1)).toIso8601String(),
+        'updatedAt': now.subtract(const Duration(hours: 2)).toIso8601String(),
+      };
+
+      final activeModel = ServiceRequestModel.fromJson(activeJson);
+      expect(activeModel.isMatchingEligible, isTrue);
+      expect(activeModel.isMatchingExpired, isFalse);
+      expect(activeModel.readyForMatchingAtUtc, isNotNull);
+      expect(activeModel.matchingExpiresAtUtc, isNotNull);
+
+      final expiredJson = {
+        'serviceRequestId': 'req-expired',
+        'customerId': 'cust-1',
+        'category': 'Plumbing',
+        'description': 'Old water leaking',
+        'locationText': 'Colombo',
+        'urgency': 'Medium',
+        'status': 'ReadyForMatching',
+        'readyForMatchingAtUtc': now.subtract(const Duration(hours: 48)).toIso8601String(),
+        'matchingExpiresAtUtc': now.subtract(const Duration(hours: 24)).toIso8601String(),
+        'isMatchingEligible': false,
+        'createdAt': now.subtract(const Duration(days: 3)).toIso8601String(),
+        'updatedAt': now.subtract(const Duration(hours: 48)).toIso8601String(),
+      };
+
+      final expiredModel = ServiceRequestModel.fromJson(expiredJson);
+      expect(expiredModel.isMatchingEligible, isFalse);
+      expect(expiredModel.isMatchingExpired, isTrue);
+
+      final serialized = activeModel.toJson();
+      expect(serialized['isMatchingEligible'], isTrue);
+      expect(serialized['readyForMatchingAtUtc'], isNotNull);
+      expect(serialized['matchingExpiresAtUtc'], isNotNull);
+    });
   });
 }

@@ -70,9 +70,7 @@ public class VisualEvidencePostgreSqlTests(PostgreSqlTestFixture fixture) : Post
             var userNow = DateTime.UtcNow;
             await db.Database.ExecuteSqlInterpolatedAsync($"INSERT INTO \"Users\" (\"Id\", \"FullName\", \"Email\", \"PasswordHash\", \"Role\", \"PhoneNumber\", \"IsActive\", \"CreatedAt\", \"UpdatedAt\") VALUES ({userId}, {"Legacy Test"}, {"legacy@example.test"}, {"dummy"}, {"Customer"}, {"0771234567"}, {true}, {userNow}, {userNow})");
             var requestId = Guid.NewGuid();
-            var request = new ServiceRequest { Id = requestId, CustomerId = userId, Description = "Legacy sink leak", LocationText = "Colombo" };
-            db.Add(request);
-            await db.SaveChangesAsync();
+            await db.Database.ExecuteSqlInterpolatedAsync($"INSERT INTO \"ServiceRequests\" (\"Id\", \"CustomerId\", \"Description\", \"LocationText\", \"Category\", \"Urgency\", \"Status\", \"LocationSource\", \"EvidenceRevision\", \"CreatedAt\", \"UpdatedAt\") VALUES ({requestId}, {userId}, {"Legacy sink leak"}, {"Colombo"}, {"Unclassified"}, {"Unknown"}, {"Created"}, {"Manual"}, {1L}, {userNow}, {userNow})");
             var id = Guid.NewGuid(); var now = DateTime.UtcNow;
             await db.Database.ExecuteSqlInterpolatedAsync($"INSERT INTO \"ProblemAnalyses\" (\"Id\", \"ServiceRequestId\", \"DetectedProblem\", \"Confidence\", \"AgentName\", \"CreatedAt\", \"UpdatedAt\", \"EvidenceRevision\") VALUES ({id}, {requestId}, {"Possible legacy leak."}, {0.8m}, {"ProblemUnderstandingAgent"}, {now}, {now}, {1L})");
             await migrator.MigrateAsync();

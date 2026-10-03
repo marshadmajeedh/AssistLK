@@ -1,10 +1,12 @@
 using System.ComponentModel.DataAnnotations;
 using AssistLK.Application.Common.Exceptions;
 using AssistLK.Application.Interfaces;
+using AssistLK.Application.ServiceRequests;
 using AssistLK.Application.ServiceRequests.DTOs;
 using AssistLK.Domain.Constants;
 using AssistLK.Domain.Entities;
 using AssistLK.Domain.Enums;
+using Microsoft.Extensions.Options;
 
 namespace AssistLK.Application.Services;
 
@@ -57,16 +59,66 @@ public class ServiceRequestService : IServiceRequestService
 
     private readonly IServiceRequestRepository _serviceRequestRepository;
     private readonly IProblemAnalysisRepository _problemAnalysisRepository;
-    private readonly IServiceJobRepository _serviceJobRepository;
+    private readonly IServiceJobRepository? _serviceJobRepository;
+    private readonly ServiceRequestLifecycleOptions _lifecycleOptions;
+    private readonly TimeProvider _timeProvider;
 
     public ServiceRequestService(
         IServiceRequestRepository serviceRequestRepository,
         IProblemAnalysisRepository problemAnalysisRepository,
-        IServiceJobRepository serviceJobRepository)
+        IServiceJobRepository? serviceJobRepository,
+        ServiceRequestLifecycleOptions? lifecycleOptions = null,
+        IOptions<ServiceRequestLifecycleOptions>? optionsWrapper = null,
+        TimeProvider? timeProvider = null)
     {
         _serviceRequestRepository = serviceRequestRepository;
         _problemAnalysisRepository = problemAnalysisRepository;
         _serviceJobRepository = serviceJobRepository;
+        _lifecycleOptions = lifecycleOptions ?? optionsWrapper?.Value ?? new ServiceRequestLifecycleOptions();
+        _timeProvider = timeProvider ?? TimeProvider.System;
+    }
+
+    public ServiceRequestService(
+        IServiceRequestRepository serviceRequestRepository,
+        IProblemAnalysisRepository problemAnalysisRepository)
+        : this(
+            serviceRequestRepository,
+            problemAnalysisRepository,
+            serviceJobRepository: null,
+            lifecycleOptions: null,
+            optionsWrapper: null,
+            timeProvider: null)
+    {
+    }
+
+    public ServiceRequestService(
+        IServiceRequestRepository serviceRequestRepository,
+        IProblemAnalysisRepository problemAnalysisRepository,
+        ServiceRequestLifecycleOptions lifecycleOptions,
+        IOptions<ServiceRequestLifecycleOptions>? optionsWrapper = null,
+        TimeProvider? timeProvider = null)
+        : this(
+            serviceRequestRepository,
+            problemAnalysisRepository,
+            serviceJobRepository: null,
+            lifecycleOptions: lifecycleOptions,
+            optionsWrapper: optionsWrapper,
+            timeProvider: timeProvider)
+    {
+    }
+
+    public ServiceRequestService(
+        IServiceRequestRepository serviceRequestRepository,
+        IProblemAnalysisRepository problemAnalysisRepository,
+        TimeProvider timeProvider)
+        : this(
+            serviceRequestRepository,
+            problemAnalysisRepository,
+            serviceJobRepository: null,
+            lifecycleOptions: null,
+            optionsWrapper: null,
+            timeProvider: timeProvider)
+    {
     }
 
     public async Task<ServiceRequestResponse> CreateAsync(
@@ -126,8 +178,9 @@ public class ServiceRequestService : IServiceRequestService
             customerId,
             cancellationToken);
 
-        var activityByRequestId = await _serviceJobRepository
-            .GetActivityByServiceRequestIdsAsync(
+        var activityByRequestId = _serviceJobRepository == null
+            ? new Dictionary<Guid, ServiceRequestActivityData>()
+            : await _serviceJobRepository.GetActivityByServiceRequestIdsAsync(
                 requests.Select(request => request.Id),
                 cancellationToken);
 
@@ -405,6 +458,9 @@ public class ServiceRequestService : IServiceRequestService
             Latitude = serviceRequest.Latitude,
             Longitude = serviceRequest.Longitude,
             Status = serviceRequest.Status,
+            ReadyForMatchingAtUtc = serviceRequest.ReadyForMatchingAtUtc,
+            MatchingExpiresAtUtc = serviceRequest.MatchingExpiresAtUtc,
+            IsMatchingEligible = ComputeIsMatchingEligible(serviceRequest),
             CreatedAt = serviceRequest.CreatedAt,
             UpdatedAt = serviceRequest.UpdatedAt
         };
@@ -575,7 +631,10 @@ public class ServiceRequestService : IServiceRequestService
                 "Cannot mark service request ready for matching because the latest problem analysis has an invalid confidence score.");
         }
 
+        var nowUtc = _timeProvider.GetUtcNow().UtcDateTime;
         serviceRequest.Status = ServiceRequestStatus.ReadyForMatching;
+        serviceRequest.ReadyForMatchingAtUtc = nowUtc;
+        serviceRequest.MatchingExpiresAtUtc = nowUtc.AddHours(_lifecycleOptions.MatchingWindowHours);
         _serviceRequestRepository.Update(serviceRequest);
         await _serviceRequestRepository.SaveChangesAsync(cancellationToken);
 
@@ -904,11 +963,14 @@ public class ServiceRequestService : IServiceRequestService
                 .ToArray()
             : Array.Empty<ServiceRequestClarificationDto>();
 
-        activity ??= (await _serviceJobRepository
-            .GetActivityByServiceRequestIdsAsync(
-                new[] { serviceRequest.Id },
-                cancellationToken))
-            .GetValueOrDefault(serviceRequest.Id);
+        if (activity == null && _serviceJobRepository != null)
+        {
+            activity = (await _serviceJobRepository
+                .GetActivityByServiceRequestIdsAsync(
+                    new[] { serviceRequest.Id },
+                    cancellationToken))
+                .GetValueOrDefault(serviceRequest.Id);
+        }
 
         return new ServiceRequestResponse
         {
@@ -929,11 +991,22 @@ public class ServiceRequestService : IServiceRequestService
             Longitude = serviceRequest.Longitude,
             Urgency = serviceRequest.Urgency,
             Status = serviceRequest.Status,
+            ReadyForMatchingAtUtc = serviceRequest.ReadyForMatchingAtUtc,
+            MatchingExpiresAtUtc = serviceRequest.MatchingExpiresAtUtc,
+            IsMatchingEligible = ComputeIsMatchingEligible(serviceRequest),
             CreatedAt = serviceRequest.CreatedAt,
             UpdatedAt = serviceRequest.UpdatedAt,
             LatestAnalysis = latestAnalysis,
             Clarifications = clarifications
         };
+    }
+
+    private bool ComputeIsMatchingEligible(ServiceRequest request)
+    {
+        var nowUtc = _timeProvider.GetUtcNow().UtcDateTime;
+        return request.Status == ServiceRequestStatus.ReadyForMatching
+            && request.MatchingExpiresAtUtc.HasValue
+            && request.MatchingExpiresAtUtc.Value > nowUtc;
     }
 
     private static ServiceRequestClarificationDto MapClarificationResponse(ServiceRequestClarification clarification)

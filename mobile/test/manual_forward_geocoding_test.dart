@@ -253,20 +253,22 @@ void main() {
           find.widgetWithText(TextFormField, 'Problem Description'),
           'Water pipe burst under kitchen sink',
         );
-        await tester.ensureVisible(find.text('Next: Location'));
-        await tester.tap(find.text('Next: Location'));
+        await tester.ensureVisible(find.text('Continue to Location'));
+        await tester.tap(find.text('Continue to Location'));
         await tester.pumpAndSettle();
 
         // Step 1: Manually enter address without tapping resolve or GPS
+        await tester.tap(find.text('Enter Manually'));
+        await tester.pumpAndSettle();
         await tester.enterText(
           find.widgetWithText(TextFormField, 'Location / Address'),
           'Independence Square, Colombo 07',
         );
         await tester.pumpAndSettle();
 
-        // Tap Next: Review
-        await tester.ensureVisible(find.text('Next: Review'));
-        await tester.tap(find.text('Next: Review'));
+        // Tap Review Request
+        await tester.ensureVisible(find.text('Review Request'));
+        await tester.tap(find.text('Review Request'));
         await tester.pumpAndSettle();
 
         // CONSTRAINT 2 VERIFICATION:
@@ -289,9 +291,9 @@ void main() {
         expect(find.text('Matching locations (2)'), findsNothing);
         expect(find.text('Address resolved & coordinates confirmed'), findsOneWidget);
 
-        // Now tap Next: Review again -> should advance to Review!
-        await tester.ensureVisible(find.text('Next: Review'));
-        await tester.tap(find.text('Next: Review'));
+        // Now tap Review Request again -> should advance to Review!
+        await tester.ensureVisible(find.text('Review Request'));
+        await tester.tap(find.text('Review Request'));
         await tester.pumpAndSettle();
 
         expect(find.text('Review Service Request'), findsOneWidget);
@@ -347,11 +349,14 @@ void main() {
           find.widgetWithText(TextFormField, 'Problem Description'),
           'Electrical short circuit in dining hall',
         );
-        await tester.ensureVisible(find.text('Next: Location'));
-        await tester.tap(find.text('Next: Location'));
+        await tester.ensureVisible(find.text('Continue to Location'));
+        await tester.tap(find.text('Continue to Location'));
         await tester.pumpAndSettle();
 
-        // Step 1: Type address
+        // Step 1: Reveal manual entry and type address
+        await tester.tap(find.text('Enter Manually'));
+        await tester.pumpAndSettle();
+
         await tester.enterText(
           find.widgetWithText(TextFormField, 'Location / Address'),
           'Option Search',
@@ -376,8 +381,8 @@ void main() {
         await tester.pumpAndSettle();
 
         // Advance to review
-        await tester.ensureVisible(find.text('Next: Review'));
-        await tester.tap(find.text('Next: Review'));
+        await tester.ensureVisible(find.text('Review Request'));
+        await tester.tap(find.text('Review Request'));
         await tester.pumpAndSettle();
 
         expect(find.text('Review Service Request'), findsOneWidget);
@@ -504,8 +509,11 @@ void main() {
           find.widgetWithText(TextFormField, 'Problem Description'),
           'Water leakage in apartment kitchen',
         );
-        await tester.ensureVisible(find.text('Next: Location'));
-        await tester.tap(find.text('Next: Location'));
+        await tester.ensureVisible(find.text('Continue to Location'));
+        await tester.tap(find.text('Continue to Location'));
+        await tester.pumpAndSettle();
+
+        await tester.tap(find.text('Enter Manually'));
         await tester.pumpAndSettle();
 
         // Step 1: Type manual address
@@ -579,8 +587,11 @@ void main() {
           find.widgetWithText(TextFormField, 'Problem Description'),
           'Sink faucet replacement needed',
         );
-        await tester.ensureVisible(find.text('Next: Location'));
-        await tester.tap(find.text('Next: Location'));
+        await tester.ensureVisible(find.text('Continue to Location'));
+        await tester.tap(find.text('Continue to Location'));
+        await tester.pumpAndSettle();
+
+        await tester.tap(find.text('Enter Manually'));
         await tester.pumpAndSettle();
 
         await tester.enterText(
@@ -642,8 +653,11 @@ void main() {
               find.widgetWithText(TextFormField, 'Problem Description'),
               'General maintenance required',
             );
-            await tester.ensureVisible(find.text('Next: Location'));
-            await tester.tap(find.text('Next: Location'));
+            await tester.ensureVisible(find.text('Continue to Location'));
+            await tester.tap(find.text('Continue to Location'));
+            await tester.pumpAndSettle();
+
+            await tester.tap(find.text('Enter Manually'));
             await tester.pumpAndSettle();
 
             await tester.enterText(

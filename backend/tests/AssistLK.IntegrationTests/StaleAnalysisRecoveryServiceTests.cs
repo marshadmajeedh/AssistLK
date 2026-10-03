@@ -734,6 +734,13 @@ public class StaleAnalysisRecoveryServiceTests
                 .ToList());
         }
 
+        public Task<IReadOnlyList<ServiceRequest>> GetStaleAwaitingInformationRequestsAsync(DateTime cutoffTimeUtc, CancellationToken cancellationToken = default)
+        {
+            return Task.FromResult<IReadOnlyList<ServiceRequest>>(_requests
+                .Where(x => x.Status == ServiceRequestStatus.AwaitingInformation && x.UpdatedAt <= cutoffTimeUtc)
+                .ToList());
+        }
+
         public Task<IReadOnlyList<ServiceRequest>> GetAllForAdminAsync(ServiceRequestStatus? status = null, string? category = null, ServiceRequestUrgency? urgency = null, CancellationToken cancellationToken = default)
         {
             return Task.FromResult<IReadOnlyList<ServiceRequest>>(_requests.ToList());

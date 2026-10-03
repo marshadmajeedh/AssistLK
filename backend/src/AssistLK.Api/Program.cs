@@ -310,6 +310,18 @@ builder.Services.AddSingleton(sp =>
 builder.Services.AddScoped<IStaleAnalysisRecoveryService, StaleAnalysisRecoveryService>();
 builder.Services.AddHostedService<StaleAnalysisRecoveryBackgroundService>();
 
+// C1 Service Request Lifecycle Expiration
+builder.Services.AddSingleton(sp =>
+{
+    var config = sp.GetRequiredService<IConfiguration>();
+    var options = new AssistLK.Application.ServiceRequests.ServiceRequestLifecycleOptions();
+    config.GetSection(AssistLK.Application.ServiceRequests.ServiceRequestLifecycleOptions.SectionName).Bind(options);
+    options.Validate();
+    return options;
+});
+builder.Services.AddScoped<IServiceRequestLifecycleExpirationService, ServiceRequestLifecycleExpirationService>();
+builder.Services.AddHostedService<ServiceRequestLifecycleExpirationBackgroundService>();
+
 // C1 Attachment Reconciliation
 builder.Services.AddSingleton(sp =>
 {

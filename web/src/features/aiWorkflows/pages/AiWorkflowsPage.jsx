@@ -27,16 +27,40 @@ export default function AiWorkflowsPage() {
 
   useEffect(() => {
     let ignore = false;
-    agentMonitoringService.getMetrics().then((data) => {
-      if (!Array.isArray(data)) throw new Error("Invalid monitoring response");
-      if (!ignore) setResult({ loading: false, data, error: "" });
-    }).catch((error) => {
-      const message = error.response?.status === 401 ? "Your session has expired. Please log in again."
-        : error.response?.status === 403 ? "You do not have permission to view AI workflow metrics."
-          : "Failed to load AI workflow metrics. Please try again.";
-      if (!ignore) setResult({ loading: false, data: [], error: message });
-    });
-    return () => { ignore = true; };
+
+    const fetchMetrics = (isBackground = false) => {
+      agentMonitoringService.getMetrics().then((data) => {
+        if (!Array.isArray(data)) throw new Error("Invalid monitoring response");
+        if (!ignore) setResult((prev) => ({ loading: false, data, error: "" }));
+      }).catch((error) => {
+        if (isBackground) return;
+        const message = error.response?.status === 401 ? "Your session has expired. Please log in again."
+          : error.response?.status === 403 ? "You do not have permission to view AI workflow metrics."
+            : "Failed to load AI workflow metrics. Please try again.";
+        if (!ignore) setResult({ loading: false, data: [], error: message });
+      });
+    };
+
+    fetchMetrics(false);
+
+    const interval = setInterval(() => {
+      if (!document.hidden) {
+        fetchMetrics(true);
+      }
+    }, 6000);
+
+    const handleVisibilityChange = () => {
+      if (!document.hidden) {
+        fetchMetrics(true);
+      }
+    };
+    document.addEventListener("visibilitychange", handleVisibilityChange);
+
+    return () => {
+      ignore = true;
+      clearInterval(interval);
+      document.removeEventListener("visibilitychange", handleVisibilityChange);
+    };
   }, [attempt]);
 
   const summary = summarizeMetrics(result.data);
@@ -53,9 +77,11 @@ export default function AiWorkflowsPage() {
   return <div className="ai-workflows" style={{ ...typography.body, color: colors.textPrimary,
     "--workflow-border": colors.border, "--workflow-muted": colors.textSecondary,
     "--workflow-focus": colors.primary, "--workflow-gap": `${spacing.md}px` }}>
-    <header>
-      <h1 style={{ ...typography.pageTitle, color: colors.textPrimary }}>AI Workflow Monitoring</h1>
-      <p className="workflow-muted">Monitor AssistLK AI agent executions, workflow outcomes, deterministic tool usage, and execution performance.</p>
+    <header style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", flexWrap: "wrap", gap: spacing.md }}>
+      <div>
+        <h1 style={{ ...typography.pageTitle, color: colors.textPrimary, margin: `0 0 ${spacing.xs}px` }}>AI Workflow Monitoring</h1>
+        <p className="workflow-muted" style={{ margin: 0 }}>Audit log and execution telemetry for automated dispatch algorithms, problem analysis, and platform workflows.</p>
+      </div>
     </header>
     {result.loading ? <LoadingSpinner message="Loading AI workflow metrics..." /> : result.error ? <div>
       <ErrorMessage message={result.error} />

@@ -36,7 +36,7 @@ function ProvidersDashboardPage() {
             transition: "all 0.2s ease",
           }}
         >
-          Verification Queue
+          Provider Approvals
         </button>
         <button
           onClick={() => setActiveTab("match-approvals")}
@@ -53,13 +53,17 @@ function ProvidersDashboardPage() {
             transition: "all 0.2s ease",
           }}
         >
-          Match Approvals (HITL Gate)
+          Match Approvals
         </button>
       </div>
 
       <div>
-        {activeTab === "verification" && <ProviderVerificationQueue />}
-        {activeTab === "match-approvals" && <MatchApprovalsPage />}
+        <div style={{ display: activeTab === "verification" ? "block" : "none" }}>
+          <ProviderVerificationQueue />
+        </div>
+        <div style={{ display: activeTab === "match-approvals" ? "block" : "none" }}>
+          <MatchApprovalsPage />
+        </div>
       </div>
     </div>
   );

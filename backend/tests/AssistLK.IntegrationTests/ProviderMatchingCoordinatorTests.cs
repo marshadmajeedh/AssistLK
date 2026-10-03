@@ -151,7 +151,9 @@ public class ProviderMatchingCoordinatorTests
             LocationText = "Colombo 03",
             Latitude = 6.9270m,
             Longitude = 79.8610m,
-            Status = ServiceRequestStatus.ReadyForMatching
+            Status = ServiceRequestStatus.ReadyForMatching,
+            MatchingExpiresAtUtc = DateTime.UtcNow.AddHours(24),
+            IsMatchingEligible = true
         };
 
         _serviceRequestServiceMock
@@ -191,7 +193,9 @@ public class ProviderMatchingCoordinatorTests
             LocationText = "Colombo",
             Latitude = 6.9270m,
             Longitude = 79.8610m,
-            Status = ServiceRequestStatus.ReadyForMatching
+            Status = ServiceRequestStatus.ReadyForMatching,
+            MatchingExpiresAtUtc = DateTime.UtcNow.AddHours(24),
+            IsMatchingEligible = true
         };
 
         _serviceRequestServiceMock
@@ -295,7 +299,9 @@ public class ProviderMatchingCoordinatorTests
             LocationText = "Colombo",
             Latitude = 6.9270m,
             Longitude = 79.8610m,
-            Status = ServiceRequestStatus.ReadyForMatching
+            Status = ServiceRequestStatus.ReadyForMatching,
+            MatchingExpiresAtUtc = DateTime.UtcNow.AddHours(24),
+            IsMatchingEligible = true
         };
 
         _serviceRequestServiceMock
@@ -397,7 +403,9 @@ public class ProviderMatchingCoordinatorTests
             LocationText = "Colombo",
             Latitude = 6.9270m,
             Longitude = 79.8610m,
-            Status = ServiceRequestStatus.ReadyForMatching
+            Status = ServiceRequestStatus.ReadyForMatching,
+            MatchingExpiresAtUtc = DateTime.UtcNow.AddHours(24),
+            IsMatchingEligible = true
         };
 
         _serviceRequestServiceMock
@@ -467,5 +475,48 @@ public class ProviderMatchingCoordinatorTests
         Assert.Equal(providerId, cand.ProviderId);
         Assert.Equal(0.94m, cand.Score);
         Assert.Equal(MatchedCandidateStatus.Recommended, cand.Status);
+    }
+
+    [Fact]
+    public async Task ExecuteMatchForRequestAsync_WhenMatchingExpired_ReturnsMatchingExpired()
+    {
+        // Arrange
+        using var db = CreateInMemoryDbContext();
+        var requestId = Guid.NewGuid();
+
+        var response = new ServiceRequestForMatchingResponse
+        {
+            ServiceRequestId = requestId,
+            Category = "Plumbing",
+            Urgency = ServiceRequestUrgency.High,
+            ProblemSummary = "Water pipe burst",
+            LocationText = "Colombo",
+            Latitude = 6.9270m,
+            Longitude = 79.8610m,
+            Status = ServiceRequestStatus.ReadyForMatching,
+            MatchingExpiresAtUtc = DateTime.UtcNow.AddHours(-1),
+            IsMatchingEligible = false
+        };
+
+        _serviceRequestServiceMock
+            .Setup(s => s.GetReadyForMatchingAsync(requestId, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(response);
+
+        var coordinator = new ProviderMatchingCoordinator(
+            _matchingServiceMock.Object,
+            _serviceRequestServiceMock.Object,
+            db,
+            _loggerMock.Object,
+            new AgentWorkflowService(db),
+            new AgentMonitoringService(db));
+
+        // Act
+        var result = await coordinator.ExecuteMatchForRequestAsync(requestId);
+
+        // Assert
+        Assert.False(result.Success);
+        Assert.Equal("MatchingExpired", result.Status);
+        Assert.Contains("expired", result.Message, StringComparison.OrdinalIgnoreCase);
+        _matchingServiceMock.Verify(m => m.StartMatchingAsync(It.IsAny<MatchStartRequest>()), Times.Never);
     }
 }

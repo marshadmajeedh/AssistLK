@@ -18,22 +18,70 @@ function ProviderVerificationQueue() {
   const [error, setError] = useState(null);
   const [processingId, setProcessingId] = useState(null);
 
-  useEffect(() => {
-    fetchQueue();
-  }, []);
-
-  const fetchQueue = async () => {
+  const fetchQueue = async (isBackground = false) => {
     try {
-      setLoading(true);
-      setError(null);
+      if (!isBackground) {
+        setLoading(true);
+        setError(null);
+      }
       const data = await getVerificationQueue();
       setProviders(Array.isArray(data) ? data : []);
     } catch (err) {
-      setError(err.response?.data?.message || err.message || "Failed to load verification queue");
+      if (!isBackground) {
+        setError(err.response?.data?.message || err.message || "Failed to load verification queue");
+      }
     } finally {
-      setLoading(false);
+      if (!isBackground) {
+        setLoading(false);
+      }
     }
   };
+
+  useEffect(() => {
+    let ignore = false;
+
+    const loadData = async (isBackground = false) => {
+      try {
+        if (!isBackground) {
+          setLoading(true);
+          setError(null);
+        }
+        const data = await getVerificationQueue();
+        if (!ignore) {
+          setProviders(Array.isArray(data) ? data : []);
+        }
+      } catch (err) {
+        if (!ignore && !isBackground) {
+          setError(err.response?.data?.message || err.message || "Failed to load verification queue");
+        }
+      } finally {
+        if (!ignore && !isBackground) {
+          setLoading(false);
+        }
+      }
+    };
+
+    loadData(false);
+
+    const interval = setInterval(() => {
+      if (!document.hidden) {
+        loadData(true);
+      }
+    }, 3000);
+
+    const handleVisibilityChange = () => {
+      if (!document.hidden) {
+        loadData(true);
+      }
+    };
+    document.addEventListener("visibilitychange", handleVisibilityChange);
+
+    return () => {
+      ignore = true;
+      clearInterval(interval);
+      document.removeEventListener("visibilitychange", handleVisibilityChange);
+    };
+  }, []);
 
   const handleVerify = async (providerId, isApproved) => {
     try {
@@ -80,16 +128,11 @@ function ProviderVerificationQueue() {
       <section className="page-hero">
         <div className="page-hero-content">
           <div>
-            <div className="page-kicker">Component 2: Provider Management</div>
-            <h1 className="page-hero-title">Provider Verification Queue</h1>
+            <div className="page-kicker">Provider Operations</div>
+            <h1 className="page-hero-title">Provider Approvals</h1>
             <p className="page-hero-copy">
-              Review technician credentials, verify background PDF certificates, and approve/reject provider onboarding requests.
+              Review technician credentials, verify background PDF certificates, and authorize provider onboarding.
             </p>
-          </div>
-          <div style={{ display: "flex", gap: "12px", alignItems: "center" }}>
-            <AppButton variant="outline" onClick={fetchQueue}>
-              Refresh Queue
-            </AppButton>
           </div>
         </div>
       </section>
@@ -100,7 +143,7 @@ function ProviderVerificationQueue() {
         <div className="glass-panel" style={{ padding: 24 }}>
           <ErrorMessage message={error} />
           <div style={{ marginTop: 16 }}>
-            <AppButton variant="primary" onClick={fetchQueue}>
+            <AppButton variant="primary" onClick={() => fetchQueue(false)}>
               Retry
             </AppButton>
           </div>
@@ -125,7 +168,7 @@ function ProviderVerificationQueue() {
               <div style={{ fontSize: "36px", marginBottom: "12px" }}>✅</div>
               <p style={{ ...typography.body, fontWeight: 600 }}>All applications reviewed</p>
               <p style={{ fontSize: "13px", color: "#64748b" }}>
-                There are currently no provider onboarding requests awaiting verification.
+                There are currently no provider onboarding requests awaiting approval.
               </p>
             </div>
           ) : (
@@ -151,8 +194,9 @@ function ProviderVerificationQueue() {
                   <tr
                     key={provider.providerId}
                     style={{
-                      backgroundColor: "rgba(255, 255, 255, 0.7)",
+                      backgroundColor: "#ffffff",
                       borderRadius: "8px",
+                      border: `1px solid ${colors.border}`,
                       boxShadow: "0 1px 3px rgba(0,0,0,0.05)",
                     }}
                   >

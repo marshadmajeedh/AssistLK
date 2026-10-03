@@ -105,20 +105,19 @@ function Toast({ message, type }) {
   );
 }
 
-// ─── AI Rationale Panel ───────────────────────────────────────────────────────
-function RationalePanel({ rationale, tokenUsage }) {
+// ─── Match Recommendation Justification Panel ─────────────────────────────────────────
+function RationalePanel({ rationale }) {
   const hasRationale = Boolean(rationale && rationale.trim() && rationale.trim() !== "No rationale available.");
-  const hasTokens = tokenUsage != null && Number(tokenUsage) > 0;
 
   return (
     <div
-      aria-label="Gemini AI Rationale"
+      aria-label="Match Recommendation Justification"
       style={{
         marginTop: spacing.md,
         padding: spacing.md,
         borderRadius: radius.medium,
-        backgroundColor: "rgba(30, 138, 129, 0.06)",
-        border: `1px solid rgba(30, 138, 129, 0.22)`,
+        backgroundColor: "rgba(31, 78, 120, 0.04)",
+        border: "1px solid rgba(31, 78, 120, 0.18)",
         position: "relative",
         overflow: "hidden",
       }}
@@ -132,7 +131,7 @@ function RationalePanel({ rationale, tokenUsage }) {
           bottom: 0,
           width: 4,
           borderRadius: `${radius.medium}px 0 0 ${radius.medium}px`,
-          background: `linear-gradient(180deg, ${colors.secondary}, #0d6e66)`,
+          background: `linear-gradient(180deg, ${colors.primary}, ${colors.primaryDark})`,
         }}
       />
       <div style={{ paddingLeft: spacing.md }}>
@@ -156,35 +155,12 @@ function RationalePanel({ rationale, tokenUsage }) {
               fontWeight: 700,
               textTransform: "uppercase",
               letterSpacing: "0.07em",
-              color: colors.secondary,
+              color: colors.primary,
             }}
           >
-            <span style={{ fontSize: 15 }}>✦</span>
-            Gemini AI Rationale
+            <span style={{ fontSize: 14 }}>ℹ</span>
+            Match Recommendation Justification
           </span>
-
-          {/* Token usage chip - only display when valid and > 0 */}
-          {hasTokens && (
-            <span
-              aria-label={`Total tokens used: ${tokenUsage}`}
-              style={{
-                display: "inline-flex",
-                alignItems: "center",
-                gap: 4,
-                padding: `3px ${spacing.sm}px`,
-                borderRadius: radius.pill,
-                backgroundColor: "rgba(30, 138, 129, 0.12)",
-                border: `1px solid rgba(30, 138, 129, 0.30)`,
-                fontSize: 11,
-                fontWeight: 700,
-                color: colors.secondary,
-                letterSpacing: "0.05em",
-              }}
-            >
-              <span style={{ opacity: 0.7 }}>⬡</span>
-              {Number(tokenUsage).toLocaleString()} tokens
-            </span>
-          )}
         </div>
 
         {/* rationale body */}
@@ -197,7 +173,7 @@ function RationalePanel({ rationale, tokenUsage }) {
             fontStyle: hasRationale ? "normal" : "italic",
           }}
         >
-          {hasRationale ? rationale : "Automated qualification based on verified technician skills and operational radius."}
+          {hasRationale ? rationale : "Automated qualification based on verified technician trade skills and service radius."}
         </p>
       </div>
     </div>
@@ -245,12 +221,11 @@ function MatchCard({ match, onDecision }) {
     <article
       aria-label={`Match recommendation for thread ${match.threadId}`}
       style={{
-        backgroundColor: "rgba(255, 253, 249, 0.90)",
+        backgroundColor: "#ffffff",
         border: `1px solid ${colors.border}`,
         borderRadius: radius.large,
         padding: spacing.lg,
-        boxShadow: "0 24px 60px rgba(22, 34, 53, 0.08)",
-        backdropFilter: "blur(18px)",
+        boxShadow: "0 4px 20px rgba(22, 34, 53, 0.06)",
         display: "flex",
         flexDirection: "column",
         gap: spacing.md,
@@ -348,7 +323,7 @@ function MatchCard({ match, onDecision }) {
           style={{
             padding: spacing.md,
             borderRadius: radius.medium,
-            backgroundColor: hasValidCandidate ? "rgba(22, 34, 53, 0.03)" : "rgba(182, 58, 43, 0.05)",
+            backgroundColor: hasValidCandidate ? "#F8FAFC" : "rgba(182, 58, 43, 0.05)",
             border: `1px solid ${hasValidCandidate ? colors.border : colors.errorLight}`,
           }}
         >
@@ -491,10 +466,9 @@ function MatchCard({ match, onDecision }) {
         </section>
       </div>
 
-      {/* ── Gemini AI Rationale ── */}
+      {/* ── Match Recommendation Justification ── */}
       <RationalePanel
         rationale={match.aiRationale}
-        tokenUsage={match.tokenUsage?.total_tokens}
       />
 
       {/* ── Error feedback ── */}
@@ -521,7 +495,7 @@ function MatchCard({ match, onDecision }) {
         </AppButton>
 
         <AppButton
-          variant="secondary"
+          variant="primary"
           disabled={processing || !hasValidCandidate || isOccupied}
           onClick={() => handleAction("Approve")}
           title={isOccupied ? match.candidate?.occupancyReason : undefined}
@@ -553,12 +527,12 @@ function EmptyState() {
         textAlign: "center",
         padding: `${spacing.xl}px ${spacing.lg}px`,
         borderRadius: radius.large,
-        backgroundColor: "rgba(255, 253, 249, 0.84)",
+        backgroundColor: "#ffffff",
         border: `1px solid ${colors.border}`,
-        boxShadow: "0 24px 60px rgba(22, 34, 53, 0.06)",
+        boxShadow: "0 4px 20px rgba(22, 34, 53, 0.04)",
       }}
     >
-      <div style={{ fontSize: 48, marginBottom: spacing.md }}>✦</div>
+      <div style={{ fontSize: 42, marginBottom: spacing.md, color: colors.primary }}>✓</div>
       <h2
         style={{
           ...typography.sectionHeading,
@@ -568,10 +542,9 @@ function EmptyState() {
       >
         All caught up
       </h2>
-      <p style={{ ...typography.body, color: colors.textSecondary, maxWidth: 380, margin: "0 auto" }}>
-        There are no AI match recommendations waiting for approval right now.
-        New recommendations will appear here when the LangGraph dispatch
-        pipeline pauses at the interrupt gate.
+      <p style={{ ...typography.body, color: colors.textSecondary, maxWidth: 420, margin: "0 auto" }}>
+        There are no dispatch recommendations requiring review at this time.
+        New match recommendations will appear here automatically when customer requests are processed.
       </p>
     </div>
   );
@@ -620,8 +593,7 @@ function MatchApprovalsPage() {
   useEffect(() => {
     fetchQueue();
 
-    // Auto-poll every 5 seconds to keep occupancy status and approvals fresh in real time
-    const pollInterval = setInterval(() => {
+    const silentPoll = () => {
       getMatchApprovals()
         .then((data) => {
           const raw = Array.isArray(data) ? data : [];
@@ -637,9 +609,26 @@ function MatchApprovalsPage() {
           setMatches(validMatches);
         })
         .catch(() => {});
-    }, 5000);
+    };
 
-    return () => clearInterval(pollInterval);
+    // Auto-poll every 2.5 seconds to keep occupancy status and approvals fresh in real time
+    const pollInterval = setInterval(() => {
+      if (!document.hidden) {
+        silentPoll();
+      }
+    }, 2500);
+
+    const handleVisibilityChange = () => {
+      if (!document.hidden) {
+        silentPoll();
+      }
+    };
+    document.addEventListener("visibilitychange", handleVisibilityChange);
+
+    return () => {
+      clearInterval(pollInterval);
+      document.removeEventListener("visibilitychange", handleVisibilityChange);
+    };
   }, [fetchQueue]);
 
   const handleDecision = useCallback((threadId, action) => {
@@ -691,19 +680,9 @@ function MatchApprovalsPage() {
               marginBottom: 0,
             }}
           >
-            AI dispatch recommendations paused at the LangGraph interrupt gate —
-            review each match and approve or reject.
+            Review automated dispatch recommendations and authorize technician assignment.
           </p>
         </div>
-
-        <AppButton
-          variant="outline"
-          disabled={loading}
-          onClick={fetchQueue}
-          style={{ minWidth: 110, minHeight: 44 }}
-        >
-          {loading ? "Refreshing…" : "↻  Refresh"}
-        </AppButton>
       </div>
 
       {/* ── Pending count chip ── */}

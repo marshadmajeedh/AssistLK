@@ -52,26 +52,17 @@ export const buttonStyles = {
 export const inputStyles = {
   display: "block",
   width: "100%",
-  minHeight: 54,
-
+  minHeight: 48,
   padding: `0 ${spacing.md}px`,
-
-  backgroundColor: "rgba(255, 253, 249, 0.88)",
-
+  backgroundColor: "#FFFFFF",
   color: colors.textPrimary,
-
-  border: `1px solid ${colors.border}`,
-
+  border: "1.5px solid #CBD5E1",
   borderRadius: radius.medium,
-
   fontFamily: typography.fontFamily,
-
   fontSize: typography.body.fontSize,
-
   outline: "none",
-
   boxSizing: "border-box",
-  boxShadow: "inset 0 1px 0 rgba(255,255,255,0.7)",
+  boxShadow: "0 1px 2px rgba(0, 0, 0, 0.05)",
 };
 
 export const cardStyles = {

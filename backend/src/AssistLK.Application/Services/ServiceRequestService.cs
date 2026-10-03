@@ -917,9 +917,13 @@ public class ServiceRequestService : IServiceRequestService
     private bool ComputeIsMatchingEligible(ServiceRequest request)
     {
         var nowUtc = _timeProvider.GetUtcNow().UtcDateTime;
-        return request.Status == ServiceRequestStatus.ReadyForMatching
-            && request.MatchingExpiresAtUtc.HasValue
-            && request.MatchingExpiresAtUtc.Value > nowUtc;
+        if (request.Status != ServiceRequestStatus.ReadyForMatching)
+            return false;
+
+        if (request.MatchingExpiresAtUtc.HasValue)
+            return request.MatchingExpiresAtUtc.Value > nowUtc;
+
+        return request.CreatedAt >= nowUtc.AddHours(-24);
     }
 
     private static ServiceRequestClarificationDto MapClarificationResponse(ServiceRequestClarification clarification)

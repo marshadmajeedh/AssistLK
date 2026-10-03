@@ -174,6 +174,34 @@ public class ProviderMatchingControllerTests : IDisposable
     }
 
     [Fact]
+    public async Task SyncReadyRequests_WhenRequestsExpired_ReturnsZeroDispatched()
+    {
+        // Arrange
+        var controller = CreateController();
+        var expiredRequest = new ServiceRequest
+        {
+            Id = Guid.NewGuid(),
+            Status = ServiceRequestStatus.ReadyForMatching,
+            MatchingExpiresAtUtc = DateTime.UtcNow.AddHours(-2)
+        };
+
+        _repoMock
+            .Setup(r => r.GetByStatusAsync(ServiceRequestStatus.ReadyForMatching, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new List<ServiceRequest> { expiredRequest });
+
+        // Act
+        var result = await controller.SyncReadyRequests(CancellationToken.None);
+
+        // Assert
+        var okResult = Assert.IsType<OkObjectResult>(result);
+        var json = JsonSerializer.Serialize(okResult.Value);
+        using var doc = JsonDocument.Parse(json);
+
+        Assert.Equal(0, doc.RootElement.GetProperty("totalDispatched").GetInt32());
+        _coordinatorMock.Verify(c => c.ExecuteMatchForRequestAsync(It.IsAny<Guid>(), It.IsAny<CancellationToken>(), false), Times.Never);
+    }
+
+    [Fact]
     public async Task GetPendingApprovals_WhenNoPending_ReturnsEmptyList()
     {
         // Arrange

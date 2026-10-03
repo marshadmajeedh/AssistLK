@@ -1,31 +1,31 @@
 export const colors = {
-  // Brand
-  primary: "#E85D3F",
-  primaryDark: "#162235",
-  secondary: "#1E8A81",
+  // Brand (matching mobile app palette)
+  primary: "#1F4E78",
+  primaryDark: "#173B5E",
+  secondary: "#0F6B66",
 
   // Status
-  success: "#227B4F",
-  warning: "#AF6A17",
-  error: "#B63A2B",
+  success: "#2E7D32",
+  warning: "#C45A11",
+  error: "#B42318",
 
   // Status Light Tints (Badges, Alerts, Chips)
-  neutralLight: "#E9EEF3",
-  secondaryLight: "#DDF5F1",
-  warningLight: "#FEF0C8",
-  successLight: "#DDF5E8",
-  primaryLight: "#FFE6DE",
-  errorLight: "#FDE4E1",
+  neutralLight: "#F3F4F6",
+  secondaryLight: "#F0FDFA",
+  warningLight: "#FFFBEB",
+  successLight: "#F0FDF4",
+  primaryLight: "#EFF6FF",
+  errorLight: "#FEF2F2",
 
   // Backgrounds
-  background: "#F5F1EA",
-  surface: "#FFFDF9",
+  background: "#F6F8FA",
+  surface: "#FFFFFF",
 
   // Text
-  textPrimary: "#162235",
-  textSecondary: "#647083",
+  textPrimary: "#1F2937",
+  textSecondary: "#6B7280",
 
   // UI
-  border: "#D8D3C8",
-  disabled: "#A4AFB8",
+  border: "#E5E7EB",
+  disabled: "#9CA3AF",
 };

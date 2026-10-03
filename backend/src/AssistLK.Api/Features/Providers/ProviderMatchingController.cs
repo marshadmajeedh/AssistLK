@@ -89,7 +89,18 @@ public class ProviderMatchingController : ControllerBase
             return Ok(new { message = "No requests in ReadyForMatching status.", totalDispatched = 0, results = Array.Empty<object>() });
         }
 
-        var readyIds = readyRequests.Select(r => r.Id).ToList();
+        // Filter out expired matching requests per Component 1 lifecycle contract
+        var utcNow = DateTime.UtcNow;
+        var eligibleReadyRequests = readyRequests
+            .Where(r => r.MatchingExpiresAtUtc.HasValue && r.MatchingExpiresAtUtc.Value > utcNow)
+            .ToList();
+
+        if (eligibleReadyRequests.Count == 0)
+        {
+            return Ok(new { message = "No eligible requests in ReadyForMatching status (matching window expired).", totalDispatched = 0, results = Array.Empty<object>() });
+        }
+
+        var readyIds = eligibleReadyRequests.Select(r => r.Id).ToList();
 
         var acceptedSrIds = await _dbContext.MatchedCandidates
             .Where(m => readyIds.Contains(m.MatchingExecution.ServiceRequestId) &&
@@ -134,11 +145,11 @@ public class ProviderMatchingController : ControllerBase
     [HttpGet("pending")]
     public async Task<IActionResult> GetPendingApprovals(CancellationToken cancellationToken)
     {
-        // 1. Purge/clean-up: update any old orphaned PendingApproval runs without valid candidates to Failed
+        // 1. Purge/clean-up: update any old orphaned PendingApproval runs without valid candidates to Failed (bounded to 20 per call)
         var orphaned = await _dbContext.MatchingExecutions
-            .Include(e => e.Candidates)
             .Where(e => e.Status == MatchingExecutionStatus.PendingApproval 
                      && !e.Candidates.Any(c => c.ProviderId != Guid.Empty))
+            .Take(20)
             .ToListAsync(cancellationToken);
 
         if (orphaned.Count > 0)
@@ -151,14 +162,16 @@ public class ProviderMatchingController : ControllerBase
             await _dbContext.SaveChangesAsync(cancellationToken);
         }
 
-        // 2. Fetch pending executions that strictly have at least one matched candidate
+        // 2. Fetch pending executions that strictly have at least one matched candidate (AsNoTracking for fast reads)
         var pendingExecutions = await _dbContext.MatchingExecutions
+            .AsNoTracking()
             .Include(e => e.Candidates)
                 .ThenInclude(c => c.Provider)
                     .ThenInclude(p => p.User)
             .Where(e => e.Status == MatchingExecutionStatus.PendingApproval 
                      && e.Candidates.Any(c => c.ProviderId != Guid.Empty))
             .OrderByDescending(e => e.StartedAt)
+            .Take(50)
             .ToListAsync(cancellationToken);
 
         if (pendingExecutions.Count == 0)
@@ -166,11 +179,65 @@ public class ProviderMatchingController : ControllerBase
             return Ok(new List<object>());
         }
 
+        // 3. Batch fetch related ServiceRequests
+        var srIds = pendingExecutions.Select(e => e.ServiceRequestId).Distinct().ToList();
+        var srMap = new Dictionary<Guid, AssistLK.Application.ServiceRequests.DTOs.ServiceRequestResponse>();
+        foreach (var id in srIds)
+        {
+            try
+            {
+                var sr = await _serviceRequestService.GetByIdForAdminAsync(id, cancellationToken);
+                if (sr != null)
+                {
+                    srMap[id] = sr;
+                }
+            }
+            catch
+            {
+                // Ignore if not found, mapped gracefully
+            }
+        }
+
+        // 4. Batch fetch provider occupancy status across pending and active jobs
+        var topCandidateList = pendingExecutions
+            .Select(e => e.Candidates?
+                .Where(c => c.ProviderId != Guid.Empty)
+                .OrderBy(c => c.Rank)
+                .FirstOrDefault())
+            .Where(c => c != null)
+            .ToList();
+
+        var providerIds = topCandidateList.Select(c => c!.ProviderId).Distinct().ToList();
+        var busyProviderIds = new HashSet<Guid>();
+        var reviewingProviderIds = new HashSet<Guid>();
+
+        if (providerIds.Count > 0)
+        {
+            busyProviderIds = (await _dbContext.MatchedCandidates
+                .AsNoTracking()
+                .Where(m => providerIds.Contains(m.ProviderId) && m.Status == MatchedCandidateStatus.Accepted)
+                .Select(m => m.ProviderId)
+                .ToListAsync(cancellationToken))
+                .ToHashSet();
+
+            var reviewingCutoff = DateTime.UtcNow.AddSeconds(-65);
+            reviewingProviderIds = (await _dbContext.MatchedCandidates
+                .AsNoTracking()
+                .Where(m => providerIds.Contains(m.ProviderId) &&
+                            m.Status == MatchedCandidateStatus.Recommended &&
+                            m.MatchingExecution != null &&
+                            m.MatchingExecution.Status == MatchingExecutionStatus.Completed &&
+                            m.CreatedAt >= reviewingCutoff)
+                .Select(m => m.ProviderId)
+                .ToListAsync(cancellationToken))
+                .ToHashSet();
+        }
+
         var results = new List<object>();
 
         foreach (var e in pendingExecutions)
         {
-            var topCandidate = e.Candidates
+            var topCandidate = e.Candidates?
                 .Where(c => c.ProviderId != Guid.Empty)
                 .OrderBy(c => c.Rank)
                 .FirstOrDefault();
@@ -179,38 +246,17 @@ public class ProviderMatchingController : ControllerBase
             {
                 continue;
             }
-            
-            // Try to fetch ServiceRequest safely
-            AssistLK.Application.ServiceRequests.DTOs.ServiceRequestResponse? sr = null;
-            try
-            {
-                sr = await _serviceRequestService.GetByIdForAdminAsync(e.ServiceRequestId, cancellationToken);
-            }
-            catch
-            {
-                // Ignore if not found, we will map it gracefully
-            }
-            
+
+            srMap.TryGetValue(e.ServiceRequestId, out var sr);
+
             var techName = !string.IsNullOrWhiteSpace(topCandidate.Provider?.User?.FullName)
                 ? topCandidate.Provider.User.FullName
                 : (!string.IsNullOrWhiteSpace(topCandidate.Provider?.BusinessName)
                     ? topCandidate.Provider.BusinessName
                     : "Assigned Specialist");
 
-            // Evaluate provider occupancy status across pending and active jobs
-            var hasOngoingJob = await _dbContext.MatchedCandidates.AnyAsync(m =>
-                m.ProviderId == topCandidate.ProviderId &&
-                m.Status == MatchedCandidateStatus.Accepted,
-                cancellationToken);
-
-            var hasReviewingDispatch = await _dbContext.MatchedCandidates.AnyAsync(m =>
-                m.ProviderId == topCandidate.ProviderId &&
-                m.Id != topCandidate.Id &&
-                m.Status == MatchedCandidateStatus.Recommended &&
-                m.MatchingExecution != null &&
-                m.MatchingExecution.Status == MatchingExecutionStatus.Completed &&
-                m.CreatedAt >= DateTime.UtcNow.AddSeconds(-65),
-                cancellationToken);
+            var hasOngoingJob = busyProviderIds.Contains(topCandidate.ProviderId);
+            var hasReviewingDispatch = reviewingProviderIds.Contains(topCandidate.ProviderId);
 
             string occupancyStatus = "Available";
             string? occupancyReason = null;

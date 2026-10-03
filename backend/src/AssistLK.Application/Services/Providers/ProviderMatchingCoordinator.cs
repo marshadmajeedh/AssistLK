@@ -92,6 +92,22 @@ public class ProviderMatchingCoordinator : IProviderMatchingCoordinator
             };
         }
 
+        // Validate matching window eligibility per Component 1 contract (24-hour window)
+        var nowUtc = DateTime.UtcNow;
+        bool is24hExpired = (sr.MatchingExpiresAtUtc.HasValue && sr.MatchingExpiresAtUtc.Value <= nowUtc) ||
+                            (!sr.MatchingExpiresAtUtc.HasValue && sr.CreatedAt != default && sr.CreatedAt < nowUtc.AddHours(-24));
+
+        if (!sr.IsMatchingEligible || is24hExpired)
+        {
+            _logger.LogWarning("ServiceRequest {ServiceRequestId} matching window has expired or is not eligible.", serviceRequestId);
+            return new MatchingExecutionResult
+            {
+                Success = false,
+                Status = "MatchingExpired",
+                Message = "Service request matching window has expired."
+            };
+        }
+
         int urgencyScore = sr.Urgency == ServiceRequestUrgency.Unknown ? 2 : (int)sr.Urgency;
         var objective = $"Category: {sr.Category}, Urgency: {urgencyScore}, Problem: {sr.ProblemSummary}, Location: {sr.LocationText}";
 
@@ -231,13 +247,13 @@ public class ProviderMatchingCoordinator : IProviderMatchingCoordinator
             {
                 try
                 {
-                    await _workflowService.CompleteExecutionAsync(agentExecution.Id, false, new { message = noProviderMsg });
-                    await _workflowService.SetStatusAsync(agentWorkflow.Id, "Failed");
+                    await _workflowService.CompleteExecutionAsync(agentExecution.Id, true, new { message = noProviderMsg });
+                    await _workflowService.SetStatusAsync(agentWorkflow.Id, "Completed");
                     await _monitoringService.RecordAsync(
                         agentWorkflow.Id,
                         agentExecution.Id,
                         "ProviderMatchingAgent",
-                        "Failed",
+                        "Completed",
                         stopwatch.ElapsedMilliseconds,
                         0);
                 }
@@ -295,13 +311,13 @@ public class ProviderMatchingCoordinator : IProviderMatchingCoordinator
                 {
                     try
                     {
-                        await _workflowService.CompleteExecutionAsync(agentExecution.Id, false, new { message = emptyMsg });
-                        await _workflowService.SetStatusAsync(agentWorkflow.Id, "Failed");
+                        await _workflowService.CompleteExecutionAsync(agentExecution.Id, true, new { message = emptyMsg });
+                        await _workflowService.SetStatusAsync(agentWorkflow.Id, "Completed");
                         await _monitoringService.RecordAsync(
                             agentWorkflow.Id,
                             agentExecution.Id,
                             "ProviderMatchingAgent",
-                            "Failed",
+                            "Completed",
                             stopwatch.ElapsedMilliseconds,
                             eligibleProviders.Count);
                     }
@@ -322,16 +338,15 @@ public class ProviderMatchingCoordinator : IProviderMatchingCoordinator
                 };
             }
 
-            var wasPreviouslyApproved = autoApprove || await _dbContext.MatchingExecutions
-                .AnyAsync(e => e.ServiceRequestId == serviceRequestId 
-                            && e.Status == MatchingExecutionStatus.Completed,
-                          cancellationToken);
+            // Auto-approval is strictly restricted to immediate cascade dispatches (when a provider declines on their device).
+            // Any request matched from the queue (e.g. when a provider logs in later), or initial request, MUST pause for Admin Match Approval.
+            var isAutoApproved = autoApprove;
 
-            execution.Status = wasPreviouslyApproved
+            execution.Status = isAutoApproved
                 ? MatchingExecutionStatus.Completed
                 : MatchingExecutionStatus.PendingApproval;
 
-            if (wasPreviouslyApproved)
+            if (isAutoApproved)
             {
                 execution.CompletedAt = DateTime.UtcNow;
             }
@@ -379,9 +394,9 @@ public class ProviderMatchingCoordinator : IProviderMatchingCoordinator
                 }
             }
 
-            if (wasPreviouslyApproved)
+            if (isAutoApproved)
             {
-                _logger.LogInformation("ServiceRequest {ServiceRequestId} automatically dispatched to provider {ProviderId} (cascade/autoApprove active).", serviceRequestId, providerGuid);
+                _logger.LogInformation("ServiceRequest {ServiceRequestId} automatically dispatched to provider {ProviderId} (immediate cascade active).", serviceRequestId, providerGuid);
             }
             else
             {

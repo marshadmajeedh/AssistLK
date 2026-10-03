@@ -26,22 +26,51 @@ const boundaries = [
   ["Component 4", "Service Tracking, Completion & Safety"],
 ];
 
+// Independent state, auto-sync polling, and retries keep either API failure from blocking the other.
 function useDashboardCollection(load, label) {
   const [result, setResult] = useState({ loading: true, data: [], error: "" });
   const [attempt, setAttempt] = useState(0);
+
   useEffect(() => {
     let ignore = false;
-    load().then((data) => {
-      if (!Array.isArray(data)) throw new Error("Invalid collection response");
-      if (!ignore) setResult({ loading: false, data, error: "" });
-    }).catch((error) => {
-      const message = error.response?.status === 401 ? "Your session has expired. Please log in again."
-        : error.response?.status === 403 ? `You do not have permission to view ${label}.`
-          : `Failed to load ${label}. Please try again.`;
-      if (!ignore) setResult({ loading: false, data: [], error: message });
-    });
-    return () => { ignore = true; };
+
+    const executeLoad = (silent = false) => {
+      load().then((data) => {
+        if (!Array.isArray(data)) throw new Error("Invalid collection response");
+        if (!ignore) setResult({ loading: false, data, error: "" });
+      }).catch((error) => {
+        if (!ignore) {
+          if (silent) return;
+          const message = error.response?.status === 401 ? "Your session has expired. Please log in again."
+            : error.response?.status === 403 ? `You do not have permission to view ${label}.`
+              : `Failed to load ${label}. Please try again.`;
+          setResult({ loading: false, data: [], error: message });
+        }
+      });
+    };
+
+    executeLoad(false);
+
+    const interval = setInterval(() => {
+      if (document.visibilityState === "visible") {
+        executeLoad(true);
+      }
+    }, 6000);
+
+    const onVisibilityChange = () => {
+      if (document.visibilityState === "visible") {
+        executeLoad(true);
+      }
+    };
+    document.addEventListener("visibilitychange", onVisibilityChange);
+
+    return () => {
+      ignore = true;
+      clearInterval(interval);
+      document.removeEventListener("visibilitychange", onVisibilityChange);
+    };
   }, [load, label, attempt]);
+
   return { ...result, retry: () => {
     setResult({ loading: true, data: [], error: "" });
     setAttempt((value) => value + 1);
@@ -88,18 +117,21 @@ export default function AdminDashboardPage() {
     <section className="page-hero">
       <div className="page-hero-content">
         <div>
-          <div className="page-kicker">Admin Dashboard</div>
+          <div className="page-kicker">Admin Dashboard · Operations Overview</div>
           <h1 className="page-hero-title">See service demand and AI workflow health in one pass.</h1>
-          <p className="page-hero-copy">This dashboard keeps Component 1 lifecycle monitoring, Component 4 Service Safety, and AssistLK AI execution metrics visible without changing backend aggregation rules.</p>
+          <p className="page-hero-copy">
+            Real-time monitoring of service demand, provider matching activity, Component 1 lifecycle health,
+            Component 4 Service Safety, and AssistLK AI execution metrics.
+          </p>
         </div>
         <div className="page-hero-meta">
           <div className="page-stat">
             <strong>{requests.data.length}</strong>
-            <span>Total service requests loaded</span>
+            <span>Active service requests</span>
           </div>
           <div className="page-stat">
             <strong>{summary.total}</strong>
-            <span>AI execution records loaded</span>
+            <span>Dispatch operations logged</span>
           </div>
         </div>
       </div>

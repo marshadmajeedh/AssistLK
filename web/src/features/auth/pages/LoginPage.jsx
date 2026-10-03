@@ -46,106 +46,98 @@ function LoginPage() {
   };
 
   return (
-    <div className="login-page" style={{ minHeight: "100vh", padding: spacing.md, fontFamily: typography.fontFamily }}>
+    <div className="login-page">
       <div className="login-backdrop" />
-      <div className="login-grid app-shell">
+      <div className="login-grid">
         <section className="login-showcase">
-          <div className="page-kicker">AssistLK Portal</div>
-          <h1 className="login-title">Bring every service decision into one trusted workspace.</h1>
-          <p className="login-copy">
-            Track service requests, AI analysis, provider readiness, and audit-friendly operations from a single, role-protected portal.
-          </p>
+          <div>
+            <div className="pill-note" style={{ backgroundColor: "rgba(255,255,255,0.12)", color: "#FFFFFF", borderColor: "rgba(255,255,255,0.22)" }}>
+              AssistLK Portal
+            </div>
+            <h1 className="login-title">Enterprise Service Operations Portal</h1>
+            <p className="login-copy">
+              Centralized management for customer service requests, provider matching, quotations, and live service coordination.
+            </p>
+          </div>
+
           <div className="login-showcase-grid">
             <div className="login-showcase-card">
-              <strong>4 workstreams</strong>
-              <span>Problem understanding, matching, booking, and tracking</span>
+              <strong>Intelligent Dispatch</strong>
+              <span>Automated technician matching based on location, availability, and skills</span>
             </div>
             <div className="login-showcase-card">
-              <strong>Shared API rules</strong>
-              <span>Web and mobile follow one identity and approval model</span>
+              <strong>Unified Operations</strong>
+              <span>End-to-end management from request triage to verified job completion</span>
             </div>
             <div className="login-showcase-card">
-              <strong>Live oversight</strong>
-              <span>Surface AI workflow metrics and customer request status instantly</span>
+              <strong>Verified Network</strong>
+              <span>Real-time provider readiness, credential audits, and transparent operations</span>
             </div>
           </div>
         </section>
 
-      <AppCard
-        className="login-card"
-        style={{
-          width: "100%",
-          maxWidth: "420px",
-          boxSizing: "border-box",
-        }}
-      >
-        <form onSubmit={handleSubmit}>
-          <div className="pill-note">Staff Workspace</div>
-          <h1
-            style={{
-              ...typography.pageTitle,
-              marginTop: spacing.md,
-              color: colors.textPrimary,
-            }}
-          >
-            AssistLK
-          </h1>
+        <AppCard className="login-card">
+          <form onSubmit={handleSubmit} style={{ width: "100%" }}>
+            <div className="pill-note">Admin Console</div>
+            <h1
+              style={{
+                ...typography.pageTitle,
+                marginTop: spacing.md,
+                color: colors.textPrimary,
+              }}
+            >
+              AssistLK
+            </h1>
 
-          <p
-            style={{
-              ...typography.body,
-              color: colors.textSecondary,
-            }}
-          >
-            Sign in to continue into the authorized web portal.
-          </p>
+            <p
+              style={{
+                ...typography.body,
+                color: colors.textSecondary,
+                marginTop: spacing.xs,
+                marginBottom: spacing.xl,
+              }}
+            >
+              Sign in to continue into the authorized web portal.
+            </p>
 
-          <div style={{ marginTop: spacing.lg }}>
-            <AppInput
-              label="Email"
-              name="email"
-              type="email"
-              autoComplete="username"
-              value={email}
-              onChange={(event) =>
-                setEmail(event.target.value)
-              }
-              required
-            />
-          </div>
+            <div style={{ marginTop: spacing.md }}>
+              <AppInput
+                label="Email"
+                name="email"
+                type="email"
+                autoComplete="username"
+                value={email}
+                onChange={(event) => setEmail(event.target.value)}
+                required
+              />
+            </div>
 
-          <div
-            style={{
-              marginTop: spacing.md,
-            }}
-          >
-            <AppInput
-              label="Password"
-              name="password"
-              type="password"
-              autoComplete="current-password"
-              value={password}
-              onChange={(event) =>
-                setPassword(event.target.value)
-              }
-              required
-            />
-          </div>
+            <div style={{ marginTop: spacing.md }}>
+              <AppInput
+                label="Password"
+                name="password"
+                type="password"
+                autoComplete="current-password"
+                value={password}
+                onChange={(event) => setPassword(event.target.value)}
+                required
+              />
+            </div>
 
-          <ErrorMessage message={error} />
+            <ErrorMessage message={error} />
 
-          <AppButton
-            type="submit"
-            disabled={loading}
-            style={{
-              width: "100%",
-              marginTop: spacing.lg,
-            }}
-          >
-            {loading ? "Signing in..." : "Sign In"}
-          </AppButton>
-        </form>
-      </AppCard>
+            <AppButton
+              type="submit"
+              disabled={loading}
+              style={{
+                width: "100%",
+                marginTop: spacing.xl,
+              }}
+            >
+              {loading ? "Signing in..." : "Sign In"}
+            </AppButton>
+          </form>
+        </AppCard>
       </div>
     </div>
   );

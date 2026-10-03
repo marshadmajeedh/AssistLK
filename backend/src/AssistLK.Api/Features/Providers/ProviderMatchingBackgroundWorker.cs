@@ -170,7 +170,44 @@ public class ProviderMatchingBackgroundWorker : BackgroundService
             return;
         }
 
-        var readyIds = readyRequests.Select(r => r.Id).ToList();
+        // Filter out expired matching requests per Component 1 lifecycle contract (24-hour matching window)
+        var utcNow = DateTime.UtcNow;
+        var eligibleReadyRequests = readyRequests
+            .Where(r => (r.MatchingExpiresAtUtc.HasValue && r.MatchingExpiresAtUtc.Value > utcNow)
+                     || (!r.MatchingExpiresAtUtc.HasValue && r.CreatedAt >= utcNow.AddHours(-24)))
+            .ToList();
+
+        // Automatically cancel any ReadyForMatching requests that have exceeded their 24-hour lifetime
+        var expiredRequests = readyRequests
+            .Where(r => (r.MatchingExpiresAtUtc.HasValue && r.MatchingExpiresAtUtc.Value <= utcNow)
+                     || (!r.MatchingExpiresAtUtc.HasValue && r.CreatedAt < utcNow.AddHours(-24)))
+            .ToList();
+
+        if (expiredRequests.Count > 0)
+        {
+            foreach (var exp in expiredRequests)
+            {
+                exp.Status = ServiceRequestStatus.Cancelled;
+                exp.UpdatedAt = utcNow;
+                serviceRequestRepository.Update(exp);
+            }
+            try
+            {
+                await serviceRequestRepository.SaveChangesAsync(stoppingToken);
+                _logger.LogInformation("ProviderMatchingBackgroundWorker transitioned {Count} expired ReadyForMatching request(s) to Cancelled.", expiredRequests.Count);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogWarning(ex, "Failed to persist expired ReadyForMatching cancellations.");
+            }
+        }
+
+        if (eligibleReadyRequests.Count == 0)
+        {
+            return;
+        }
+
+        var readyIds = eligibleReadyRequests.Select(r => r.Id).ToList();
 
         // 1. Exclude requests that already have an accepted candidate
         var acceptedSrIds = await dbContext.MatchedCandidates

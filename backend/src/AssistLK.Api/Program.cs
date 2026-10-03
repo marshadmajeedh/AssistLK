@@ -186,9 +186,15 @@ builder.Services.AddHttpClient<IProblemUnderstandingClient, ProblemUnderstanding
 builder.Services.AddHttpClient<IQuotationBookingAgentClient, QuotationBookingAgentClient>();
 
 // Provider Matching Microservice Client
-builder.Services.AddHttpClient<AssistLK.Application.Services.Providers.IProviderMatchingService, AssistLK.Application.Services.Providers.ProviderMatchingService>(client =>
+builder.Services.AddHttpClient<AssistLK.Application.Services.Providers.IProviderMatchingService, AssistLK.Application.Services.Providers.ProviderMatchingService>((sp, client) =>
 {
-    client.BaseAddress = new Uri("http://127.0.0.1:8000");
+    var config = sp.GetRequiredService<IConfiguration>();
+    var baseUrl = config["AgentServices:ProviderMatchingUrl"];
+    if (string.IsNullOrWhiteSpace(baseUrl))
+    {
+        baseUrl = "http://127.0.0.1:8000";
+    }
+    client.BaseAddress = new Uri(baseUrl.TrimEnd('/'));
     client.Timeout = TimeSpan.FromSeconds(90);
 });
 builder.Services.AddScoped<AssistLK.Application.Services.Providers.IProviderMatchingCoordinator, AssistLK.Application.Services.Providers.ProviderMatchingCoordinator>();

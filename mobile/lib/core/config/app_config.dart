@@ -6,6 +6,6 @@ class AppConfig {
   static String get apiBaseUrl {
     return _apiBaseUrlOverride.isNotEmpty
         ? _apiBaseUrlOverride
-        : 'http://localhost:5012/api';
+        : 'https://assistlk-backend-production.up.railway.app/api';
   }
 }

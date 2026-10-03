@@ -27,7 +27,7 @@ describe("AdminLayout", () => {
     const logo = screen.getByRole("img", { name: /assistlk logo/i });
     expect(logo).toBeInTheDocument();
     expect(logo).toHaveAttribute("src");
-    expect(screen.getByText("AssistLK")).toBeInTheDocument();
+    expect(screen.getAllByText("AssistLK")[0]).toBeInTheDocument();
     expect(screen.getByText("Admin Operations")).toBeInTheDocument();
     expect(screen.getByText("Trusted service coordination")).toBeInTheDocument();
     expect(screen.getByText("Dashboard Content")).toBeInTheDocument();
@@ -74,5 +74,49 @@ describe("AdminLayout", () => {
     const authState = useAuthStore.getState();
     expect(authState.user).toBeNull();
     expect(authState.token).toBeNull();
+  });
+
+  it("renders subtle brand footer at bottom without adding interactive elements", () => {
+    render(
+      <MemoryRouter initialEntries={["/dashboard"]}>
+        <Routes>
+          <Route element={<AdminLayout />}>
+            <Route path="/dashboard" element={<div>Dashboard Content</div>} />
+          </Route>
+        </Routes>
+      </MemoryRouter>
+    );
+
+    // 1. AssistLK branding still renders (both top brand and footer brand)
+    const assistLkElements = screen.getAllByText("AssistLK");
+    expect(assistLkElements).toHaveLength(2);
+
+    // 2. Navigation items remain unchanged
+    expect(screen.getByRole("link", { name: "Dashboard" })).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "Service Requests" })).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "Providers" })).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "Quotations" })).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "Service Tracking" })).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "AI Workflows" })).toBeInTheDocument();
+
+    // 3. Signed-in user block remains
+    expect(screen.getByText("Signed in")).toBeInTheDocument();
+    expect(screen.getByText("Admin User")).toBeInTheDocument();
+
+    // 4. Logout button remains
+    const buttons = screen.getAllByRole("button");
+    expect(buttons).toHaveLength(1);
+    expect(screen.getByRole("button", { name: /logout/i })).toBeInTheDocument();
+
+    // 5. Footer renders AssistLK and Admin Console v1.0
+    expect(screen.getByText("Admin Console v1.0")).toBeInTheDocument();
+    expect(assistLkElements[1]).toHaveClass("admin-brand-footer-name");
+
+    // 6. No new interactive elements added
+    const links = screen.getAllByRole("link");
+    expect(links).toHaveLength(6);
+
+    // 7. Main content unaffected
+    expect(screen.getByText("Dashboard Content")).toBeInTheDocument();
   });
 });

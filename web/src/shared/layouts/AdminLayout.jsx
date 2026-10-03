@@ -105,6 +105,19 @@ function AdminLayout() {
             Logout
           </button>
         </div>
+
+        <div className="admin-sidebar-spacer" aria-hidden="true" />
+
+        <div className="admin-brand-footer">
+          <div className="admin-brand-footer-text">
+            <span className="admin-brand-footer-name">AssistLK</span>
+            <span className="admin-brand-footer-version">Admin Console v1.0</span>
+          </div>
+          <div className="admin-brand-footer-waves" aria-hidden="true">
+            <span className="admin-brand-wave admin-brand-wave-1" />
+            <span className="admin-brand-wave admin-brand-wave-2" />
+          </div>
+        </div>
       </aside>
 
       <main

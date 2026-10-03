@@ -42,6 +42,9 @@ AssistLK Database
 
 The owning component defines data invariants and application use cases. Other components reference published identifiers and contracts rather than changing another component's tables directly. Cross-component writes must go through the owning application service or an agreed domain event.
 
+> **Service Request Lifecycle Integrity:** Component 1 exclusively owns `ServiceRequests.Status`. Allowed values are strictly: `Created`, `Analyzing`, `AwaitingInformation`, `Analyzed`, `ReadyForMatching`, `Cancelled`. Database constraint `CK_ServiceRequests_Status_Valid` enforces this invariant. Downstream states (e.g., `Assigned`, `ProviderAssigned`, `Matched`, `Booked`, `InProgress`, `Completed`) belong strictly to downstream entities (`ServiceJob`, `Booking`, `MatchingExecution`) and must never be written to `ServiceRequests`.
+
+
 ## 4. Shared Core Tables
 
 The following tables are used by multiple components and must not be modified without team discussion.

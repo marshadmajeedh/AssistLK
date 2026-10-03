@@ -6,9 +6,7 @@
   content: "";
   position: fixed;
   inset: 0;
-  background:
-    radial-gradient(circle at 0% 0%, rgba(232, 93, 63, 0.14), transparent 26%),
-    radial-gradient(circle at 100% 0%, rgba(30, 138, 129, 0.16), transparent 24%);
+  background: transparent;
   pointer-events: none;
 }
 
@@ -17,9 +15,9 @@
   top: 0;
   align-self: flex-start;
   min-height: 100vh;
-  background: linear-gradient(180deg, rgba(22, 34, 53, 0.98), rgba(31, 48, 69, 0.98));
+  background: linear-gradient(180deg, #173b5e 0%, #1f4e78 100%);
   border-right: 1px solid rgba(255, 255, 255, 0.08);
-  box-shadow: 28px 0 60px rgba(22, 34, 53, 0.14);
+  box-shadow: 12px 0 32px rgba(23, 59, 94, 0.10);
 }
 
 .admin-sidebar-brand {
@@ -70,7 +68,7 @@
 }
 
 .admin-nav a.active::before {
-  border-color: rgba(232, 93, 63, 0.55);
+  border-color: #38bdf8;
 }
 
 .admin-sidebar-footer {

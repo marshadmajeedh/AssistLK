@@ -91,8 +91,8 @@ function LoginPage() {
                 src={assistLkLogo}
                 alt="AssistLK Logo"
                 className="brand-logo"
-                width={52}
-                height={52}
+                width={38}
+                height={38}
               />
               <span className="brand-logo-text">AssistLK</span>
             </div>

@@ -10,6 +10,7 @@ class AppColors {
   static const Color success = Color(0xFF2E7D32);
   static const Color warning = Color(0xFFC45A11);
   static const Color error = Color(0xFFB42318);
+  static const Color destructiveOnNavy = Color(0xFFF87171);
 
   // Background
   static const Color background = Color(0xFFF6F8FA);

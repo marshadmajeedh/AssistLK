@@ -20,6 +20,7 @@ import '../../../../shared/theme/app_text_styles.dart';
 import '../../../../shared/widgets/animated_border_trail.dart';
 import '../../../../shared/widgets/app_button.dart';
 import '../../../../shared/widgets/app_card.dart';
+import '../../../../shared/widgets/assistlk_app_bar.dart';
 import '../models/canonical_service_category.dart';
 import '../models/completion_record_model.dart';
 import '../models/problem_understanding_result_model.dart';
@@ -271,6 +272,7 @@ class _ServiceRequestDetailScreenState
   Widget build(BuildContext context) {
     if (_photos.sessionEnded) {
       return const Scaffold(
+        appBar: AssistLKAppBar(title: Text('Request Details')),
         body: Center(
           child: Text('Your session has ended. Please sign in again.'),
         ),
@@ -281,15 +283,15 @@ class _ServiceRequestDetailScreenState
     final analysis = provider.currentAnalysis;
 
     if (provider.isLoading && request == null) {
-      return Scaffold(
-        appBar: AppBar(title: const Text('Request Details')),
-        body: const Center(child: CircularProgressIndicator()),
+      return const Scaffold(
+        appBar: AssistLKAppBar(title: Text('Request Details')),
+        body: Center(child: CircularProgressIndicator()),
       );
     }
 
     if (request == null) {
       return Scaffold(
-        appBar: AppBar(title: const Text('Request Details')),
+        appBar: const AssistLKAppBar(title: Text('Request Details')),
         body: Center(
           child: Padding(
             padding: const EdgeInsets.all(AppSpacing.lg),
@@ -320,7 +322,7 @@ class _ServiceRequestDetailScreenState
     }
 
     return Scaffold(
-      appBar: AppBar(
+      appBar: AssistLKAppBar(
         title: const Text('Request Details'),
         actions: [
           // Completed වුණාම Cancel button එක පෙන්වන්නේ නැති වෙන්න හැදුවා
@@ -331,7 +333,10 @@ class _ServiceRequestDetailScreenState
               !provider.isAnalyzing &&
               !provider.analysisStateNeedsRefresh)
             IconButton(
-              icon: const Icon(Icons.cancel_outlined, color: AppColors.error),
+              icon: const Icon(
+                Icons.cancel_outlined,
+                color: AppColors.destructiveOnNavy,
+              ),
               tooltip: 'Cancel Request',
               onPressed: () => _cancelRequest(request.serviceRequestId),
             ),
@@ -554,9 +559,8 @@ class _ServiceRequestDetailScreenState
                   'Upload or discard selected photos before continuing with analysis.',
                 )
               else ...[
-                if ((request.status ==
-                            ServiceRequestStatus.awaitingInformation ||
-                        request.status == ServiceRequestStatus.cancelled) &&
+                if (request.status ==
+                        ServiceRequestStatus.awaitingInformation &&
                     request.latestAnalysis != null &&
                     request.latestAnalysis!.visualEvidence.status !=
                         AnalysisVisionStatus.notRequested) ...[
@@ -891,23 +895,84 @@ class _ServiceRequestDetailScreenState
         );
 
       case ServiceRequestStatus.cancelled:
-        return AppCard(
-          child: Padding(
-            padding: const EdgeInsets.symmetric(vertical: AppSpacing.md),
-            child: Row(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                const Icon(Icons.cancel_outlined, color: AppColors.error),
-                const SizedBox(width: AppSpacing.sm),
-                Text(
-                  'This request has been cancelled.',
-                  style: AppTextStyles.body.copyWith(
-                    color: AppColors.textSecondary,
-                  ),
-                ),
-              ],
-            ),
+        final displayAnalysis = analysis ??
+            (request.latestAnalysis != null
+                ? ProblemUnderstandingResultModel(
+                    workflowId: '',
+                    executionId: '',
+                    serviceRequestId: request.serviceRequestId,
+                    status: request.status,
+                    category: request.category,
+                    problemSummary: request.latestAnalysis!.detectedProblem,
+                    urgency: request.urgency,
+                    confidence: request.latestAnalysis!.confidence,
+                    needsMoreInformation: false,
+                    followUpQuestions: const [],
+                  )
+                : null);
+
+        final noticeCard = Container(
+          width: double.infinity,
+          padding: const EdgeInsets.all(AppSpacing.md),
+          decoration: BoxDecoration(
+            color: const Color(0xFFF3F4F6),
+            borderRadius: BorderRadius.circular(AppRadius.medium),
+            border: Border.all(color: AppColors.border),
           ),
+          child: const Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Icon(
+                Icons.info_outline_rounded,
+                color: AppColors.textSecondary,
+                size: 22,
+              ),
+              SizedBox(width: AppSpacing.sm),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'Request cancelled',
+                      style: TextStyle(
+                        fontSize: 15,
+                        fontWeight: FontWeight.w600,
+                        color: AppColors.textPrimary,
+                      ),
+                    ),
+                    SizedBox(height: 4),
+                    Text(
+                      'This request is closed and no further actions are available.',
+                      style: TextStyle(
+                        fontSize: 13,
+                        color: AppColors.textSecondary,
+                        height: 1.4,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        );
+
+        if (displayAnalysis == null) return noticeCard;
+
+        return Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            AnalysisResultCard(
+              analysis: displayAnalysis,
+              visualEvidence:
+                  request.latestAnalysis?.visualEvidence ??
+                  const AnalysisVisualEvidence(),
+              hasPhotos: _photos.attachments.isNotEmpty,
+              categoryHint: request.categoryHint,
+              status: request.status,
+            ),
+            const SizedBox(height: AppSpacing.md),
+            noticeCard,
+          ],
         );
 
     }

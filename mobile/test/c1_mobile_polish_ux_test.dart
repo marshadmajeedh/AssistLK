@@ -14,6 +14,7 @@ import 'package:mobile/features/service_requests/providers/service_request_provi
 import 'package:mobile/features/service_requests/screens/create_service_request_screen.dart';
 import 'package:mobile/features/service_requests/screens/service_request_detail_screen.dart';
 import 'package:mobile/features/service_requests/widgets/service_request_card.dart';
+import 'package:mobile/features/service_requests/models/canonical_service_category.dart';
 import 'package:mobile/shared/theme/app_colors.dart';
 import 'package:mobile/shared/theme/app_theme.dart';
 import 'package:mobile/shared/widgets/animated_border_trail.dart';
@@ -528,6 +529,344 @@ void main() {
         ),
         findsOneWidget,
       );
+    });
+  });
+
+  group('6. Request Flow Navy App Bar & Dynamic Description Placeholder Consistency', () {
+    // 1. Details app bar is navy
+    testWidgets('Details app bar uses AssistLK navy background and white foreground',
+        (tester) async {
+      await tester.pumpWidget(
+        buildApp(
+          CreateServiceRequestScreen(
+            locationService: gps,
+            geocodingService: geocoding,
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      final appBarFinder = find.byType(AppBar);
+      expect(appBarFinder, findsOneWidget);
+      final appBar = tester.widget<AppBar>(appBarFinder);
+      expect(appBar.backgroundColor, AppColors.primary);
+      expect(appBar.foregroundColor, Colors.white);
+      expect(appBar.elevation, 0);
+      expect(appBar.systemOverlayStyle, SystemUiOverlayStyle.light);
+      expect(find.text('Create Service Request'), findsOneWidget);
+    });
+
+    // 2. Request Details app bar is navy in every request-flow state
+    for (final status in [
+      ServiceRequestStatus.created,
+      ServiceRequestStatus.analyzing,
+      ServiceRequestStatus.awaitingInformation,
+      ServiceRequestStatus.analyzed,
+      ServiceRequestStatus.readyForMatching,
+      ServiceRequestStatus.cancelled,
+    ]) {
+      testWidgets('Request Details app bar is navy in status: ${status.name}',
+          (tester) async {
+        final req = ServiceRequestModel(
+          serviceRequestId: 'req-${status.name}',
+          customerId: 'cust-1',
+          category: 'Plumbing',
+          description: 'Water leak',
+          locationText: 'Colombo',
+          urgency: ServiceRequestUrgency.medium,
+          status: status,
+          createdAt: DateTime(2026, 10, 1),
+          updatedAt: DateTime(2026, 10, 1),
+        );
+        requests.items = [req];
+
+        await tester.pumpWidget(
+          buildApp(
+            ServiceRequestDetailScreen(requestId: 'req-${status.name}'),
+          ),
+        );
+        if (status == ServiceRequestStatus.analyzing) {
+          await tester.pump();
+          await tester.pump(const Duration(milliseconds: 100));
+          await tester.pump();
+        } else {
+          await tester.pumpAndSettle();
+        }
+
+        final appBarFinder = find.byType(AppBar);
+        expect(appBarFinder, findsOneWidget);
+        final appBar = tester.widget<AppBar>(appBarFinder);
+        expect(appBar.backgroundColor, AppColors.primary);
+        expect(appBar.foregroundColor, Colors.white);
+        expect(appBar.elevation, 0);
+        expect(appBar.systemOverlayStyle, SystemUiOverlayStyle.light);
+        expect(find.text('Request Details'), findsOneWidget);
+      });
+    }
+
+    testWidgets('Request Details app bar is navy in loading and error states',
+        (tester) async {
+      requests.items = [];
+      await tester.pumpWidget(
+        buildApp(
+          const ServiceRequestDetailScreen(requestId: 'non-existent-id'),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      final appBarFinder = find.byType(AppBar);
+      expect(appBarFinder, findsOneWidget);
+      final appBar = tester.widget<AppBar>(appBarFinder);
+      expect(appBar.backgroundColor, AppColors.primary);
+      expect(appBar.foregroundColor, Colors.white);
+      expect(find.text('Request Details'), findsOneWidget);
+    });
+
+    // 3. Title, back button, and actions remain readable on navy
+    testWidgets('app bar title, back icon, and cancel action remain readable on navy',
+        (tester) async {
+      final req = ServiceRequestModel(
+        serviceRequestId: 'req-cancel-check',
+        customerId: 'cust-1',
+        category: 'Plumbing',
+        description: 'Water pipe leaking',
+        locationText: 'Colombo',
+        urgency: ServiceRequestUrgency.low,
+        status: ServiceRequestStatus.created,
+        createdAt: DateTime(2026, 10, 1),
+        updatedAt: DateTime(2026, 10, 1),
+      );
+      requests.items = [req];
+
+      await tester.pumpWidget(
+        buildApp(
+          Navigator(
+            onGenerateRoute: (_) => MaterialPageRoute(
+              builder: (_) => const ServiceRequestDetailScreen(
+                requestId: 'req-cancel-check',
+              ),
+            ),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      final appBar = tester.widget<AppBar>(find.byType(AppBar));
+      expect(appBar.foregroundColor, Colors.white);
+      expect(appBar.iconTheme?.color, Colors.white);
+
+      // Cancel button action retains destructive color with high contrast on navy
+      final cancelIconFinder = find.byIcon(Icons.cancel_outlined);
+      expect(cancelIconFinder, findsOneWidget);
+      final iconWidget = tester.widget<Icon>(cancelIconFinder);
+      expect(iconWidget.color, AppColors.destructiveOnNavy);
+    });
+
+    // 4. Plumbing produces plumbing placeholder
+    test('Plumbing produces plumbing placeholder', () {
+      expect(
+        problemDescriptionHintForCategory('Plumbing'),
+        'e.g., Water is leaking heavily from the kitchen sink.',
+      );
+    });
+
+    // 5. Vehicle Repair produces vehicle placeholder
+    test('Vehicle Repair produces vehicle placeholder', () {
+      expect(
+        problemDescriptionHintForCategory('Vehicle Repair'),
+        'e.g., My car will not start and makes a clicking sound.',
+      );
+      expect(
+        problemDescriptionHintForCategory('Vehicle Assistance'),
+        'e.g., My car will not start and makes a clicking sound.',
+      );
+    });
+
+    // 6. Electrical produces electrical placeholder
+    test('Electrical produces electrical placeholder', () {
+      expect(
+        problemDescriptionHintForCategory('Electrical'),
+        'e.g., The bedroom power outlets suddenly stopped working.',
+      );
+      expect(
+        problemDescriptionHintForCategory('Electrical Services'),
+        'e.g., The bedroom power outlets suddenly stopped working.',
+      );
+    });
+
+    // 7. Appliance Repair produces appliance placeholder
+    test('Appliance Repair produces appliance placeholder', () {
+      expect(
+        problemDescriptionHintForCategory('Appliance Repair'),
+        'e.g., The washing machine is not draining water.',
+      );
+    });
+
+    // 8. Generic AI-identify mode produces neutral placeholder
+    test('generic AI-identify mode and unselected category produce neutral placeholder', () {
+      expect(
+        problemDescriptionHintForCategory(null),
+        'e.g., Describe what happened, what is affected, and any symptoms you noticed.',
+      );
+      expect(
+        problemDescriptionHintForCategory(''),
+        'e.g., Describe what happened, what is affected, and any symptoms you noticed.',
+      );
+      expect(
+        problemDescriptionHintForCategory('Let AssistLK AI identify'),
+        'e.g., Describe what happened, what is affected, and any symptoms you noticed.',
+      );
+      expect(
+        problemDescriptionHintForCategory('Let AI identify'),
+        'e.g., Describe what happened, what is affected, and any symptoms you noticed.',
+      );
+      expect(
+        problemDescriptionHintForCategory('Unknown Category'),
+        'e.g., Describe what happened, what is affected, and any symptoms you noticed.',
+      );
+    });
+
+    // Dynamic placeholder updates on category selection
+    testWidgets('CreateServiceRequestScreen dynamically updates placeholder when preference changes',
+        (tester) async {
+      await tester.pumpWidget(
+        buildApp(
+          CreateServiceRequestScreen(
+            locationService: gps,
+            geocodingService: geocoding,
+            initialCategoryPreference: 'Plumbing',
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      // Initially Plumbing placeholder
+      final fieldFinder = find.widgetWithText(AppTextField, 'Problem Description');
+      expect(fieldFinder, findsOneWidget);
+      AppTextField field = tester.widget<AppTextField>(fieldFinder);
+      expect(field.hint, 'e.g., Water is leaking heavily from the kitchen sink.');
+
+      // Tap Change preference
+      await tester.tap(find.text('Change'));
+      await tester.pumpAndSettle();
+
+      // Select Electrical
+      await tester.tap(find.widgetWithText(ListTile, 'Electrical'));
+      await tester.pumpAndSettle();
+
+      field = tester.widget<AppTextField>(fieldFinder);
+      expect(field.hint, 'e.g., The bedroom power outlets suddenly stopped working.');
+
+      // Tap Change preference again -> Vehicle Assistance
+      await tester.tap(find.text('Change'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.widgetWithText(ListTile, 'Vehicle Assistance'));
+      await tester.pumpAndSettle();
+
+      field = tester.widget<AppTextField>(fieldFinder);
+      expect(field.hint, 'e.g., My car will not start and makes a clicking sound.');
+
+      // Tap Change preference again -> Appliance Repair
+      await tester.tap(find.text('Change'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.widgetWithText(ListTile, 'Appliance Repair'));
+      await tester.pumpAndSettle();
+
+      field = tester.widget<AppTextField>(fieldFinder);
+      expect(field.hint, 'e.g., The washing machine is not draining water.');
+
+      // Tap Change preference again -> Let AssistLK AI identify
+      await tester.tap(find.text('Change'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Let AssistLK AI identify'));
+      await tester.pumpAndSettle();
+
+      field = tester.widget<AppTextField>(fieldFinder);
+      expect(
+        field.hint,
+        'e.g., Describe what happened, what is affected, and any symptoms you noticed.',
+      );
+    });
+
+    // 9. Changing category does not clear typed description
+    testWidgets('changing category does not clear typed description',
+        (tester) async {
+      await tester.pumpWidget(
+        buildApp(
+          CreateServiceRequestScreen(
+            locationService: gps,
+            geocodingService: geocoding,
+            initialCategoryPreference: 'Plumbing',
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      // Type custom description
+      const typedText = 'pipe burst near bathroom';
+      await tester.enterText(
+        find.widgetWithText(TextFormField, 'Problem Description'),
+        typedText,
+      );
+      await tester.pumpAndSettle();
+
+      // Verify entered text
+      expect(find.text(typedText), findsOneWidget);
+
+      // Change category to Electrical
+      await tester.tap(find.text('Change'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.widgetWithText(ListTile, 'Electrical'));
+      await tester.pumpAndSettle();
+
+      // Typed text remains completely intact
+      expect(find.text(typedText), findsOneWidget);
+      final textFormField = tester.widget<TextFormField>(
+        find.widgetWithText(TextFormField, 'Problem Description'),
+      );
+      expect(textFormField.controller?.text, typedText);
+
+      // Change category to AI identify
+      await tester.tap(find.text('Change'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Let AssistLK AI identify'));
+      await tester.pumpAndSettle();
+
+      // Typed text still remains completely intact
+      expect(find.text(typedText), findsOneWidget);
+      expect(textFormField.controller?.text, typedText);
+    });
+
+    // 10. Placeholder text is not submitted as request description
+    testWidgets('placeholder text is not submitted as request description',
+        (tester) async {
+      await tester.pumpWidget(
+        buildApp(
+          CreateServiceRequestScreen(
+            locationService: gps,
+            geocodingService: geocoding,
+            initialCategoryPreference: 'Plumbing',
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      // Controller is empty
+      final textFormField = tester.widget<TextFormField>(
+        find.widgetWithText(TextFormField, 'Problem Description'),
+      );
+      expect(textFormField.controller?.text, isEmpty);
+
+      // Attempt to proceed with only the placeholder visible
+      await tester.tap(find.text('Continue to Location'));
+      await tester.pumpAndSettle();
+
+      // Validation triggers error and blocks navigation - placeholder is not accepted as description
+      expect(
+        find.text('Please describe the problem you are experiencing.'),
+        findsOneWidget,
+      );
+      expect(find.text('Location / Address'), findsNothing);
     });
   });
 }

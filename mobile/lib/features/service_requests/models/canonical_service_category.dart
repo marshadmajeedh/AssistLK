@@ -91,4 +91,48 @@ class CanonicalServiceCategory {
       'Unsupported category preference: "$input". Expected one of: Plumbing, Electrical, Vehicle Assistance, Appliance Repair, or "Let AI identify".',
     );
   }
+
+  static String problemDescriptionHint(String? category) =>
+      problemDescriptionHintForCategory(category);
+}
+
+/// Returns a category-specific problem description placeholder for the selected service preference.
+///
+/// Supported canonical mappings:
+/// - Plumbing -> "e.g., Water is leaking heavily from the kitchen sink."
+/// - Vehicle Repair / Vehicle Assistance -> "e.g., My car will not start and makes a clicking sound."
+/// - Electrical / Electrical Services -> "e.g., The bedroom power outlets suddenly stopped working."
+/// - Appliance Repair -> "e.g., The washing machine is not draining water."
+/// - Cleaning / Cleaning Services -> "e.g., I need deep cleaning for the kitchen and bathrooms."
+/// - Let AssistLK AI identify / null / unselected -> "e.g., Describe what happened, what is affected, and any symptoms you noticed."
+String problemDescriptionHintForCategory(String? category) {
+  if (category == null) {
+    return 'e.g., Describe what happened, what is affected, and any symptoms you noticed.';
+  }
+  final trimmed = category.trim();
+  if (trimmed.isEmpty ||
+      trimmed.toLowerCase() == 'let ai identify' ||
+      trimmed.toLowerCase() == 'let assistlk ai identify') {
+    return 'e.g., Describe what happened, what is affected, and any symptoms you noticed.';
+  }
+  final canonical =
+      CanonicalServiceCategory.fromCanonicalOrDisplayName(trimmed);
+  final key = canonical?.canonicalName.toLowerCase() ?? trimmed.toLowerCase();
+  switch (key) {
+    case 'plumbing':
+      return 'e.g., Water is leaking heavily from the kitchen sink.';
+    case 'vehicle repair':
+    case 'vehicle assistance':
+      return 'e.g., My car will not start and makes a clicking sound.';
+    case 'electrical':
+    case 'electrical services':
+      return 'e.g., The bedroom power outlets suddenly stopped working.';
+    case 'appliance repair':
+      return 'e.g., The washing machine is not draining water.';
+    case 'cleaning':
+    case 'cleaning services':
+      return 'e.g., I need deep cleaning for the kitchen and bathrooms.';
+    default:
+      return 'e.g., Describe what happened, what is affected, and any symptoms you noticed.';
+  }
 }

@@ -336,6 +336,11 @@ class ServiceRequestService {
       }
     }
 
+    if (error is Exception) {
+      final msg = error.toString();
+      return msg.startsWith('Exception: ') ? msg.substring(11) : msg;
+    }
+
     return 'Something went wrong. Please try again.';
   }
 

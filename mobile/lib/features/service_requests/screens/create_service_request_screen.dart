@@ -1,7 +1,6 @@
 import '../../customer/providers/customer_location_provider.dart';
 
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 
 import '../../../../shared/theme/app_assets.dart';
@@ -13,9 +12,9 @@ import '../../../../shared/widgets/app_button.dart';
 import '../../../../shared/widgets/app_card.dart';
 import '../../../../shared/widgets/app_image_asset.dart';
 import '../../../../shared/widgets/app_text_field.dart';
-
 import '../../auth/providers/auth_provider.dart';
 import '../../customer/models/location_suggestion.dart';
+import '../../../../shared/widgets/assistlk_app_bar.dart';
 import '../models/canonical_service_category.dart';
 import '../models/create_service_request_dto.dart';
 import '../models/location_source.dart';
@@ -327,13 +326,8 @@ class _CreateServiceRequestScreenState
     return PopScope(
       canPop: !_photos.busy,
       child: Scaffold(
-        appBar: AppBar(
-          backgroundColor: AppColors.primary,
-          foregroundColor: Colors.white,
-          elevation: 0,
-          systemOverlayStyle: SystemUiOverlayStyle.light,
-          iconTheme: const IconThemeData(color: Colors.white),
-          title: const Text('Create Service Request'),
+        appBar: const AssistLKAppBar(
+          title: Text('Create Service Request'),
         ),
         body: SafeArea(
           child: Column(
@@ -531,7 +525,7 @@ class _CreateServiceRequestScreenState
           AppTextField(
             controller: _descriptionController,
             label: 'Problem Description',
-            hint: 'e.g., Water is leaking heavily from the pipe under my kitchen sink...',
+            hint: problemDescriptionHintForCategory(_selectedPreference),
             maxLines: 5,
             validator: (value) {
               if (value == null || value.trim().isEmpty) {

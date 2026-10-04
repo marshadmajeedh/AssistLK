@@ -1,6 +1,6 @@
 /* ==========================================================================
    AssistLK Admin Login Portal Styles
-   Matches reference design: Visual Scale & Hierarchy Correction
+   Compact Deployment Scale (1220px shell, balanced margins & typography)
    ========================================================================== */
 
 .admin-login-page {
@@ -10,7 +10,7 @@
   align-items: center;
   justify-content: center;
   background-color: #f1f5f9;
-  padding: clamp(20px, 3vh, 36px);
+  padding: clamp(16px, 3vh, 32px);
   box-sizing: border-box;
   font-family: "Plus Jakarta Sans", "Segoe UI", -apple-system, BlinkMacSystemFont, Roboto, sans-serif;
 }
@@ -19,15 +19,16 @@
   position: relative;
   z-index: 1;
   display: grid;
-  grid-template-columns: minmax(0, 1.8fr) minmax(400px, 1fr);
-  width: min(94vw, 1540px);
-  height: min(94vh, 880px);
-  min-height: 720px;
+  grid-template-columns: minmax(0, 1.55fr) minmax(360px, 440px);
+  width: min(calc(100vw - 48px), 1220px);
+  max-width: 1220px;
+  height: min(780px, calc(100vh - 48px));
+  min-height: 640px;
   background: #ffffff;
-  border-radius: 32px;
+  border-radius: 28px;
   box-shadow:
-    0 32px 70px -16px rgba(15, 23, 42, 0.22),
-    0 12px 30px -8px rgba(15, 23, 42, 0.1);
+    0 24px 60px -12px rgba(15, 23, 42, 0.18),
+    0 8px 24px -6px rgba(15, 23, 42, 0.08);
   border: 1px solid rgba(226, 232, 240, 0.85);
   overflow: hidden;
   box-sizing: border-box;
@@ -42,7 +43,7 @@
   display: flex;
   flex-direction: column;
   justify-content: flex-start;
-  padding: clamp(36px, 4.5vh, 56px) clamp(44px, 4.5vw, 68px);
+  padding: clamp(28px, 3.5vh, 44px) clamp(32px, 3.5vw, 48px);
   background:
     radial-gradient(circle at 75% 85%, rgba(56, 189, 248, 0.24) 0%, transparent 42%),
     radial-gradient(circle at 18% 18%, rgba(31, 78, 120, 0.38) 0%, transparent 48%),
@@ -55,10 +56,10 @@
 /* Concentric faint background arcs */
 .brand-ambient-arcs {
   position: absolute;
-  top: -80px;
-  right: -80px;
-  width: 720px;
-  height: 720px;
+  top: -60px;
+  right: -60px;
+  width: 580px;
+  height: 580px;
   pointer-events: none;
   z-index: 0;
   opacity: 0.85;
@@ -73,39 +74,39 @@
 .brand-identity-row {
   display: flex;
   align-items: center;
-  gap: 16px;
+  gap: 12px;
 }
 
 .brand-logo {
-  width: 52px;
-  height: 52px;
+  width: 38px;
+  height: 38px;
   object-fit: contain;
   display: block;
 }
 
 .brand-logo-text {
-  font-size: clamp(28px, 2.2vw, 34px);
+  font-size: 24px;
   font-weight: 800;
   letter-spacing: -0.02em;
   color: #ffffff;
 }
 
 .brand-accent-line {
-  width: 90px;
+  width: 64px;
   height: 3px;
   background: linear-gradient(90deg, #38bdf8, rgba(56, 189, 248, 0.25));
   border-radius: 2px;
-  margin-top: 16px;
-  margin-bottom: clamp(30px, 3.6vh, 46px);
+  margin-top: 12px;
+  margin-bottom: clamp(18px, 2.4vh, 28px);
 }
 
 /* Main Heading */
 .brand-hero-title {
   margin: 0;
-  font-size: clamp(52px, 4.3vw, 70px);
+  font-size: clamp(34px, 3.5vw, 46px);
   font-weight: 800;
-  line-height: 1.0;
-  letter-spacing: -0.035em;
+  line-height: 1.05;
+  letter-spacing: -0.03em;
   display: flex;
   flex-direction: column;
 }
@@ -120,9 +121,9 @@
 
 /* Tagline */
 .brand-tagline {
-  margin-top: 16px;
+  margin-top: 12px;
   margin-bottom: 0;
-  font-size: clamp(20px, 1.45vw, 24px);
+  font-size: clamp(15px, 1.1vw, 17px);
   font-weight: 600;
   color: #ffffff;
   letter-spacing: -0.01em;
@@ -130,20 +131,20 @@
 
 /* Supporting description */
 .brand-description {
-  margin-top: 12px;
+  margin-top: 8px;
   margin-bottom: 0;
-  font-size: clamp(16px, 1.15vw, 19px);
-  line-height: 1.6;
+  font-size: clamp(13px, 0.9vw, 14px);
+  line-height: 1.5;
   color: rgba(224, 231, 255, 0.82);
-  max-width: 580px;
+  max-width: 480px;
 }
 
 /* Feature Items Grid */
 .brand-feature-row {
   display: grid;
-  grid-template-columns: repeat(4, minmax(105px, 130px));
-  gap: clamp(16px, 1.8vw, 26px);
-  margin-top: clamp(26px, 3.2vh, 38px);
+  grid-template-columns: repeat(4, minmax(75px, 105px));
+  gap: clamp(8px, 1.1vw, 16px);
+  margin-top: clamp(16px, 2vh, 24px);
 }
 
 .brand-feature-item {
@@ -151,13 +152,13 @@
   flex-direction: column;
   align-items: center;
   text-align: center;
-  gap: 10px;
+  gap: 8px;
 }
 
 .brand-feature-icon-box {
-  width: 58px;
-  height: 58px;
-  border-radius: 16px;
+  width: 42px;
+  height: 42px;
+  border-radius: 12px;
   background: rgba(255, 255, 255, 0.08);
   border: 1px solid rgba(255, 255, 255, 0.16);
   backdrop-filter: blur(10px);
@@ -168,25 +169,30 @@
   transition: transform 0.2s ease, background 0.2s ease;
 }
 
+.brand-feature-icon-box svg {
+  width: 20px;
+  height: 20px;
+}
+
 .brand-feature-label {
-  font-size: 15.5px;
+  font-size: 12.5px;
   font-weight: 600;
   color: #e2e8f0;
-  line-height: 1.35;
+  line-height: 1.3;
   text-align: center;
 }
 
 /* ==========================================================================
    LOWER LEFT OPERATIONS ILLUSTRATION (CSS / HTML composition)
-   Occupies ~40-44% of left panel height, filling lower section
+   Occupies compact proportional height, filling lower section gracefully
    ========================================================================== */
 
 .brand-illustration-container {
   position: absolute;
-  left: 6%;
+  left: 5%;
   right: 5%;
   bottom: 0;
-  height: clamp(270px, 42%, 350px);
+  height: clamp(180px, 32%, 240px);
   pointer-events: none;
   user-select: none;
   z-index: 1;
@@ -197,30 +203,30 @@
   position: absolute;
   left: 15%;
   bottom: 10px;
-  width: 360px;
-  height: 240px;
-  background: radial-gradient(circle, rgba(56, 189, 248, 0.32) 0%, rgba(14, 116, 144, 0.18) 50%, transparent 80%);
-  filter: blur(40px);
+  width: 300px;
+  height: 180px;
+  background: radial-gradient(circle, rgba(56, 189, 248, 0.28) 0%, rgba(14, 116, 144, 0.15) 50%, transparent 80%);
+  filter: blur(36px);
   border-radius: 50%;
 }
 
 /* Dark organic shapes on sides */
 .illustration-foliage-left {
   position: absolute;
-  left: -40px;
-  bottom: -15px;
-  width: 170px;
-  height: 140px;
+  left: -30px;
+  bottom: -10px;
+  width: 140px;
+  height: 110px;
   background: radial-gradient(ellipse at bottom left, rgba(14, 42, 71, 0.9) 0%, transparent 70%);
   border-radius: 50% 60% 0 0;
 }
 
 .illustration-foliage-right {
   position: absolute;
-  right: -30px;
-  bottom: -15px;
-  width: 190px;
-  height: 180px;
+  right: -25px;
+  bottom: -10px;
+  width: 150px;
+  height: 140px;
   background: radial-gradient(ellipse at bottom right, rgba(14, 42, 71, 0.9) 0%, transparent 70%);
   border-radius: 60% 50% 0 0;
 }
@@ -228,15 +234,15 @@
 /* Dashboard Console Tablet */
 .illustration-dashboard-card {
   position: absolute;
-  left: 60px;
+  left: 40px;
   bottom: 0px;
-  width: clamp(380px, 52%, 460px);
-  padding: 18px 22px;
+  width: clamp(290px, 48%, 350px);
+  padding: 14px 18px;
   background: linear-gradient(145deg, rgba(17, 36, 61, 0.95), rgba(11, 23, 40, 0.98));
   border: 1px solid rgba(56, 189, 248, 0.26);
-  border-radius: 20px;
+  border-radius: 16px;
   box-shadow:
-    0 24px 50px rgba(0, 0, 0, 0.48),
+    0 20px 40px rgba(0, 0, 0, 0.45),
     inset 0 1px 1px rgba(255, 255, 255, 0.12);
   transform: perspective(900px) rotateX(10deg) rotateY(5deg) rotateZ(-2deg);
   z-index: 2;
@@ -246,21 +252,21 @@
 .dashboard-card-header {
   display: flex;
   align-items: center;
-  gap: 10px;
-  padding-bottom: 12px;
+  gap: 8px;
+  padding-bottom: 10px;
   border-bottom: 1px solid rgba(255, 255, 255, 0.08);
 }
 
 .dashboard-logo-dot {
-  width: 12px;
-  height: 12px;
+  width: 10px;
+  height: 10px;
   border-radius: 50%;
   background: #38bdf8;
   box-shadow: 0 0 8px #38bdf8;
 }
 
 .dashboard-card-title {
-  font-size: 13.5px;
+  font-size: 12px;
   font-weight: 700;
   color: #ffffff;
   letter-spacing: -0.01em;
@@ -268,54 +274,54 @@
 
 .dashboard-header-placeholder {
   margin-left: auto;
-  width: 64px;
-  height: 8px;
+  width: 52px;
+  height: 6px;
   background: rgba(255, 255, 255, 0.12);
-  border-radius: 4px;
+  border-radius: 3px;
 }
 
 .dashboard-card-rows {
   display: flex;
   flex-direction: column;
-  gap: 11px;
-  margin-top: 12px;
+  gap: 8px;
+  margin-top: 10px;
 }
 
 .dashboard-row {
   display: flex;
   align-items: center;
-  gap: 10px;
+  gap: 8px;
 }
 
 .dashboard-line-group {
   display: flex;
   flex-direction: column;
-  gap: 4px;
+  gap: 3px;
   flex: 1;
 }
 
 .dash-bar {
-  height: 6px;
+  height: 5px;
   background: rgba(255, 255, 255, 0.16);
   border-radius: 3px;
 }
 
 .dash-bar.long {
-  width: 90px;
+  width: 72px;
 }
 
 .dash-bar.medium {
-  width: 68px;
+  width: 54px;
 }
 
 .dash-bar.short {
-  width: 48px;
+  width: 38px;
 }
 
 .dash-badge {
-  font-size: 9.5px;
+  font-size: 8.5px;
   font-weight: 700;
-  padding: 3px 9px;
+  padding: 2px 7px;
   border-radius: 999px;
   line-height: 1.2;
 }
@@ -339,26 +345,26 @@
 }
 
 .dash-pill {
-  width: 18px;
-  height: 8px;
+  width: 14px;
+  height: 6px;
   background: rgba(255, 255, 255, 0.12);
-  border-radius: 4px;
+  border-radius: 3px;
 }
 
 /* Floating Map Card */
 .illustration-map-card {
   position: absolute;
-  right: 20px;
-  bottom: 16px;
-  width: clamp(280px, 38%, 340px);
-  height: clamp(190px, 86%, 230px);
+  right: 15px;
+  bottom: 12px;
+  width: clamp(200px, 32%, 250px);
+  height: clamp(135px, 72%, 165px);
   background: linear-gradient(135deg, rgba(186, 230, 253, 0.26), rgba(56, 189, 248, 0.12));
   border: 1px solid rgba(255, 255, 255, 0.38);
-  border-radius: 22px;
+  border-radius: 18px;
   backdrop-filter: blur(14px);
-  box-shadow: 0 20px 44px rgba(0, 0, 0, 0.35);
+  box-shadow: 0 16px 36px rgba(0, 0, 0, 0.32);
   z-index: 1;
-  padding: 14px;
+  padding: 10px 12px;
   box-sizing: border-box;
   display: flex;
   flex-direction: column;
@@ -367,12 +373,12 @@
 .map-badge-card {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: 6px;
   background: #ffffff;
-  padding: 7px 12px;
-  border-radius: 12px;
+  padding: 5px 10px;
+  border-radius: 10px;
   width: fit-content;
-  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.14);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.12);
 }
 
 .map-pin-icon {
@@ -381,29 +387,34 @@
   justify-content: center;
 }
 
+.map-pin-icon svg {
+  width: 14px;
+  height: 14px;
+}
+
 .map-badge-lines {
   display: flex;
   flex-direction: column;
-  gap: 4px;
+  gap: 3px;
 }
 
 .map-badge-bar {
-  height: 5px;
-  border-radius: 3px;
+  height: 4px;
+  border-radius: 2px;
   background: #cbd5e1;
 }
 
 .map-badge-bar.long {
-  width: 50px;
+  width: 40px;
 }
 
 .map-badge-bar.short {
-  width: 30px;
+  width: 24px;
 }
 
 .map-route-svg {
   width: 100%;
-  height: 110px;
+  height: 75px;
   margin-top: auto;
   overflow: visible;
 }
@@ -411,39 +422,44 @@
 /* Floating Appliance Repair Glass Card */
 .illustration-floating-service-card {
   position: absolute;
-  left: 10px;
-  bottom: 12px;
+  left: 6px;
+  bottom: 8px;
   display: flex;
   align-items: center;
-  gap: 12px;
-  padding: 12px 18px;
+  gap: 10px;
+  padding: 8px 14px;
   background: rgba(255, 255, 255, 0.2);
   border: 1px solid rgba(255, 255, 255, 0.4);
-  border-radius: 16px;
+  border-radius: 14px;
   backdrop-filter: blur(18px);
-  box-shadow: 0 16px 36px rgba(0, 0, 0, 0.38);
+  box-shadow: 0 12px 28px rgba(0, 0, 0, 0.35);
   z-index: 3;
 }
 
 .service-card-icon-box {
-  width: 40px;
-  height: 40px;
-  border-radius: 11px;
+  width: 32px;
+  height: 32px;
+  border-radius: 9px;
   background: #0284c7;
   display: flex;
   align-items: center;
   justify-content: center;
-  box-shadow: 0 4px 12px rgba(2, 132, 199, 0.45);
+  box-shadow: 0 4px 10px rgba(2, 132, 199, 0.45);
+}
+
+.service-card-icon-box svg {
+  width: 16px;
+  height: 16px;
 }
 
 .service-card-text {
   display: flex;
   flex-direction: column;
-  gap: 5px;
+  gap: 4px;
 }
 
 .service-card-title {
-  font-size: 13.5px;
+  font-size: 12px;
   font-weight: 700;
   color: #ffffff;
   letter-spacing: -0.01em;
@@ -451,10 +467,10 @@
 }
 
 .service-card-bar {
-  width: 64px;
-  height: 5px;
+  width: 50px;
+  height: 4px;
   background: rgba(255, 255, 255, 0.32);
-  border-radius: 3px;
+  border-radius: 2px;
 }
 
 /* ==========================================================================
@@ -466,14 +482,14 @@
   flex-direction: column;
   justify-content: center;
   align-items: center;
-  padding: clamp(36px, 4.5vh, 60px) clamp(36px, 4vw, 56px);
+  padding: clamp(24px, 3.5vh, 44px) clamp(24px, 3vw, 40px);
   background: #ffffff;
   box-sizing: border-box;
 }
 
 .login-panel-content {
   width: 100%;
-  max-width: 440px;
+  max-width: 340px;
   display: flex;
   flex-direction: column;
 }
@@ -482,21 +498,21 @@
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  padding: 6px 16px;
+  padding: 4px 12px;
   background-color: #e0f2fe;
   color: #0369a1;
-  font-size: 12px;
+  font-size: 11px;
   font-weight: 700;
   letter-spacing: 0.07em;
   text-transform: uppercase;
   border-radius: 999px;
   width: fit-content;
-  margin-bottom: 24px;
+  margin-bottom: 16px;
 }
 
 .admin-login-title {
   margin: 0;
-  font-size: clamp(36px, 2.8vw, 44px);
+  font-size: clamp(26px, 2.2vw, 32px);
   font-weight: 800;
   color: #0f172a;
   letter-spacing: -0.03em;
@@ -504,10 +520,10 @@
 }
 
 .admin-login-subtitle {
-  margin-top: 10px;
-  margin-bottom: 32px;
-  font-size: clamp(16px, 1.15vw, 18px);
-  line-height: 1.5;
+  margin-top: 6px;
+  margin-bottom: 22px;
+  font-size: 14px;
+  line-height: 1.45;
   color: #64748b;
 }
 
@@ -520,14 +536,14 @@
 .login-form-field {
   display: flex;
   flex-direction: column;
-  margin-bottom: 22px;
+  margin-bottom: 16px;
 }
 
 .login-form-label {
-  font-size: 15.5px;
+  font-size: 13.5px;
   font-weight: 600;
   color: #1e293b;
-  margin-bottom: 8px;
+  margin-bottom: 6px;
 }
 
 .login-input-container {
@@ -539,7 +555,7 @@
 
 .login-input-icon {
   position: absolute;
-  left: 16px;
+  left: 14px;
   color: #94a3b8;
   display: flex;
   align-items: center;
@@ -547,15 +563,20 @@
   pointer-events: none;
 }
 
+.login-input-icon svg {
+  width: 18px;
+  height: 18px;
+}
+
 .login-input {
   width: 100%;
-  height: 58px;
-  padding: 0 16px 0 48px;
+  height: 46px;
+  padding: 0 14px 0 42px;
   background-color: #ffffff;
   border: 1.5px solid #cbd5e1;
-  border-radius: 12px;
+  border-radius: 10px;
   font-family: inherit;
-  font-size: 16px;
+  font-size: 14px;
   color: #1e293b;
   outline: none;
   box-sizing: border-box;
@@ -577,24 +598,29 @@
 }
 
 .login-input-with-toggle {
-  padding-right: 48px;
+  padding-right: 42px;
 }
 
 .password-toggle-btn {
   position: absolute;
-  right: 12px;
+  right: 10px;
   top: 50%;
   transform: translateY(-50%);
   background: transparent;
   border: none;
-  padding: 8px;
-  border-radius: 8px;
+  padding: 6px;
+  border-radius: 6px;
   cursor: pointer;
   color: #94a3b8;
   display: flex;
   align-items: center;
   justify-content: center;
   transition: color 0.15s ease;
+}
+
+.password-toggle-btn svg {
+  width: 18px;
+  height: 18px;
 }
 
 .password-toggle-btn:hover {
@@ -608,25 +634,25 @@
 
 .admin-login-submit-btn {
   width: 100%;
-  height: 60px;
-  margin-top: 12px;
+  height: 48px;
+  margin-top: 10px;
   background: #173b5e;
   color: #ffffff;
   border: none;
-  border-radius: 12px;
+  border-radius: 10px;
   font-family: inherit;
-  font-size: 17.5px;
+  font-size: 15px;
   font-weight: 700;
   letter-spacing: -0.01em;
   cursor: pointer;
-  box-shadow: 0 4px 14px rgba(23, 59, 94, 0.28);
+  box-shadow: 0 4px 12px rgba(23, 59, 94, 0.25);
   transition: background-color 0.15s ease, transform 0.1s ease, box-shadow 0.15s ease;
 }
 
 .admin-login-submit-btn:hover:not(:disabled) {
   background: #112d4a;
   transform: translateY(-1px);
-  box-shadow: 0 8px 20px rgba(23, 59, 94, 0.36);
+  box-shadow: 0 6px 16px rgba(23, 59, 94, 0.32);
 }
 
 .admin-login-submit-btn:active:not(:disabled) {
@@ -646,23 +672,23 @@
 
 @media (max-width: 1200px) {
   .admin-login-shell {
-    grid-template-columns: minmax(0, 1.5fr) minmax(380px, 1fr);
-    width: 96vw;
+    grid-template-columns: minmax(0, 1.45fr) minmax(340px, 400px);
+    width: min(calc(100vw - 32px), 1220px);
   }
 
   .brand-feature-row {
-    grid-template-columns: repeat(4, minmax(95px, 115px));
-    gap: 14px;
+    grid-template-columns: repeat(4, minmax(70px, 95px));
+    gap: 10px;
   }
 
   .illustration-dashboard-card {
     left: 20px;
-    width: clamp(340px, 48%, 400px);
+    width: clamp(260px, 46%, 310px);
   }
 
   .illustration-map-card {
     right: 10px;
-    width: clamp(240px, 36%, 300px);
+    width: clamp(180px, 30%, 220px);
   }
 }
 
@@ -670,21 +696,21 @@
   .admin-login-shell {
     grid-template-columns: 1fr 1fr;
     height: auto;
-    min-height: 680px;
+    min-height: 600px;
   }
 
   .brand-feature-row {
     grid-template-columns: repeat(2, 1fr);
-    gap: 14px;
+    gap: 12px;
   }
 
   .brand-illustration-container {
-    height: 240px;
+    height: 180px;
   }
 
   .illustration-dashboard-card {
     left: 10px;
-    width: 320px;
+    width: 280px;
   }
 
   .illustration-map-card {
@@ -702,17 +728,17 @@
     grid-template-columns: 1fr;
     height: auto;
     min-height: unset;
-    max-width: 520px;
+    max-width: 480px;
     margin: 20px auto;
   }
 
   .admin-brand-panel {
-    padding: 36px 30px;
+    padding: 32px 24px;
   }
 
   .brand-feature-row {
     grid-template-columns: repeat(2, 1fr);
-    gap: 16px;
+    gap: 14px;
   }
 
   /* On mobile <= 860px, hide decorative illustration to keep login form immediately accessible */
@@ -721,7 +747,7 @@
   }
 
   .admin-login-panel {
-    padding: 40px 30px;
+    padding: 32px 24px;
   }
 }
 
@@ -731,41 +757,41 @@
   }
 
   .admin-login-shell {
-    border-radius: 24px;
+    border-radius: 20px;
     margin: 10px auto;
   }
 
   .admin-brand-panel {
-    padding: 28px 20px;
+    padding: 24px 16px;
   }
 
   .brand-hero-title {
-    font-size: 36px;
+    font-size: 28px;
   }
 
   .brand-feature-row {
     grid-template-columns: repeat(2, 1fr);
-    gap: 12px;
+    gap: 10px;
   }
 
   .brand-feature-icon-box {
-    width: 48px;
-    height: 48px;
+    width: 38px;
+    height: 38px;
   }
 
   .brand-feature-label {
-    font-size: 13px;
+    font-size: 11.5px;
   }
 
   .admin-login-panel {
-    padding: 30px 20px;
+    padding: 24px 16px;
   }
 
   .login-input {
-    height: 52px;
+    height: 44px;
   }
 
   .admin-login-submit-btn {
-    height: 52px;
+    height: 46px;
   }
 }

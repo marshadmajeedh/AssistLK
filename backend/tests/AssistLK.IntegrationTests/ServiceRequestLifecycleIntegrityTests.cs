@@ -65,7 +65,7 @@ public class ServiceRequestLifecycleIntegrityTests
     {
         var statusNames = Enum.GetNames<ServiceRequestStatus>();
 
-        Assert.DoesNotContain("Completed", statusNames);
+        Assert.Contains("Completed", statusNames);
         Assert.DoesNotContain("Failed", statusNames);
         Assert.DoesNotContain("Matched", statusNames);
         Assert.DoesNotContain("Assigned", statusNames);
@@ -75,7 +75,7 @@ public class ServiceRequestLifecycleIntegrityTests
         Assert.DoesNotContain("PendingApproval", statusNames);
 
         // Authoritative C1 lifecycle values only
-        Assert.Equal(6, statusNames.Length);
+        Assert.Equal(7, statusNames.Length);
         Assert.Contains("Created", statusNames);
         Assert.Contains("Analyzing", statusNames);
         Assert.Contains("AwaitingInformation", statusNames);

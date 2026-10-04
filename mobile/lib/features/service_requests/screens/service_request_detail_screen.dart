@@ -551,9 +551,8 @@ class _ServiceRequestDetailScreenState
                   'Upload or discard selected photos before continuing with analysis.',
                 )
               else ...[
-                if ((request.status ==
-                            ServiceRequestStatus.awaitingInformation ||
-                        request.status == ServiceRequestStatus.cancelled) &&
+                if (request.status ==
+                        ServiceRequestStatus.awaitingInformation &&
                     request.latestAnalysis != null &&
                     request.latestAnalysis!.visualEvidence.status !=
                         AnalysisVisionStatus.notRequested) ...[
@@ -866,31 +865,87 @@ class _ServiceRequestDetailScreenState
         );
 
       case ServiceRequestStatus.cancelled:
-        return Container(
+        final displayAnalysis = analysis ??
+            (request.latestAnalysis != null
+                ? ProblemUnderstandingResultModel(
+                    workflowId: '',
+                    executionId: '',
+                    serviceRequestId: request.serviceRequestId,
+                    status: request.status,
+                    category: request.category,
+                    problemSummary: request.latestAnalysis!.detectedProblem,
+                    urgency: request.urgency,
+                    confidence: request.latestAnalysis!.confidence,
+                    needsMoreInformation: false,
+                    followUpQuestions: const [],
+                  )
+                : null);
+
+        final noticeCard = Container(
           width: double.infinity,
           padding: const EdgeInsets.all(AppSpacing.md),
           decoration: BoxDecoration(
-            color: const Color(0xFFFEF2F2),
+            color: const Color(0xFFF3F4F6),
             borderRadius: BorderRadius.circular(AppRadius.medium),
-            border: Border.all(color: const Color(0xFFFECACA)),
+            border: Border.all(color: AppColors.border),
           ),
           child: const Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Icon(Icons.cancel_rounded, color: AppColors.error),
+              Icon(
+                Icons.info_outline_rounded,
+                color: AppColors.textSecondary,
+                size: 22,
+              ),
               SizedBox(width: AppSpacing.sm),
               Expanded(
-                child: Text(
-                  'This service request has been cancelled.',
-                  style: TextStyle(
-                    fontSize: 14,
-                    color: AppColors.error,
-                    fontWeight: FontWeight.w500,
-                  ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'Request cancelled',
+                      style: TextStyle(
+                        fontSize: 15,
+                        fontWeight: FontWeight.w600,
+                        color: AppColors.textPrimary,
+                      ),
+                    ),
+                    SizedBox(height: 4),
+                    Text(
+                      'This request is closed and no further actions are available.',
+                      style: TextStyle(
+                        fontSize: 13,
+                        color: AppColors.textSecondary,
+                        height: 1.4,
+                      ),
+                    ),
+                  ],
                 ),
               ),
             ],
           ),
         );
+
+        if (displayAnalysis != null) {
+          return Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              AnalysisResultCard(
+                analysis: displayAnalysis,
+                visualEvidence:
+                    request.latestAnalysis?.visualEvidence ??
+                    const AnalysisVisualEvidence(),
+                hasPhotos: _photos.attachments.isNotEmpty,
+                categoryHint: request.categoryHint,
+                status: request.status,
+              ),
+              const SizedBox(height: AppSpacing.md),
+              noticeCard,
+            ],
+          );
+        }
+
+        return noticeCard;
     }
   }
 }

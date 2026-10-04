@@ -22,6 +22,7 @@ import '../../../../shared/widgets/app_button.dart';
 import '../../../../shared/widgets/app_card.dart';
 import '../../../../shared/widgets/app_image_asset.dart';
 import '../../../../shared/widgets/app_text_field.dart';
+import '../../../../shared/widgets/assistlk_app_bar.dart';
 import '../models/canonical_service_category.dart';
 import '../models/create_service_request_dto.dart';
 import '../providers/service_request_provider.dart';
@@ -324,7 +325,9 @@ class _CreateServiceRequestScreenState
     return PopScope(
       canPop: !_photos.busy,
       child: Scaffold(
-        appBar: AppBar(title: const Text('Create Service Request')),
+        appBar: const AssistLKAppBar(
+          title: Text('Create Service Request'),
+        ),
         body: SafeArea(
           child: Column(
             children: [
@@ -523,7 +526,7 @@ class _CreateServiceRequestScreenState
           AppTextField(
             controller: _descriptionController,
             label: 'Problem Description',
-            hint: 'e.g., Water is leaking heavily from the pipe under my kitchen sink...',
+            hint: problemDescriptionHintForCategory(_selectedPreference),
             maxLines: 5,
             validator: (value) {
               if (value == null || value.trim().isEmpty) {

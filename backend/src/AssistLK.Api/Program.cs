@@ -186,9 +186,15 @@ builder.Services.AddHttpClient<IProblemUnderstandingClient, ProblemUnderstanding
 builder.Services.AddHttpClient<IQuotationBookingAgentClient, QuotationBookingAgentClient>();
 
 // Provider Matching Microservice Client
-builder.Services.AddHttpClient<AssistLK.Application.Services.Providers.IProviderMatchingService, AssistLK.Application.Services.Providers.ProviderMatchingService>(client =>
+builder.Services.AddHttpClient<AssistLK.Application.Services.Providers.IProviderMatchingService, AssistLK.Application.Services.Providers.ProviderMatchingService>((sp, client) =>
 {
-    client.BaseAddress = new Uri("http://127.0.0.1:8000");
+    var config = sp.GetRequiredService<IConfiguration>();
+    var baseUrl = config["AgentServices:ProviderMatchingUrl"];
+    if (string.IsNullOrWhiteSpace(baseUrl))
+    {
+        baseUrl = "http://127.0.0.1:8000";
+    }
+    client.BaseAddress = new Uri(baseUrl.TrimEnd('/'));
     client.Timeout = TimeSpan.FromSeconds(90);
 });
 builder.Services.AddScoped<AssistLK.Application.Services.Providers.IProviderMatchingCoordinator, AssistLK.Application.Services.Providers.ProviderMatchingCoordinator>();
@@ -424,8 +430,39 @@ builder.Services.AddCors(options =>
                         return false;
                     }
 
-                    return (uri.Scheme == Uri.UriSchemeHttp || uri.Scheme == Uri.UriSchemeHttps)
-                           && (uri.Host == "localhost" || uri.Host == "127.0.0.1");
+                    if (uri.Scheme != Uri.UriSchemeHttp && uri.Scheme != Uri.UriSchemeHttps)
+                    {
+                        return false;
+                    }
+
+                    // Local development (localhost, 127.0.0.1)
+                    if (uri.Host == "localhost" || uri.Host == "127.0.0.1")
+                    {
+                        return true;
+                    }
+
+                    // Vercel deployment domains (*.vercel.app)
+                    if (uri.Host.EndsWith(".vercel.app", StringComparison.OrdinalIgnoreCase))
+                    {
+                        return true;
+                    }
+
+                    // Railway deployment domains (*.railway.app, *.up.railway.app)
+                    if (uri.Host.EndsWith(".railway.app", StringComparison.OrdinalIgnoreCase))
+                    {
+                        return true;
+                    }
+
+                    // Optional custom configured origins via Cors:AllowedOrigins
+                    var configuredOrigins = builder.Configuration["Cors:AllowedOrigins"];
+                    if (!string.IsNullOrWhiteSpace(configuredOrigins))
+                    {
+                        var allowedList = configuredOrigins
+                            .Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+                        return allowedList.Any(allowed => string.Equals(allowed.TrimEnd('/'), origin.TrimEnd('/'), StringComparison.OrdinalIgnoreCase));
+                    }
+
+                    return false;
                 })
                 .AllowAnyHeader()
                 .AllowAnyMethod();
@@ -452,7 +489,10 @@ if (!app.Environment.IsEnvironment("Testing"))
 app.UseMiddleware<ExceptionHandlingMiddleware>();
 
 
-if(app.Environment.IsDevelopment())
+var enableSwagger = app.Environment.IsDevelopment()
+    || app.Configuration.GetValue<bool>("ENABLE_SWAGGER", true);
+
+if (enableSwagger)
 {
     app.UseSwagger();
     app.UseSwaggerUI();

@@ -17,6 +17,7 @@ import '../../../../shared/theme/app_text_styles.dart';
 import '../../../../shared/widgets/animated_border_trail.dart';
 import '../../../../shared/widgets/app_button.dart';
 import '../../../../shared/widgets/app_card.dart';
+import '../../../../shared/widgets/assistlk_app_bar.dart';
 import '../models/canonical_service_category.dart';
 import '../models/problem_understanding_result_model.dart';
 import '../models/service_request_model.dart';
@@ -265,6 +266,7 @@ class _ServiceRequestDetailScreenState
   Widget build(BuildContext context) {
     if (_photos.sessionEnded) {
       return const Scaffold(
+        appBar: AssistLKAppBar(title: Text('Request Details')),
         body: Center(
           child: Text('Your session has ended. Please sign in again.'),
         ),
@@ -275,15 +277,15 @@ class _ServiceRequestDetailScreenState
     final analysis = provider.currentAnalysis;
 
     if (provider.isLoading && request == null) {
-      return Scaffold(
-        appBar: AppBar(title: const Text('Request Details')),
-        body: const Center(child: CircularProgressIndicator()),
+      return const Scaffold(
+        appBar: AssistLKAppBar(title: Text('Request Details')),
+        body: Center(child: CircularProgressIndicator()),
       );
     }
 
     if (request == null) {
       return Scaffold(
-        appBar: AppBar(title: const Text('Request Details')),
+        appBar: const AssistLKAppBar(title: Text('Request Details')),
         body: Center(
           child: Padding(
             padding: const EdgeInsets.all(AppSpacing.lg),
@@ -314,7 +316,7 @@ class _ServiceRequestDetailScreenState
     }
 
     return Scaffold(
-      appBar: AppBar(
+      appBar: AssistLKAppBar(
         title: const Text('Request Details'),
         actions: [
           if (request.status != ServiceRequestStatus.cancelled &&
@@ -323,7 +325,10 @@ class _ServiceRequestDetailScreenState
               !provider.isAnalyzing &&
               !provider.analysisStateNeedsRefresh)
             IconButton(
-              icon: const Icon(Icons.cancel_outlined, color: AppColors.error),
+              icon: const Icon(
+                Icons.cancel_outlined,
+                color: AppColors.destructiveOnNavy,
+              ),
               tooltip: 'Cancel Request',
               onPressed: () => _cancelRequest(request.serviceRequestId),
             ),

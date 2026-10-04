@@ -13,6 +13,7 @@ import '../../../../shared/theme/app_spacing.dart';
 import '../../../../shared/theme/app_text_styles.dart';
 import '../../../../shared/widgets/app_button.dart';
 import '../../../../shared/widgets/app_text_field.dart';
+import '../../../../shared/widgets/assistlk_app_bar.dart';
 import '../models/canonical_service_category.dart';
 import '../models/service_request_model.dart';
 import '../models/update_service_request_dto.dart';
@@ -223,7 +224,7 @@ class _EditServiceRequestScreenState extends State<EditServiceRequestScreen> {
         );
 
     return Scaffold(
-      appBar: AppBar(title: const Text('Edit Request Details')),
+      appBar: const AssistLKAppBar(title: Text('Edit Request Details')),
       body: SafeArea(
         child: SingleChildScrollView(
           padding: const EdgeInsets.all(AppSpacing.lg),
@@ -304,7 +305,7 @@ class _EditServiceRequestScreenState extends State<EditServiceRequestScreen> {
                 AppTextField(
                   controller: _descriptionController,
                   label: 'Problem Description',
-                  hint: 'Describe the issue in detail...',
+                  hint: problemDescriptionHintForCategory(_selectedPreference),
                   maxLines: 4,
                   validator: (value) {
                     if (value == null || value.trim().isEmpty) {

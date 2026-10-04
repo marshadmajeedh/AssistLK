@@ -11,17 +11,25 @@ class ProviderBottomNavigation extends StatelessWidget {
   final int selectedIndex;
   final ValueChanged<int> onDestinationSelected;
 
-  static const labels = ['Dashboard', 'Dispatch Map', 'Bookings', 'Profile'];
+  static const labels = [
+    'Dashboard',
+    'Dispatch Map',
+    'Bookings',
+    'Tracking',
+    'Profile',
+  ];
   static const _icons = [
     Icons.dashboard_outlined,
     Icons.map_outlined,
     Icons.receipt_long_outlined,
+    Icons.route_outlined,
     Icons.person_outline_rounded,
   ];
   static const _selectedIcons = [
     Icons.dashboard_rounded,
     Icons.map_rounded,
     Icons.receipt_long_rounded,
+    Icons.route,
     Icons.person_rounded,
   ];
 
@@ -71,9 +79,11 @@ class ProviderBottomNavigation extends StatelessWidget {
                 painter.dispose();
               }
               final minimum = math.max(48.0, labelWidth + AppSpacing.sm);
-              final columns =
-                  constraints.maxWidth >= minimum * 4 + AppSpacing.xs * 3
-                  ? 4
+                final columns =
+                  constraints.maxWidth >= minimum * 5 + AppSpacing.xs * 4
+                  ? 5
+                  : constraints.maxWidth >= minimum * 3 + AppSpacing.xs * 2
+                  ? 3
                   : 2;
               final width =
                   (constraints.maxWidth - AppSpacing.xs * (columns - 1)) /

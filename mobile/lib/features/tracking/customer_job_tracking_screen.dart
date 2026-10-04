@@ -4,6 +4,8 @@ import 'package:flutter/material.dart';
 import 'package:latlong2/latlong.dart';
 
 import '../../core/api/api_client.dart';
+import '../../core/config/app_config.dart';
+import '../../shared/theme/app_colors.dart';
 import '../feedback/screens/feedback_service.dart';
 import 'widgets/live_tracking_map.dart';
 
@@ -48,8 +50,7 @@ class CustomerJobTrackingScreen extends StatefulWidget {
       _CustomerJobTrackingScreenState();
 }
 
-class _CustomerJobTrackingScreenState
-    extends State<CustomerJobTrackingScreen> {
+class _CustomerJobTrackingScreenState extends State<CustomerJobTrackingScreen> {
   static const _lifecycleStages = [
     'Assigned',
     'OnTheWay',
@@ -70,6 +71,7 @@ class _CustomerJobTrackingScreenState
   bool _isPolling = false;
   String? _completionImageUrl;
   String? _completionSummary;
+  // ignore: unused_field
   double? _additionalCost;
   int? _feedbackRating;
   String? _feedbackComment;
@@ -143,21 +145,27 @@ class _CustomerJobTrackingScreenState
       if (matchingRequest == null || !mounted) return;
 
       final polledStatus = _normalizeStatus(
-        matchingRequest['status']?.toString() ?? _currentStatus,
+        matchingRequest['jobStatus']?.toString() ??
+            matchingRequest['status']?.toString() ??
+            _currentStatus,
       );
       final completion = matchingRequest['completionRecord'];
       final completionData = completion is Map
           ? Map<String, dynamic>.from(completion)
           : null;
-      final polledImageUrl = completionData?['proofOfWorkImageUrl']?.toString();
+      final polledImageUrl = _readProofImageUrl(
+        matchingRequest,
+        completionData,
+      );
       final polledSummary =
           (completionData?['summaryNotes'] ?? completionData?['workSummary'])
               ?.toString();
-      final polledAdditionalCost =
-          (completionData?['additionalCost'] as num?)?.toDouble();
-      final polledFeedbackComment = matchingRequest['feedbackComment']?.toString();
-      final polledFeedbackRating =
-          (matchingRequest['feedbackRating'] as num?)?.toInt();
+      final polledAdditionalCost = (completionData?['additionalCost'] as num?)
+          ?.toDouble();
+      final polledFeedbackComment = matchingRequest['feedbackComment']
+          ?.toString();
+      final polledFeedbackRating = (matchingRequest['feedbackRating'] as num?)
+          ?.toInt();
       final statusIndex = _lifecycleStages.indexOf(polledStatus);
 
       setState(() {
@@ -192,6 +200,33 @@ class _CustomerJobTrackingScreenState
     }
   }
 
+  String? _readProofImageUrl(
+    Map<String, dynamic> jobPayload,
+    Map<String, dynamic>? completionData,
+  ) {
+    final rawUrl =
+        completionData?['proofOfWorkImageUrl'] ??
+        completionData?['ProofOfWorkImageUrl'] ??
+        jobPayload['proofOfWorkImageUrl'] ??
+        jobPayload['ProofOfWorkImageUrl'];
+    final value = rawUrl?.toString().trim();
+    if (value == null || value.isEmpty) return null;
+
+    final uri = Uri.tryParse(value);
+    if (uri == null || uri.hasScheme) return value;
+
+    final apiUri = Uri.tryParse(AppConfig.apiBaseUrl);
+    return apiUri?.resolve(value).toString() ?? value;
+  }
+
+  String _resolveImageUrl(String value) {
+    final uri = Uri.tryParse(value.trim());
+    if (uri == null || uri.hasScheme) return value;
+
+    final apiUri = Uri.tryParse(AppConfig.apiBaseUrl);
+    return apiUri?.resolve(value).toString() ?? value;
+  }
+
   String _normalizeStatus(String status) {
     switch (status.trim().toLowerCase()) {
       case 'on the way':
@@ -206,7 +241,13 @@ class _CustomerJobTrackingScreenState
       case 'workstarted':
         return 'InProgress';
       case 'completed':
+      case 'complete':
       case 'workcompleted':
+      case 'jobcompleted':
+      case 'job completed':
+      case 'completed successfully':
+      case 'job completed successfully':
+      case 'servicejobstatus.completed':
         return 'Completed';
       case 'assigned':
       default:
@@ -215,6 +256,9 @@ class _CustomerJobTrackingScreenState
   }
 
   int get _currentStageIndex {
+    if (_currentStatus == 'Completed') {
+      return _lifecycleStages.length - 1;
+    }
     final index = _lifecycleStages.indexOf(_currentStatus);
     return index < 0 ? 0 : index;
   }
@@ -253,53 +297,111 @@ class _CustomerJobTrackingScreenState
   }
 
   void _showMessage(String message) {
-    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(message)));
+    ScaffoldMessenger.of(context)
+        .showSnackBar(SnackBar(content: Text(message)));
   }
 
   Widget _buildLifecycleBar() {
-    return Card(
+    return Container(
       margin: const EdgeInsets.fromLTRB(16, 16, 16, 8),
-      child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 16),
-        child: Row(
-          children: List.generate(_lifecycleStages.length, (index) {
-            final isComplete = index <= _currentStageIndex;
-            final label = _lifecycleStages[index]
-                .replaceAll('OnTheWay', 'On The Way')
-                .replaceAll('InProgress', 'In Progress');
-            return Expanded(
-              child: Column(
-                children: [
-                  CircleAvatar(
-                    radius: 14,
-                    backgroundColor:
-                        isComplete ? Colors.green : Colors.grey.shade300,
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: AppColors.surface,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: AppColors.border.withValues(alpha: 0.7)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Text(
+            'Service Status',
+            style: TextStyle(
+              color: AppColors.textPrimary,
+              fontSize: 16,
+              fontWeight: FontWeight.w700,
+            ),
+          ),
+          const SizedBox(height: 12),
+          ...List.generate(_lifecycleStages.length, (index) {
+            final isComplete = _currentStatus == 'Completed' ||
+                index < _currentStageIndex;
+            final isCurrent = _currentStatus != 'Completed' &&
+                index == _currentStageIndex;
+            final isLast = index == _lifecycleStages.length - 1;
+
+            return Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                SizedBox(
+                  width: 32,
+                  child: Column(
+                    children: [
+                      Container(
+                        key: ValueKey(
+                          'customer_tracking_stage_${_lifecycleStages[index]}',
+                        ),
+                        width: 26,
+                        height: 26,
+                        decoration: BoxDecoration(
+                          color: isComplete || isCurrent
+                              ? AppColors.primary
+                              : AppColors.surface,
+                          shape: BoxShape.circle,
+                          border: isComplete || isCurrent
+                              ? null
+                              : Border.all(color: AppColors.disabled, width: 2),
+                        ),
+                        child: isComplete
+                            ? const Icon(Icons.check, color: Colors.white, size: 17)
+                            : isCurrent
+                                ? const Icon(
+                                    Icons.radio_button_checked,
+                                    color: Colors.white,
+                                    size: 14,
+                                  )
+                                : null,
+                      ),
+                      if (!isLast)
+                        Container(
+                          width: 2,
+                          height: 28,
+                          color: index < _currentStageIndex
+                              ? AppColors.primary
+                              : AppColors.border,
+                        ),
+                    ],
+                  ),
+                ),
+                Expanded(
+                  child: AnimatedContainer(
+                    duration: const Duration(milliseconds: 180),
+                    margin: const EdgeInsets.only(bottom: 6),
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 12,
+                      vertical: 8,
+                    ),
+                    decoration: BoxDecoration(
+                      color: isCurrent ? AppColors.primarySurface : null,
+                      borderRadius: BorderRadius.circular(10),
+                    ),
                     child: Text(
-                      '${index + 1}',
+                      _lifecycleStages[index],
                       style: TextStyle(
-                        color: isComplete ? Colors.white : Colors.grey.shade700,
-                        fontWeight: FontWeight.bold,
+                        color: isComplete || isCurrent
+                            ? AppColors.primary
+                            : AppColors.textSecondary,
+                        fontSize: 14,
+                        fontWeight: isComplete || isCurrent
+                            ? FontWeight.w700
+                            : FontWeight.w500,
                       ),
                     ),
                   ),
-                  const SizedBox(height: 6),
-                  Text(
-                    label,
-                    textAlign: TextAlign.center,
-                    style: const TextStyle(fontSize: 10),
-                  ),
-                  if (index < _lifecycleStages.length - 1)
-                    Divider(
-                      color: index < _currentStageIndex
-                          ? Colors.green
-                          : Colors.grey.shade300,
-                      thickness: 2,
-                    ),
-                ],
-              ),
+                ),
+              ],
             );
           }),
-        ),
+        ],
       ),
     );
   }
@@ -326,25 +428,52 @@ class _CustomerJobTrackingScreenState
                   : null,
               child: widget.providerImageUrl?.isNotEmpty == true
                   ? null
-                  : const Icon(Icons.person),
+                  : const Icon(Icons.person, color: AppColors.primary),
             ),
             const SizedBox(width: 12),
             Expanded(
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text(name, style: const TextStyle(fontWeight: FontWeight.bold)),
-                  Text(category),
-                  Text('$rating ${rating == 'Not rated' ? '' : '★'}'),
+                  Text(
+                    name,
+                    style: const TextStyle(
+                      color: AppColors.textPrimary,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                  Text(
+                    category,
+                    style: const TextStyle(color: AppColors.textSecondary),
+                  ),
+                  Row(
+                    children: [
+                      if (rating != 'Not rated') ...[
+                        const Icon(
+                          Icons.star_rounded,
+                          color: AppColors.primary,
+                          size: 18,
+                        ),
+                        const SizedBox(width: 3),
+                      ],
+                      Text(
+                        rating,
+                        style: const TextStyle(color: AppColors.primary),
+                      ),
+                    ],
+                  ),
                   if (widget.providerPhone?.isNotEmpty == true)
-                    Text(widget.providerPhone!),
+                    Text(
+                      widget.providerPhone!,
+                      style: const TextStyle(color: AppColors.textSecondary),
+                    ),
                 ],
               ),
             ),
             if (widget.providerPhone?.isNotEmpty == true)
               IconButton(
                 tooltip: 'Contact provider',
-                icon: const Icon(Icons.phone),
+                icon: const Icon(Icons.phone, color: AppColors.primary),
                 onPressed: () => _showMessage(widget.providerPhone!),
               ),
           ],
@@ -356,36 +485,119 @@ class _CustomerJobTrackingScreenState
   Widget _buildCompletionSummary() {
     return Card(
       margin: const EdgeInsets.all(16),
-      color: Colors.green.shade50,
+      color: AppColors.primarySurface,
       child: Padding(
         padding: const EdgeInsets.all(16),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            const Text(
-              'Thank You! Job Completed Successfully',
-              style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+            Row(
+              children: [
+                const CircleAvatar(
+                  key: ValueKey('completion_status_icon'),
+                  radius: 20,
+                  backgroundColor: AppColors.primary,
+                  child: Icon(Icons.check, color: Colors.white),
+                ),
+                const SizedBox(width: 12),
+                const Expanded(
+                  child: Text(
+                    'Thank You! Job Completed Successfully',
+                    style: TextStyle(
+                      color: AppColors.primaryDark,
+                      fontSize: 17,
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                ),
+              ],
             ),
-            if (_completionImageUrl?.isNotEmpty == true) ...[
-              const SizedBox(height: 12),
-              Image.network(
-                _completionImageUrl!,
-                height: 180,
-                fit: BoxFit.cover,
-                errorBuilder: (_, error, stackTrace) =>
-                  const Icon(Icons.broken_image),
-              ),
-            ],
             if (_completionSummary?.isNotEmpty == true) ...[
               const SizedBox(height: 12),
-              Text('Summary: $_completionSummary'),
-            ],
-            if (_additionalCost != null) ...[
-              const SizedBox(height: 8),
-              Text('Additional cost: $_additionalCost'),
+              Text(
+                'Summary: $_completionSummary',
+                style: const TextStyle(color: AppColors.textPrimary),
+              ),
             ],
           ],
         ),
+      ),
+    );
+  }
+
+  Widget _buildServiceProofSection() {
+    final hasProofImage = _completionImageUrl?.isNotEmpty == true;
+    return Card(
+      margin: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Text(
+              'Service Proof Image',
+              style: TextStyle(
+                color: AppColors.textPrimary,
+                fontSize: 16,
+                fontWeight: FontWeight.w700,
+              ),
+            ),
+            const SizedBox(height: 12),
+            if (hasProofImage)
+              ClipRRect(
+                borderRadius: BorderRadius.circular(12),
+                child: Image.network(
+                  _resolveImageUrl(_completionImageUrl!),
+                  width: double.infinity,
+                  height: 190,
+                  fit: BoxFit.cover,
+                  errorBuilder: (_, error, stackTrace) => _proofImageFallback(),
+                ),
+              )
+            else
+              _proofImageFallback(),
+            const SizedBox(height: 10),
+            const Row(
+              children: [
+                Icon(Icons.photo_outlined, color: AppColors.primary, size: 18),
+                SizedBox(width: 6),
+                Text(
+                  'Proof photo',
+                  style: TextStyle(
+                    color: AppColors.primary,
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 4),
+            Text(
+              hasProofImage
+                  ? 'Photo shared by your provider as proof of completed work.'
+                  : 'No proof photo was provided for this service.',
+              style: const TextStyle(
+                color: AppColors.textSecondary,
+                fontSize: 12,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _proofImageFallback() {
+    return Container(
+      width: double.infinity,
+      height: 150,
+      decoration: BoxDecoration(
+        color: AppColors.primarySurface,
+        borderRadius: BorderRadius.circular(12),
+      ),
+      child: const Icon(
+        Icons.image_outlined,
+        color: AppColors.primary,
+        size: 42,
       ),
     );
   }
@@ -408,7 +620,13 @@ class _CustomerJobTrackingScreenState
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            const Text('Rate your service', style: TextStyle(fontWeight: FontWeight.bold)),
+            const Text(
+              'How was your experience?',
+              style: TextStyle(
+                color: AppColors.textPrimary,
+                fontWeight: FontWeight.bold,
+              ),
+            ),
             Row(
               mainAxisAlignment: MainAxisAlignment.center,
               children: List.generate(5, (index) {
@@ -416,7 +634,7 @@ class _CustomerJobTrackingScreenState
                 return IconButton(
                   icon: Icon(
                     rating <= _selectedRating ? Icons.star : Icons.star_border,
-                    color: Colors.amber,
+                    color: AppColors.primary,
                   ),
                   onPressed: _isSubmittingFeedback
                       ? null
@@ -431,17 +649,47 @@ class _CustomerJobTrackingScreenState
               decoration: const InputDecoration(
                 labelText: 'Review',
                 border: OutlineInputBorder(),
+                focusedBorder: OutlineInputBorder(
+                  borderSide: BorderSide(color: AppColors.primary, width: 2),
+                ),
               ),
             ),
             const SizedBox(height: 12),
             ElevatedButton(
               onPressed: _isSubmittingFeedback ? null : _submitFeedback,
-              child: const Text('Submit Feedback'),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: AppColors.primary,
+                foregroundColor: AppColors.surface,
+              ),
+              child: const Text('Submit Review'),
             ),
           ],
         ),
       ),
     );
+  }
+
+  List<Widget> _buildTrackingNotices() {
+    return [
+      if (_connectionError != null)
+        MaterialBanner(
+          content: Text(_connectionError!),
+          actions: [
+            TextButton(
+              onPressed: () {
+                ScaffoldMessenger.of(context).hideCurrentMaterialBanner();
+                setState(() => _connectionError = null);
+              },
+              child: const Text('Dismiss'),
+            ),
+          ],
+        ),
+      if (_trackingStopped)
+        const ListTile(
+          leading: Icon(Icons.info_outline),
+          title: Text('Provider tracking has stopped.'),
+        ),
+    ];
   }
 
   @override
@@ -451,30 +699,31 @@ class _CustomerJobTrackingScreenState
       widget.destinationLongitude,
     );
 
-    return Scaffold(
-      appBar: AppBar(title: Text('Job #${widget.jobId} Tracking')),
-      body: Column(
-        children: [
-          _buildLifecycleBar(),
-          _buildProviderCard(),
-          if (_currentStatus == 'Completed') ...[
-            _buildCompletionSummary(),
-            _buildFeedbackSection(),
-          ],
-          if (_connectionError != null)
-            MaterialBanner(
-              content: Text(_connectionError!),
-              actions: const [],
+    final body = _currentStatus == 'Completed'
+        ? SingleChildScrollView(
+            child: Column(
+              children: [
+                _buildProviderCard(),
+                _buildLifecycleBar(),
+                _buildCompletionSummary(),
+                _buildFeedbackSection(),
+                _buildServiceProofSection(),
+                ..._buildTrackingNotices(),
+              ],
             ),
-          if (_trackingStopped)
-            const ListTile(
-              leading: Icon(Icons.info_outline),
-              title: Text('Provider tracking has stopped.'),
-            ),
-          Expanded(
-            child: _currentStatus == 'Completed'
-                ? const SizedBox.shrink()
-                : LiveTrackingMap(
+          )
+        : Column(
+            children: [
+              _buildProviderCard(),
+              Expanded(
+                child: Container(
+                  margin: const EdgeInsets.symmetric(horizontal: 16),
+                  clipBehavior: Clip.antiAlias,
+                  decoration: BoxDecoration(
+                    color: AppColors.surface,
+                    borderRadius: BorderRadius.circular(16),
+                  ),
+                  child: LiveTrackingMap(
                     jobId: widget.jobId,
                     status: _currentStatus,
                     destination: destination,
@@ -490,9 +739,22 @@ class _CustomerJobTrackingScreenState
                       if (mounted) setState(() => _connectionError = error);
                     },
                   ),
-          ),
-        ],
+                ),
+              ),
+              _buildLifecycleBar(),
+              ..._buildTrackingNotices(),
+            ],
+          );
+
+    return Scaffold(
+      backgroundColor: AppColors.background,
+      appBar: AppBar(
+        title: Text('Job #${widget.jobId} Tracking'),
+        backgroundColor: AppColors.primary,
+        foregroundColor: AppColors.surface,
+        elevation: 0,
       ),
+      body: body,
     );
   }
 }

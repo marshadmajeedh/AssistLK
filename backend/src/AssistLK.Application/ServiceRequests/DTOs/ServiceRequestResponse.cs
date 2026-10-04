@@ -1,4 +1,5 @@
 using AssistLK.Domain.Enums;
+using AssistLK.Domain.Entities;
 
 namespace AssistLK.Application.ServiceRequests.DTOs;
 
@@ -9,6 +10,7 @@ public class ServiceRequestResponse
 
     public Guid ServiceRequestId { get; set; }
     public Guid? ServiceJobId { get; set; }
+    public ServiceJobStatus? JobStatus { get; set; }
     public Guid CustomerId { get; set; }
     public string? CategoryHint { get; set; }
     public string Category { get; set; } = string.Empty;

@@ -44,6 +44,7 @@ public class ServiceJobRepository : IServiceJobRepository
             {
                 ServiceRequestId = job.ServiceRequestId!.Value,
                 ServiceJobId = job.Id,
+                JobStatus = job.Status,
                 CompletionRecord = job.CompletionRecord == null
                     ? null
                     : new CompletionRecordResponse

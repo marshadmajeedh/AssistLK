@@ -36,6 +36,11 @@ class ProviderLocationStreamService {
     );
 
     final locationSettings = _locationSettings();
+    final initialPosition = await Geolocator.getCurrentPosition(
+      locationSettings: locationSettings,
+    );
+    await _sendPosition(initialPosition);
+
     _positionSubscription = Geolocator.getPositionStream(
       locationSettings: locationSettings,
     ).listen(_sendPosition);

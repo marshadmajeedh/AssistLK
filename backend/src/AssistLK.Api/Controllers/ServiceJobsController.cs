@@ -216,6 +216,9 @@ namespace AssistLK.Api.Controllers
                 agentName,
                 payload);
             var stopwatch = Stopwatch.StartNew();
+            AgentValidationResponse? result = null;
+            var success = false;
+            object? output = null;
 
             try
             {
@@ -230,71 +233,33 @@ namespace AssistLK.Api.Controllers
                         "Tracking validation agent returned HTTP {StatusCode}; bypassing validation for job {JobId}.",
                         (int)response.StatusCode,
                         payload.GetType().GetProperty("job_id")?.GetValue(payload));
-                    await TryCompleteValidationExecutionAsync(
-                        workflow.Id,
-                        execution.Id,
-                        agentName,
-                        false,
-                        new { statusCode = (int)response.StatusCode },
-                        stopwatch);
-                    return (null, true);
+                    output = new { statusCode = (int)response.StatusCode };
                 }
-
-                var content = await response.Content.ReadAsStringAsync(cancellationToken);
-                var result = JsonSerializer.Deserialize<AgentValidationResponse>(
-                    content,
-                    new JsonSerializerOptions { PropertyNameCaseInsensitive = true });
-                var success = result?.Status != "INVALID";
-
-                await CompleteValidationExecutionAsync(
-                    workflow.Id,
-                    execution.Id,
-                    agentName,
-                    success,
-                    result,
-                    stopwatch);
-                return (result, true);
+                else
+                {
+                    var content = await response.Content.ReadAsStringAsync(cancellationToken);
+                    result = JsonSerializer.Deserialize<AgentValidationResponse>(
+                        content,
+                        new JsonSerializerOptions { PropertyNameCaseInsensitive = true });
+                    success = result?.Status != "INVALID";
+                    output = result;
+                }
             }
             catch (Exception ex)
             {
                 _logger.LogWarning(
                     ex,
                     "Tracking validation agent is unavailable; bypassing validation for the status update.");
-                await TryCompleteValidationExecutionAsync(
-                    workflow.Id,
-                    execution.Id,
-                    agentName,
-                    false,
-                    null,
-                    stopwatch);
-                return (null, true);
             }
-        }
 
-        private async Task TryCompleteValidationExecutionAsync(
-            Guid workflowId,
-            Guid executionId,
-            string agentName,
-            bool success,
-            object? output,
-            Stopwatch stopwatch)
-        {
-            try
-            {
-                await CompleteValidationExecutionAsync(
-                    workflowId,
-                    executionId,
-                    agentName,
-                    success,
-                    output,
-                    stopwatch);
-            }
-            catch (Exception ex)
-            {
-                _logger.LogWarning(
-                    ex,
-                    "Failed to record the tracking validation result; continuing with the status update.");
-            }
+            await CompleteValidationExecutionAsync(
+                workflow.Id,
+                execution.Id,
+                agentName,
+                success,
+                output,
+                stopwatch);
+            return (result, true);
         }
 
         private async Task CompleteValidationExecutionAsync(
@@ -310,13 +275,26 @@ namespace AssistLK.Api.Controllers
             await _agentWorkflowService.SetStatusAsync(
                 workflowId,
                 success ? "Completed" : "Failed");
-            await _agentMonitoringService.RecordAsync(
-                workflowId,
-                executionId,
-                agentName,
-                success ? "Completed" : "Failed",
-                stopwatch.ElapsedMilliseconds,
-                0);
+            try
+            {
+                await _agentMonitoringService.RecordAsync(
+                    workflowId,
+                    executionId,
+                    agentName,
+                    success ? "Completed" : "Failed",
+                    stopwatch.ElapsedMilliseconds,
+                    0);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(
+                    ex,
+                    "Failed to persist telemetry for {AgentName} execution {ExecutionId} in workflow {WorkflowId}.",
+                    agentName,
+                    executionId,
+                    workflowId);
+                throw;
+            }
         }
 
         private static ServiceRequestStatus MapServiceRequestStatus(
@@ -337,7 +315,7 @@ namespace AssistLK.Api.Controllers
         public async Task<IActionResult> CompleteJob(
             Guid id,
             [FromForm] CompleteJobForm form,
-            IFormFile? proofOfWorkImage,
+            [FromForm] IFormFile? proofOfWorkImage,
             CancellationToken cancellationToken)
         {
             try
@@ -447,18 +425,7 @@ namespace AssistLK.Api.Controllers
                 completion.AdditionalCost = 0;
                 completion.CompletedAt = DateTime.UtcNow;
 
-                if (job.ServiceRequestId.HasValue)
-                {
-                    var serviceRequest = await _assistLkDbContext.ServiceRequests
-                        .FindAsync(new object[] { job.ServiceRequestId.Value }, cancellationToken);
-                    if (serviceRequest != null)
-                    {
-                        serviceRequest.Status = ServiceRequestStatus.Completed;
-                    }
-                }
-
                 await _applicationDbContext.SaveChangesAsync(cancellationToken);
-                await _assistLkDbContext.SaveChangesAsync(cancellationToken);
 
                 return Ok(new
                 {
@@ -528,14 +495,6 @@ namespace AssistLK.Api.Controllers
                     return Forbid();
                 }
 
-                await using var transaction = await _applicationDbContext.Database.BeginTransactionAsync(cancellationToken);
-                var applicationConnection = _applicationDbContext.Database.GetDbConnection();
-                if (!ReferenceEquals(_assistLkDbContext.Database.GetDbConnection(), applicationConnection))
-                {
-                    _assistLkDbContext.Database.SetDbConnection(applicationConnection);
-                }
-                await _assistLkDbContext.Database.UseTransactionAsync(transaction.GetDbTransaction());
-
                 var sentimentResult = new SentimentResponse
                 {
                     Sentiment = "NEUTRAL",
@@ -566,21 +525,38 @@ namespace AssistLK.Api.Controllers
                     // Fallback to rating validation if sentiment agent is unreachable
                 }
 
-                var result = await _feedbackApplicationService.SubmitAsync(
-                    id,
-                    new SubmitFeedbackCommand(
-                        customerId,
-                        dto.Rating,
-                        dto.Comment,
+                var strategy = _applicationDbContext.Database.CreateExecutionStrategy();
+                var result = await strategy.ExecuteAsync(async () =>
+                {
+                    await using var transaction =
+                        await _applicationDbContext.Database.BeginTransactionAsync(cancellationToken);
+                    var applicationConnection = _applicationDbContext.Database.GetDbConnection();
+                    if (!ReferenceEquals(_assistLkDbContext.Database.GetDbConnection(), applicationConnection))
+                    {
+                        _assistLkDbContext.Database.SetDbConnection(applicationConnection);
+                    }
+                    await using var sharedTransaction =
+                        await _assistLkDbContext.Database.UseTransactionAsync(
+                        transaction.GetDbTransaction(),
+                        cancellationToken);
+
+                    var submissionResult = await _feedbackApplicationService.SubmitAsync(
+                        id,
+                        new SubmitFeedbackCommand(
+                            customerId,
+                            dto.Rating,
+                            dto.Comment,
                             sentimentResult.ShouldRouteToComplaint || dto.Rating <= 2,
-                        sentimentResult.Sentiment),
-                    cancellationToken);
+                            sentimentResult.Sentiment),
+                        cancellationToken);
 
-                await SyncCompletedServiceRequestAndProviderRatingAsync(
-                    job,
-                    cancellationToken);
+                    await SyncProviderRatingAsync(
+                        job,
+                        cancellationToken);
 
-                await transaction.CommitAsync(cancellationToken);
+                    await transaction.CommitAsync(cancellationToken);
+                    return submissionResult;
+                });
 
                 return Ok(new
                 {
@@ -613,28 +589,15 @@ namespace AssistLK.Api.Controllers
             }
             catch (Exception ex)
             {
+                _logger.LogError(ex, "Error submitting feedback for service job {ServiceJobId}", id);
                 return StatusCode(500, new { message = "Error submitting feedback", error = ex.Message });
             }
         }
 
-        private async Task SyncCompletedServiceRequestAndProviderRatingAsync(
+        private async Task SyncProviderRatingAsync(
             ServiceJob job,
             CancellationToken cancellationToken)
         {
-            if (job.ServiceRequestId.HasValue)
-            {
-                var serviceRequest = await _assistLkDbContext.ServiceRequests
-                    .FirstOrDefaultAsync(
-                        request => request.Id == job.ServiceRequestId.Value,
-                        cancellationToken);
-
-                if (serviceRequest != null)
-                {
-                    serviceRequest.Status = ServiceRequestStatus.Completed;
-                    serviceRequest.UpdatedAt = DateTime.UtcNow;
-                }
-            }
-
             if (!job.ProviderId.HasValue)
             {
                 return;

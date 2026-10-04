@@ -2,6 +2,7 @@ import 'dart:convert';
 
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
+import 'package:http_parser/http_parser.dart';
 import 'package:image_picker/image_picker.dart';
 
 import '../../../core/auth/token_storage.dart';
@@ -74,7 +75,30 @@ class _ProofOfWorkUploadWidgetState extends State<ProofOfWorkUploadWidget> {
     final image = _selectedImage;
     if (image == null || _isSubmitting) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Upload proof of work before submitting.')),
+        const SnackBar(
+          content: Text('Upload proof of work before submitting.'),
+        ),
+      );
+      return;
+    }
+
+    final contentType = _imageContentType(image.name);
+    if (contentType == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Choose a JPEG, PNG, or WebP image for proof of work.'),
+        ),
+      );
+      return;
+    }
+
+    final imageBytes = await image.readAsBytes();
+    if (!mounted) return;
+    if (imageBytes.isEmpty || imageBytes.length > 10 * 1024 * 1024) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Choose a proof image smaller than 10 MB.'),
+        ),
       );
       return;
     }
@@ -83,39 +107,50 @@ class _ProofOfWorkUploadWidgetState extends State<ProofOfWorkUploadWidget> {
     try {
       final token = await _tokenStorage.getToken();
       if (token == null || token.isEmpty) {
-        throw StateError('Cannot complete the job without an authenticated session.');
+        throw StateError(
+          'Cannot complete the job without an authenticated session.',
+        );
       }
 
-      final request = http.MultipartRequest(
-        'PUT',
-        Uri.parse(
-          '${AppConfig.apiBaseUrl}/service-jobs/${widget.jobId}/complete',
-        ),
-      )
-        ..headers['Authorization'] = 'Bearer $token'
-        ..fields['notes'] = _summaryController.text.trim().isEmpty
-            ? 'Work completed'
-            : _summaryController.text.trim()
-        ..fields['timeElapsedMinutes'] =
-            widget.timeElapsedMinutes.toString();
+      final request =
+          http.MultipartRequest(
+              'PUT',
+              Uri.parse(
+                '${AppConfig.apiBaseUrl}/service-jobs/${widget.jobId}/complete',
+              ),
+            )
+            ..headers['Authorization'] = ['Bearer', token].join(' ')
+            ..fields['notes'] = _summaryController.text.trim().isEmpty
+                ? 'Work completed'
+                : _summaryController.text.trim()
+            ..fields['timeElapsedMinutes'] = widget.timeElapsedMinutes
+                .toString();
 
       request.files.add(
-        await http.MultipartFile.fromPath(
+        http.MultipartFile.fromBytes(
           'proofOfWorkImage',
-          image.path,
+          imageBytes,
           filename: image.name,
+          contentType: contentType,
         ),
       );
 
       final response = await request.send();
       final responseBody = await response.stream.bytesToString();
-      final decoded = responseBody.isEmpty
-          ? <String, dynamic>{}
-          : jsonDecode(responseBody) as Map<String, dynamic>;
+      var decoded = <String, dynamic>{};
+      if (responseBody.isNotEmpty) {
+        try {
+          final payload = jsonDecode(responseBody);
+          if (payload is Map<String, dynamic>) decoded = payload;
+        } on FormatException {
+          // Use the HTTP status when the server returns a non-JSON error.
+        }
+      }
 
       if (response.statusCode < 200 || response.statusCode >= 300) {
         throw StateError(
           decoded['message']?.toString() ??
+              (responseBody.isNotEmpty ? responseBody : null) ??
               'Completion failed with status ${response.statusCode}.',
         );
       }
@@ -124,9 +159,22 @@ class _ProofOfWorkUploadWidgetState extends State<ProofOfWorkUploadWidget> {
     } catch (error) {
       if (!mounted) return;
       setState(() => _isSubmitting = false);
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Completion failed: $error')),
-      );
+      ScaffoldMessenger.of(context)
+          .showSnackBar(SnackBar(content: Text('Completion failed: $error')));
+    }
+  }
+
+  MediaType? _imageContentType(String fileName) {
+    switch (fileName.split('.').last.toLowerCase()) {
+      case 'jpg':
+      case 'jpeg':
+        return MediaType('image', 'jpeg');
+      case 'png':
+        return MediaType('image', 'png');
+      case 'webp':
+        return MediaType('image', 'webp');
+      default:
+        return null;
     }
   }
 
@@ -152,8 +200,7 @@ class _ProofOfWorkUploadWidgetState extends State<ProofOfWorkUploadWidget> {
             decoration: const InputDecoration(labelText: 'Work Summary'),
           ),
           const SizedBox(height: 10),
-          if (_selectedImage != null)
-            Text('Selected: ${_selectedImage!.name}'),
+          if (_selectedImage != null) Text('Selected: ${_selectedImage!.name}'),
           ElevatedButton.icon(
             onPressed: _isSubmitting ? null : _chooseImageSource,
             icon: const Icon(Icons.camera_alt),

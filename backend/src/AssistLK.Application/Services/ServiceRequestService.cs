@@ -976,6 +976,7 @@ public class ServiceRequestService : IServiceRequestService
         {
             ServiceRequestId = serviceRequest.Id,
             ServiceJobId = activity?.ServiceJobId,
+            JobStatus = activity?.JobStatus,
             CompletionRecord = activity?.CompletionRecord,
             HasFeedback = activity?.Feedback != null,
             FeedbackRating = activity?.Feedback?.Rating,

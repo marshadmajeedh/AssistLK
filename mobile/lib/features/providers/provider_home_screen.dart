@@ -16,6 +16,7 @@ import 'widgets/provider_bottom_navigation.dart';
 import 'screens/provider_dashboard_tab.dart';
 import 'screens/provider_profile_tab.dart';
 import '../quotations/screens/booking_management_tab.dart';
+import '../tracking/provider_job_tracking_screen.dart';
 
 class ProviderHomeScreen extends StatefulWidget {
   const ProviderHomeScreen({super.key});
@@ -645,6 +646,7 @@ class _ProviderHomeViewState extends State<_ProviderHomeView> {
           ),
           _buildVerifiedWorkspaceScaffold(context, dashboard, auth),
           const BookingManagementTab(),
+          _buildTrackingTab(dashboard),
           const ProviderProfileTab(),
         ],
       ),
@@ -658,6 +660,46 @@ class _ProviderHomeViewState extends State<_ProviderHomeView> {
                 });
               },
             ),
+    );
+  }
+
+  Widget _buildTrackingTab(ProviderDashboardProvider dashboard) {
+    final activeJob = dashboard.activeJobMatch;
+    final jobId = activeJob?['jobId']?.toString();
+
+    if (jobId == null || jobId.isEmpty) {
+      return const Scaffold(
+        body: Center(
+          child: Padding(
+            padding: EdgeInsets.all(24),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Icon(Icons.route_outlined, size: 48),
+                SizedBox(height: 16),
+                Text(
+                  'No active service job available for tracking.',
+                  textAlign: TextAlign.center,
+                ),
+              ],
+            ),
+          ),
+        ),
+      );
+    }
+
+    return ProviderJobTrackingScreen(
+      key: ValueKey('provider_tracking_$jobId'),
+      jobId: jobId,
+      initialStatus: activeJob?['jobStatus']?.toString() ??
+          activeJob?['status']?.toString() ??
+          'Assigned',
+      customerLatitude:
+          (activeJob?['customerLatitude'] as num?)?.toDouble(),
+      customerLongitude:
+          (activeJob?['customerLongitude'] as num?)?.toDouble(),
+      customerAddress: activeJob?['locationText']?.toString(),
+      serviceDescription: activeJob?['description']?.toString(),
     );
   }
 

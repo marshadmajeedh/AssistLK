@@ -20,16 +20,19 @@ class TrackingCoordinate {
       throw const FormatException('Tracking update is not an object.');
     }
 
-    final data = Map<String, dynamic>.from(value);
+    final data = <String, dynamic>{
+      for (final entry in value.entries)
+        entry.key.toString().toLowerCase(): entry.value,
+    };
     final latitude = (data['latitude'] as num?)?.toDouble();
     final longitude = (data['longitude'] as num?)?.toDouble();
     if (latitude == null || longitude == null) {
       throw const FormatException('Tracking update has no coordinates.');
     }
 
-    final rawUpdatedAt = data['updatedAtUtc']?.toString();
+    final rawUpdatedAt = data['updatedatutc']?.toString();
     return TrackingCoordinate(
-      jobId: data['jobId']?.toString() ?? '',
+      jobId: data['jobid']?.toString() ?? '',
       latitude: latitude,
       longitude: longitude,
       updatedAtUtc: rawUpdatedAt == null

@@ -39,6 +39,7 @@ class ProviderDashboardProvider extends ChangeNotifier {
 
   // Stores the real job dispatched from your Python/C# backend
   Map<String, dynamic>? activeJobMatch;
+  final Set<String> _locallyCompletedJobIds = {};
   String? _lastAnnouncedJobId;
   String? _dismissedActiveJobId;
   List<latlong.LatLng> routePoints = [];
@@ -550,6 +551,10 @@ class ProviderDashboardProvider extends ChangeNotifier {
       if (response.statusCode == 200 && response.data != null) {
         final data = Map<String, dynamic>.from(response.data);
         final jobId = data['jobId']?.toString();
+        if (jobId != null && _locallyCompletedJobIds.contains(jobId)) {
+          _clearJobState();
+          return;
+        }
         if (jobId != null && jobId == _dismissedActiveJobId) {
           _clearJobState();
           return;
@@ -823,6 +828,30 @@ class ProviderDashboardProvider extends ChangeNotifier {
     );
     _clearJobState();
     _lastAnnouncedJobId = null;
+  }
+
+  void markJobCompletedLocally(String jobId) {
+    if (!_locallyCompletedJobIds.add(jobId)) return;
+
+    final completedJobs =
+        (profile?['completedJobs'] as num?)?.toInt() ??
+        (profile?['totalCompletedJobs'] as num?)?.toInt() ??
+        0;
+    profile = {
+      ...?profile,
+      'completedJobs': completedJobs + 1,
+      'totalCompletedJobs': completedJobs + 1,
+    };
+
+    if (activeJobMatch?['jobId']?.toString() == jobId) {
+      activeJobMatch = {
+        ...activeJobMatch!,
+        'status': 'Completed',
+        'jobStatus': 'Completed',
+      };
+    }
+
+    notifyListeners();
   }
 
   Future<void> declineJob({bool logNotification = true}) async {

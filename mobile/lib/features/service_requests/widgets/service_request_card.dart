@@ -76,8 +76,10 @@ class ServiceRequestCard extends StatelessWidget {
                       style: AppTextStyles.cardHeading,
                     ),
                     StatusBadge(
-                      status: request.status,
-                      isExpired: request.isMatchingExpired,
+                      status: _getDisplayStatus(),
+                      isExpired: request.isMatchingExpired &&
+                          _getDisplayStatus() ==
+                              ServiceRequestStatus.readyForMatching,
                     ),
                   ],
                 ),
@@ -142,6 +144,18 @@ class ServiceRequestCard extends StatelessWidget {
       return 'Pending AI analysis';
     }
     return request.category.isEmpty ? 'General Request' : request.category;
+  }
+
+  ServiceRequestStatus _getDisplayStatus() {
+    final jobStatus = request.jobStatus
+        ?.replaceAll(RegExp(r'[\s_-]'), '')
+        .toLowerCase();
+    if (jobStatus == 'completed' ||
+        jobStatus == 'workcompleted' ||
+        jobStatus == 'jobcompletedsuccessfully') {
+      return ServiceRequestStatus.completed;
+    }
+    return request.status;
   }
 
   String? _getUrgencyLabel() {

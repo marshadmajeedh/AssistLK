@@ -10,6 +10,7 @@ class ServiceRequestModel {
 
   final String serviceRequestId;
   final String? serviceJobId;
+  final String? jobStatus;
   final String customerId;
   final String? categoryHint;
   final String category;
@@ -35,6 +36,7 @@ class ServiceRequestModel {
   const ServiceRequestModel({
     required this.serviceRequestId,
     this.serviceJobId,
+    this.jobStatus,
     required this.customerId,
     this.categoryHint,
     required this.category,
@@ -104,6 +106,7 @@ class ServiceRequestModel {
     return ServiceRequestModel(
       serviceRequestId: json['serviceRequestId']?.toString() ?? '',
       serviceJobId: json['serviceJobId']?.toString(),
+      jobStatus: json['jobStatus']?.toString(),
       customerId: json['customerId']?.toString() ?? '',
       categoryHint: json['categoryHint'] as String?,
       category: json['category'] as String? ?? 'Unclassified',

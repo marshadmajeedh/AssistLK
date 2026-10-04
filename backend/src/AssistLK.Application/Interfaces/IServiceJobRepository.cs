@@ -1,11 +1,13 @@
 namespace AssistLK.Application.Interfaces;
 
 using AssistLK.Application.ServiceRequests.DTOs;
+using AssistLK.Domain.Entities;
 
 public sealed class ServiceRequestActivityData
 {
     public Guid ServiceRequestId { get; init; }
     public Guid? ServiceJobId { get; init; }
+    public ServiceJobStatus? JobStatus { get; init; }
     public CompletionRecordResponse? CompletionRecord { get; init; }
     public FeedbackSummaryResponse? Feedback { get; init; }
 }

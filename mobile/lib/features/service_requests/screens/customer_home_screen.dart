@@ -156,7 +156,7 @@ class CustomerHomeScreen extends StatelessWidget {
                   MaterialPageRoute<void>(
                     builder: (_) => CustomerJobTrackingScreen(
                       jobId: request.serviceJobId!,
-                      status: request.status.toJson(),
+                      status: request.jobStatus ?? request.status.toJson(),
                       destinationLatitude: request.latitude!,
                       destinationLongitude: request.longitude!,
                       completionImageUrl:

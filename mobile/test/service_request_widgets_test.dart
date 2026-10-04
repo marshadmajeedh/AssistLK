@@ -88,6 +88,27 @@ void main() {
       await tester.tap(find.byType(ServiceRequestCard));
       expect(tapped, true);
     });
+
+    testWidgets('shows completed job status over stale request lifecycle status', (tester) async {
+      final request = ServiceRequestModel(
+        serviceRequestId: 'req-completed',
+        serviceJobId: 'job-completed',
+        jobStatus: 'Completed',
+        customerId: 'cust-1',
+        category: 'Plumbing',
+        description: 'Repair completed',
+        locationText: 'Colombo 04',
+        urgency: ServiceRequestUrgency.medium,
+        status: ServiceRequestStatus.readyForMatching,
+        createdAt: DateTime(2026, 10, 3),
+        updatedAt: DateTime(2026, 10, 4),
+      );
+
+      await tester.pumpWidget(buildTestable(ServiceRequestCard(request: request)));
+
+      expect(find.text('Completed'), findsOneWidget);
+      expect(find.text('Ready For Matching'), findsNothing);
+    });
   });
 
   group('AnalysisResultCard', () {

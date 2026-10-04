@@ -3,6 +3,7 @@ using System;
 using AssistLK.Infrastructure.Data;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 
@@ -11,9 +12,11 @@ using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 namespace AssistLK.Infrastructure.Data.Migrations
 {
     [DbContext(typeof(AssistLKDbContext))]
-    partial class AssistLKDbContextModelSnapshot : ModelSnapshot
+    [Migration("20261003151501_AddServiceRequestStatusCheckConstraint")]
+    partial class AddServiceRequestStatusCheckConstraint
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
@@ -615,9 +618,6 @@ namespace AssistLK.Infrastructure.Data.Migrations
                     b.Property<decimal>("Rating")
                         .HasPrecision(3, 2)
                         .HasColumnType("numeric(3,2)");
-
-                    b.Property<int>("TotalReviews")
-                        .HasColumnType("integer");
 
                     b.Property<int>("TotalCompletedJobs")
                         .HasColumnType("integer");

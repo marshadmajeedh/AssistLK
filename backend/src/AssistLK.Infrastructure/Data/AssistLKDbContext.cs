@@ -394,6 +394,10 @@ public class AssistLKDbContext : DbContext, IAgentWorkflowDbContext, IProviderPr
             table =>
             {
                 table.HasCheckConstraint(
+                    "CK_ServiceRequests_Status_Valid",
+                    "\"Status\" IN ('Created', 'Analyzing', 'AwaitingInformation', 'Analyzed', 'ReadyForMatching', 'Cancelled')");
+
+                table.HasCheckConstraint(
                     "CK_ServiceRequests_Latitude",
                     "\"Latitude\" IS NULL OR \"Latitude\" BETWEEN -90 AND 90");
 

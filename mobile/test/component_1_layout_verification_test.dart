@@ -24,6 +24,7 @@ import 'package:mobile/features/service_requests/services/service_request_servic
 import 'package:mobile/features/service_requests/widgets/analysis_result_card.dart';
 import 'package:mobile/features/service_requests/widgets/clarification_section.dart';
 import 'package:mobile/features/service_requests/widgets/ready_for_matching_section.dart';
+import 'package:mobile/shared/theme/app_colors.dart';
 import 'package:mobile/shared/theme/app_theme.dart';
 import 'package:provider/provider.dart';
 import 'mocks/mock_location_geocoding_service.dart';
@@ -205,6 +206,9 @@ void main() {
       await tester.pumpAndSettle();
 
       expect(find.text('Create Service Request'), findsOneWidget);
+      final appBar = tester.widget<AppBar>(find.byType(AppBar));
+      expect(appBar.backgroundColor, AppColors.primary);
+      expect(appBar.foregroundColor, Colors.white);
       expect(find.text('Continue to Location'), findsOneWidget);
 
       await simulateMouseHoverSweep(tester);

@@ -4,6 +4,7 @@ import {
   useNavigate,
 } from "react-router-dom";
 import { useAuthStore } from "../auth/authStore";
+import assistLkLogo from "../../assets/assistlk-logo.png";
 import "./AdminLayout.css";
 
 import {
@@ -43,11 +44,20 @@ function AdminLayout() {
         }}
       >
         <div className="admin-sidebar-brand">
-          <div>
-            <div className="admin-eyebrow">AssistLK Operations</div>
-            <h2>Trusted service coordination</h2>
+          <div className="admin-brand-identity">
+            <img
+              src={assistLkLogo}
+              alt="AssistLK Logo"
+              className="admin-brand-logo"
+              width={36}
+              height={36}
+            />
+            <div className="admin-brand-text">
+              <span className="admin-brand-name">AssistLK</span>
+              <span className="admin-brand-subtitle">Admin Operations</span>
+            </div>
           </div>
-          <p>Requests, workflows, approvals, and tracking in one workspace.</p>
+          <p className="admin-brand-tagline">Trusted service coordination</p>
         </div>
 
         <nav
@@ -94,6 +104,19 @@ function AdminLayout() {
           <button className="admin-logout" onClick={handleLogout}>
             Logout
           </button>
+        </div>
+
+        <div className="admin-sidebar-spacer" aria-hidden="true" />
+
+        <div className="admin-brand-footer">
+          <div className="admin-brand-footer-text">
+            <span className="admin-brand-footer-name">AssistLK</span>
+            <span className="admin-brand-footer-version">Admin Console v1.0</span>
+          </div>
+          <div className="admin-brand-footer-waves" aria-hidden="true">
+            <span className="admin-brand-wave admin-brand-wave-1" />
+            <span className="admin-brand-wave admin-brand-wave-2" />
+          </div>
         </div>
       </aside>
 

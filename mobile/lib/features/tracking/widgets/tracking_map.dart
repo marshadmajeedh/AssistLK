@@ -78,9 +78,9 @@ class _TrackingMapState extends State<TrackingMap> {
           width: 48,
           height: 48,
           child: const Icon(
-            Icons.navigation_rounded,
+            Icons.person_pin_circle_rounded,
             color: AppColors.primary,
-            size: 34,
+            size: 42,
           ),
         ),
     ];
@@ -102,6 +102,16 @@ class _TrackingMapState extends State<TrackingMap> {
               urlTemplate: 'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
               userAgentPackageName: 'com.assistlk.mobile',
             ),
+            if (widget.providerLocation != null)
+              PolylineLayer(
+                polylines: [
+                  Polyline(
+                    points: [widget.providerLocation!, widget.destination],
+                    strokeWidth: 4,
+                    color: AppColors.primary,
+                  ),
+                ],
+              ),
             MarkerLayer(markers: markers),
           ],
         ),
@@ -141,7 +151,7 @@ class _TrackingMapState extends State<TrackingMap> {
                     ),
                     Text(
                       widget.providerLocation == null
-                          ? 'Waiting for provider location'
+                          ? 'Waiting for agent location'
                           : 'Live location updating',
                       style: const TextStyle(
                         color: AppColors.primaryDark,

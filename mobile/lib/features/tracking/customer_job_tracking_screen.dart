@@ -409,10 +409,10 @@ class _CustomerJobTrackingScreenState extends State<CustomerJobTrackingScreen> {
   Widget _buildProviderCard() {
     final name = widget.providerName?.trim().isNotEmpty == true
         ? widget.providerName!
-        : 'Assigned Provider';
+      : 'Assigned Agent';
     final category = widget.providerCategory?.trim().isNotEmpty == true
         ? widget.providerCategory!
-        : 'Service Provider';
+      : 'Service Agent';
     final rating = widget.providerRating?.toStringAsFixed(1) ?? 'Not rated';
 
     return Card(
@@ -472,7 +472,7 @@ class _CustomerJobTrackingScreenState extends State<CustomerJobTrackingScreen> {
             ),
             if (widget.providerPhone?.isNotEmpty == true)
               IconButton(
-                tooltip: 'Contact provider',
+                tooltip: 'Contact agent',
                 icon: const Icon(Icons.phone, color: AppColors.primary),
                 onPressed: () => _showMessage(widget.providerPhone!),
               ),
@@ -573,7 +573,7 @@ class _CustomerJobTrackingScreenState extends State<CustomerJobTrackingScreen> {
             const SizedBox(height: 4),
             Text(
               hasProofImage
-                  ? 'Photo shared by your provider as proof of completed work.'
+                  ? 'Photo shared by your agent as proof of completed work.'
                   : 'No proof photo was provided for this service.',
               style: const TextStyle(
                 color: AppColors.textSecondary,
@@ -687,7 +687,7 @@ class _CustomerJobTrackingScreenState extends State<CustomerJobTrackingScreen> {
       if (_trackingStopped)
         const ListTile(
           leading: Icon(Icons.info_outline),
-          title: Text('Provider tracking has stopped.'),
+          title: Text('Agent tracking has stopped.'),
         ),
     ];
   }

@@ -1,15 +1,14 @@
 using AssistLK.Application.Interfaces;
 using AssistLK.Application.ServiceRequests.DTOs;
-using AssistLK.Infrastructure.Data;
 using Microsoft.EntityFrameworkCore;
 
 namespace AssistLK.Infrastructure.Repositories;
 
 public class ServiceJobRepository : IServiceJobRepository
 {
-    private readonly ApplicationDbContext _context;
+    private readonly IServiceJobsDbContext _context;
 
-    public ServiceJobRepository(ApplicationDbContext context)
+    public ServiceJobRepository(IServiceJobsDbContext context)
     {
         _context = context;
     }

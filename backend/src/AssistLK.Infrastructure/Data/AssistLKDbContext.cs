@@ -6,7 +6,7 @@ using Microsoft.EntityFrameworkCore;
 namespace AssistLK.Infrastructure.Data;
 
 
-public class AssistLKDbContext : DbContext, IAgentWorkflowDbContext
+public class AssistLKDbContext : DbContext, IAgentWorkflowDbContext, IProviderProfileDbContext, IServiceJobsDbContext
 {
     public AssistLKDbContext(
         DbContextOptions<AssistLKDbContext> options)
@@ -33,6 +33,12 @@ public class AssistLKDbContext : DbContext, IAgentWorkflowDbContext
     public DbSet<Booking> Bookings => Set<Booking>();
     public DbSet<BookingStatusHistory> BookingStatusHistories => Set<BookingStatusHistory>(); 
     //My Part
+
+    public DbSet<ServiceJob> ServiceJobs => Set<ServiceJob>();
+    public DbSet<ServiceStatusHistory> ServiceStatusHistories => Set<ServiceStatusHistory>();
+    public DbSet<CompletionRecord> CompletionRecords => Set<CompletionRecord>();
+    public DbSet<Feedback> Feedbacks => Set<Feedback>();
+    public DbSet<Complaint> Complaints => Set<Complaint>();
 
 
     public DbSet<AgentWorkflow> AgentWorkflows =>
@@ -271,6 +277,22 @@ public class AssistLKDbContext : DbContext, IAgentWorkflowDbContext
         ConfigureMatchingExecution(modelBuilder);
         ConfigureMatchedCandidate(modelBuilder);
         ConfigureRegistrationChallenge(modelBuilder);
+        ConfigureServiceJob(modelBuilder);
+    }
+
+    private static void ConfigureServiceJob(ModelBuilder modelBuilder)
+    {
+        modelBuilder.Entity<ServiceJob>()
+            .Property(e => e.Status)
+            .HasConversion<string>();
+
+        modelBuilder.Entity<ServiceStatusHistory>()
+            .Property(e => e.OldStatus)
+            .HasConversion<string>();
+
+        modelBuilder.Entity<ServiceStatusHistory>()
+            .Property(e => e.NewStatus)
+            .HasConversion<string>();
     }
 
     private static void ConfigureUser(ModelBuilder modelBuilder)

@@ -6,14 +6,14 @@ namespace AssistLK.Infrastructure.Services;
 
 public sealed class TrackingAccessService : ITrackingAccessService
 {
-    private readonly ApplicationDbContext _applicationDbContext;
+    private readonly IServiceJobsDbContext _serviceJobsDbContext;
     private readonly AssistLKDbContext _assistLkDbContext;
 
     public TrackingAccessService(
-        ApplicationDbContext applicationDbContext,
+        IServiceJobsDbContext serviceJobsDbContext,
         AssistLKDbContext assistLkDbContext)
     {
-        _applicationDbContext = applicationDbContext;
+        _serviceJobsDbContext = serviceJobsDbContext;
         _assistLkDbContext = assistLkDbContext;
     }
 
@@ -22,7 +22,7 @@ public sealed class TrackingAccessService : ITrackingAccessService
         Guid userId,
         CancellationToken cancellationToken = default)
     {
-        var job = await _applicationDbContext.ServiceJobs
+        var job = await _serviceJobsDbContext.ServiceJobs
             .AsNoTracking()
             .Where(item => item.Id == jobId)
             .Select(item => new

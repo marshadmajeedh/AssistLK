@@ -1,4 +1,6 @@
 import '../../../core/api/api_client.dart';
+import 'package:dio/dio.dart';
+import 'package:image_picker/image_picker.dart';
 
 class ProviderService {
   final ApiClient apiClient;
@@ -58,5 +60,52 @@ class ProviderService {
         ? endpoint.substring(4)
         : endpoint;
     await apiClient.client.post(path);
+  }
+
+  Future<void> updateJobStatus(String jobId, String newStatus) async {
+    final response = await apiClient.client.put(
+      '/service-jobs/$jobId/status',
+      data: {'newStatus': newStatus},
+    );
+
+    final statusCode = response.statusCode;
+    if (statusCode == null || statusCode < 200 || statusCode >= 300) {
+      throw DioException(
+        requestOptions: response.requestOptions,
+        response: response,
+        message: 'Status update failed with HTTP $statusCode.',
+      );
+    }
+  }
+
+  Future<Map<String, dynamic>> completeJob(
+    String jobId, {
+    double timeElapsedMinutes = 0,
+    String notes = 'Work completed',
+    XFile? proofOfWorkImage,
+  }) async {
+    final formData = FormData.fromMap({
+      'notes': notes,
+      'timeElapsedMinutes': timeElapsedMinutes,
+    });
+
+    if (proofOfWorkImage != null) {
+      formData.files.add(
+        MapEntry(
+          'proofOfWorkImage',
+          MultipartFile.fromBytes(
+            await proofOfWorkImage.readAsBytes(),
+            filename: proofOfWorkImage.name,
+          ),
+        ),
+      );
+    }
+
+    final response = await apiClient.client.put(
+      '/service-jobs/$jobId/complete',
+      data: formData,
+    );
+
+    return Map<String, dynamic>.from(response.data as Map);
   }
 }

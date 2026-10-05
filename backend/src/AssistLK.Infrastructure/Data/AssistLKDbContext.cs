@@ -286,6 +286,10 @@ public class AssistLKDbContext : DbContext, IAgentWorkflowDbContext, IProviderPr
             .Property(e => e.Status)
             .HasConversion<string>();
 
+        modelBuilder.Entity<ServiceJob>()
+            .HasIndex(e => e.BookingId)
+            .IsUnique();
+
         modelBuilder.Entity<ServiceStatusHistory>()
             .Property(e => e.OldStatus)
             .HasConversion<string>();

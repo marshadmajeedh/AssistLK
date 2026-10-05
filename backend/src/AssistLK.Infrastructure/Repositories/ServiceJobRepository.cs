@@ -57,9 +57,35 @@ public class ServiceJobRepository : IServiceJobRepository
                     {
                         Rating = job.Feedback.Rating,
                         Comment = job.Feedback.Comment
-                    }
+                    },
+                ProviderId = job.ProviderId
             })
             .ToListAsync(cancellationToken);
+
+        if (_context is AssistLK.Infrastructure.Data.AssistLKDbContext dbContext)
+        {
+            var providerIds = activity
+                .Where(a => a.ProviderId.HasValue)
+                .Select(a => a.ProviderId!.Value)
+                .Distinct()
+                .ToList();
+
+            if (providerIds.Count > 0)
+            {
+                var profiles = await dbContext.ProviderProfiles
+                    .AsNoTracking()
+                    .Where(p => providerIds.Contains(p.Id))
+                    .ToDictionaryAsync(p => p.Id, p => p.BusinessName, cancellationToken);
+
+                foreach (var item in activity)
+                {
+                    if (item.ProviderId.HasValue && profiles.TryGetValue(item.ProviderId.Value, out var name))
+                    {
+                        item.ProviderBusinessName = name;
+                    }
+                }
+            }
+        }
 
         return activity.ToDictionary(item => item.ServiceRequestId);
     }

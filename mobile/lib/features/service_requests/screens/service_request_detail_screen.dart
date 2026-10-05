@@ -30,6 +30,7 @@ import '../widgets/ready_for_matching_section.dart';
 import '../widgets/status_badge.dart';
 import '../widgets/urgency_chip.dart';
 import 'edit_service_request_screen.dart';
+import '../../tracking/customer_job_tracking_screen.dart';
 
 class ServiceRequestDetailScreen extends StatefulWidget {
   final String requestId;
@@ -67,7 +68,22 @@ class _ServiceRequestDetailScreenState
       if (!mounted) return;
       context.read<ServiceRequestProvider>().loadRequestById(widget.requestId);
       _loadPhotos();
+      _loadActivity();
     });
+  }
+
+  Map<String, dynamic>? _activityData;
+
+  Future<void> _loadActivity() async {
+    try {
+      final service = context.read<ServiceRequestProvider>().serviceRequestService;
+      final data = await service.getActivity(widget.requestId);
+      if (mounted) {
+        setState(() {
+          _activityData = data;
+        });
+      }
+    } catch (_) {}
   }
 
   Future<void> _loadPhotos() async {
@@ -559,6 +575,10 @@ class _ServiceRequestDetailScreenState
                   _persistedPhotoAnalysis(request),
                   const SizedBox(height: AppSpacing.md),
                 ],
+                if (_activityData != null && _activityData!['serviceJobId'] != null) ...[
+                  _buildJobTrackingCard(_activityData!, request),
+                  const SizedBox(height: AppSpacing.md),
+                ],
                 _buildStatusWorkflowSection(
                   context,
                   request,
@@ -569,6 +589,55 @@ class _ServiceRequestDetailScreenState
             ],
           ),
         ),
+      ),
+    );
+  }
+
+  Widget _buildJobTrackingCard(Map<String, dynamic> activity, ServiceRequestModel request) {
+    final jobId = activity['serviceJobId']?.toString();
+    final jobStatus = activity['serviceJobStatus']?.toString() ?? 'Assigned';
+    final providerName = activity['provider']?['businessName']?.toString();
+
+    if (jobId == null || jobId.isEmpty) return const SizedBox.shrink();
+
+    return AppCard(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              const Icon(Icons.navigation_rounded, color: AppColors.primary),
+              const SizedBox(width: AppSpacing.sm),
+              Expanded(
+                child: Text(
+                  'Active Service Job ($jobStatus)',
+                  style: AppTextStyles.cardHeading,
+                ),
+              ),
+            ],
+          ),
+          if (providerName != null) ...[
+            const SizedBox(height: AppSpacing.xs),
+            Text('Provider: $providerName', style: AppTextStyles.body),
+          ],
+          const SizedBox(height: AppSpacing.md),
+          AppButton(
+            text: 'Track Job & View Status',
+            onPressed: () {
+              Navigator.of(context).push(
+                MaterialPageRoute<void>(
+                  builder: (_) => CustomerJobTrackingScreen(
+                    jobId: jobId,
+                    status: jobStatus,
+                    destinationLatitude: request.latitude ?? 6.9271,
+                    destinationLongitude: request.longitude ?? 79.8612,
+                    providerName: providerName,
+                  ),
+                ),
+              );
+            },
+          ),
+        ],
       ),
     );
   }

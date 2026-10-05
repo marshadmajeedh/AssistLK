@@ -13,4 +13,5 @@ public record BookingDto(
     decimal? Latitude,
     decimal? Longitude,
     DateTime CreatedAt,
-    DateTime UpdatedAt);
+    DateTime UpdatedAt,
+    Guid? ServiceJobId = null);

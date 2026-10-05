@@ -17,7 +17,7 @@ public class ServiceJob
 {
     public Guid Id { get; set; } = Guid.NewGuid();
     public Guid? ServiceRequestId { get; set; }
-    public Guid? BookingId { get; set; }
+    public int? BookingId { get; set; }
     public Guid? ProviderId { get; set; }
     public ServiceJobStatus Status { get; set; } = ServiceJobStatus.Assigned;
     public DateTime? StartedAt { get; set; }

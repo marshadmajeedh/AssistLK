@@ -38,6 +38,8 @@ class ProviderDashboardProvider extends ChangeNotifier {
   // Stores the real job dispatched from your Python/C# backend
   Map<String, dynamic>? activeJobMatch;
   String? _lastAnnouncedJobId;
+  String? _dismissedActiveJobId;
+  final Set<String> _locallyCompletedJobIds = <String>{};
   List<latlong.LatLng> routePoints = [];
 
   List<Map<String, dynamic>> _inAppNotifications = [];
@@ -543,6 +545,13 @@ class ProviderDashboardProvider extends ChangeNotifier {
         _updateLiveDistance();
 
         final jobId = data['jobId']?.toString();
+        if (jobId != null && jobId == _dismissedActiveJobId) {
+          return;
+        }
+
+        if (jobId != null && _dismissedActiveJobId != null && jobId != _dismissedActiveJobId) {
+          _dismissedActiveJobId = null;
+        }
         final status = data['status']?.toString();
         if (jobId != null && jobId != _lastAnnouncedJobId && status != 'Accepted') {
           _lastAnnouncedJobId = jobId;
@@ -734,6 +743,22 @@ class ProviderDashboardProvider extends ChangeNotifier {
     _clearJobState();
   }
 
+  void dismissActiveJob() {
+    _dismissedActiveJobId = activeJobMatch?['jobId']?.toString();
+    _clearJobState();
+  }
+
+  Future<void> updateActiveJobStatus(String newStatus) async {
+    final jobId = activeJobMatch?['jobId']?.toString();
+    if (jobId == null || jobId.isEmpty) {
+      throw StateError('No active service job is available.');
+    }
+
+    await providerService.updateJobStatus(jobId, newStatus);
+    activeJobMatch = {...?activeJobMatch, 'jobStatus': newStatus};
+    notifyListeners();
+  }
+
   Future<void> acceptJob() async {
     _stopAcceptCountdown();
     final currentJobId = activeJobMatch?['jobId']?.toString();
@@ -773,6 +798,30 @@ class ProviderDashboardProvider extends ChangeNotifier {
     );
     _clearJobState();
     _lastAnnouncedJobId = null;
+  }
+
+  void markJobCompletedLocally(String jobId) {
+    if (!_locallyCompletedJobIds.add(jobId)) return;
+
+    final completedJobs =
+        (profile?['completedJobs'] as num?)?.toInt() ??
+        (profile?['totalCompletedJobs'] as num?)?.toInt() ??
+        0;
+    profile = {
+      ...?profile,
+      'completedJobs': completedJobs + 1,
+      'totalCompletedJobs': completedJobs + 1,
+    };
+
+    if (activeJobMatch?['jobId']?.toString() == jobId) {
+      activeJobMatch = {
+        ...activeJobMatch!,
+        'status': 'Completed',
+        'jobStatus': 'Completed',
+      };
+    }
+
+    notifyListeners();
   }
 
   Future<void> declineJob({bool logNotification = true}) async {

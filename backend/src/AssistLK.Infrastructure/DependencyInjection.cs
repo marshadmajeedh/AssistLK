@@ -20,9 +20,17 @@ public static class DependencyInjection
         services.AddScoped<IAgentWorkflowDbContext>(
             provider => provider.GetRequiredService<AssistLKDbContext>()
         );
+        services.AddScoped<IProviderProfileDbContext>(
+            provider => provider.GetRequiredService<AssistLKDbContext>()
+        );
+        services.AddScoped<IServiceJobsDbContext>(
+            provider => provider.GetRequiredService<AssistLKDbContext>()
+        );
         services.AddScoped<IUserRepository, UserRepository>();
         services.AddScoped<IRegistrationChallengeRepository, RegistrationChallengeRepository>();
         services.AddScoped<IServiceRequestRepository, ServiceRequestRepository>();
+        services.AddScoped<IServiceJobRepository, ServiceJobRepository>();
+        services.AddScoped<ITrackingAccessService, Services.TrackingAccessService>();
         services.AddScoped<IProblemAnalysisRepository, ProblemAnalysisRepository>();
         services.AddScoped<AssistLK.Application.Attachments.IServiceRequestAttachmentRepository, ServiceRequestAttachmentRepository>();
         services.AddScoped<AssistLK.Application.Attachments.ServiceRequestAttachmentService>();

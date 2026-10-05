@@ -18,6 +18,7 @@ using AssistLK.Application.Services.Auth;
 using AssistLK.Application.Quotations.DTOs;
 using AssistLK.Api.Features.ServiceRequests;
 using AssistLK.Domain.Entities;
+using AssistLK.Api.Hubs;
 using FluentValidation;
 using FluentValidation.AspNetCore;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
@@ -81,6 +82,15 @@ if (otpPepper.Trim().Length < 16)
 // -----------------------------
 
 builder.Services.AddInfrastructure(connectionString);
+builder.Services.AddSingleton(sp =>
+{
+    var options = new AssistLK.Infrastructure.Attachments.SupabaseStorageOptions();
+    sp.GetRequiredService<IConfiguration>().GetSection("Supabase").Bind(options);
+    return options;
+});
+builder.Services.AddHttpClient<
+    AssistLK.Application.Attachments.IProofOfWorkStorage,
+    AssistLK.Infrastructure.Attachments.SupabaseProofOfWorkStorage>();
 builder.Services.AddSingleton<AssistLK.Application.Attachments.IServiceRequestAttachmentStorage>(sp =>
 {
     var options = new AssistLK.Infrastructure.Attachments.AttachmentStorageOptions();
@@ -89,6 +99,8 @@ builder.Services.AddSingleton<AssistLK.Application.Attachments.IServiceRequestAt
     return new AssistLK.Infrastructure.Attachments.PrivateFileAttachmentStorage(
         options.Resolve(environment.ContentRootPath, environment.WebRootPath));
 });
+builder.Services.AddScoped<FeedbackApplicationService>();
+builder.Services.AddSignalR();
 
 builder.Services
     .AddControllers()
@@ -340,6 +352,23 @@ builder.Services
 
                 ClockSkew = TimeSpan.Zero
             };
+
+        options.Events = new JwtBearerEvents
+        {
+            OnMessageReceived = context =>
+            {
+                var accessToken = context.Request.Query["access_token"];
+                var requestPath = context.HttpContext.Request.Path;
+
+                if (!string.IsNullOrEmpty(accessToken) &&
+                    requestPath.StartsWithSegments("/hubs/tracking"))
+                {
+                    context.Token = accessToken;
+                }
+
+                return Task.CompletedTask;
+            }
+        };
     });
 
 
@@ -454,7 +483,8 @@ builder.Services.AddCors(options =>
                     return false;
                 })
                 .AllowAnyHeader()
-                .AllowAnyMethod();
+                .AllowAnyMethod()
+                .AllowCredentials();
         });
 });
 
@@ -512,6 +542,7 @@ app.UseRateLimiter();
 // -----------------------------
 
 app.MapControllers();
+app.MapHub<TrackingHub>("/hubs/tracking");
 
 app.MapHealthChecks("/health");
 

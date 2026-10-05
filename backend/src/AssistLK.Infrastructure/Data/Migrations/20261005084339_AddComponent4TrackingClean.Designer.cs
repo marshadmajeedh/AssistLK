@@ -12,8 +12,8 @@ using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 namespace AssistLK.Infrastructure.Data.Migrations
 {
     [DbContext(typeof(AssistLKDbContext))]
-    [Migration("20260928113432_AddProviderProfileTotalReviews")]
-    partial class AddProviderProfileTotalReviews
+    [Migration("20261005084339_AddComponent4TrackingClean")]
+    partial class AddComponent4TrackingClean
     {
         /// <inheritdoc />
         protected override void BuildTargetModel(ModelBuilder modelBuilder)
@@ -284,6 +284,191 @@ namespace AssistLK.Infrastructure.Data.Migrations
                     b.ToTable("AgentWorkflows");
                 });
 
+            modelBuilder.Entity("AssistLK.Domain.Entities.Booking", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid>("CustomerId")
+                        .HasColumnType("uuid");
+
+                    b.Property<decimal?>("Latitude")
+                        .HasColumnType("numeric");
+
+                    b.Property<string>("LocationText")
+                        .HasColumnType("text");
+
+                    b.Property<decimal?>("Longitude")
+                        .HasColumnType("numeric");
+
+                    b.Property<Guid>("ProviderId")
+                        .HasColumnType("uuid");
+
+                    b.Property<int>("QuotationId")
+                        .HasColumnType("integer");
+
+                    b.Property<DateTime>("ScheduledAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<int>("Status")
+                        .HasColumnType("integer");
+
+                    b.Property<DateTime>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("QuotationId")
+                        .IsUnique();
+
+                    b.ToTable("Bookings");
+                });
+
+            modelBuilder.Entity("AssistLK.Domain.Entities.BookingStatusHistory", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
+
+                    b.Property<int>("BookingId")
+                        .HasColumnType("integer");
+
+                    b.Property<DateTime>("ChangedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid>("ChangedByUserId")
+                        .HasColumnType("uuid");
+
+                    b.Property<int>("NewStatus")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("PreviousStatus")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("Reason")
+                        .HasColumnType("text");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("BookingId");
+
+                    b.ToTable("BookingStatusHistories");
+                });
+
+            modelBuilder.Entity("AssistLK.Domain.Entities.Complaint", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("AiSentiment")
+                        .HasColumnType("text");
+
+                    b.Property<Guid>("ComplainantId")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("CustomerComment")
+                        .HasColumnType("text");
+
+                    b.Property<Guid>("CustomerId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("Description")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<Guid>("ServiceJobId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("Status")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<string>("Subject")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<string>("Type")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("ServiceJobId");
+
+                    b.ToTable("Complaints");
+                });
+
+            modelBuilder.Entity("AssistLK.Domain.Entities.CompletionRecord", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<decimal>("AdditionalCost")
+                        .HasColumnType("numeric");
+
+                    b.Property<DateTime>("CompletedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("ProofOfWorkImageUrl")
+                        .HasColumnType("text");
+
+                    b.Property<Guid>("ServiceJobId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("WorkSummary")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("ServiceJobId")
+                        .IsUnique();
+
+                    b.ToTable("CompletionRecords");
+                });
+
+            modelBuilder.Entity("AssistLK.Domain.Entities.Feedback", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("Comment")
+                        .HasColumnType("text");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid>("CustomerId")
+                        .HasColumnType("uuid");
+
+                    b.Property<int>("Rating")
+                        .HasColumnType("integer");
+
+                    b.Property<Guid>("ServiceJobId")
+                        .HasColumnType("uuid");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("ServiceJobId")
+                        .IsUnique();
+
+                    b.ToTable("Feedbacks");
+                });
+
             modelBuilder.Entity("AssistLK.Domain.Entities.MatchedCandidate", b =>
                 {
                     b.Property<Guid>("Id")
@@ -540,10 +725,10 @@ namespace AssistLK.Infrastructure.Data.Migrations
                         .HasPrecision(3, 2)
                         .HasColumnType("numeric(3,2)");
 
-                    b.Property<int>("TotalReviews")
+                    b.Property<int>("TotalCompletedJobs")
                         .HasColumnType("integer");
 
-                    b.Property<int>("TotalCompletedJobs")
+                    b.Property<int>("TotalReviews")
                         .HasColumnType("integer");
 
                     b.Property<DateTime>("UpdatedAt")
@@ -608,6 +793,180 @@ namespace AssistLK.Infrastructure.Data.Migrations
                     b.ToTable("ProviderSkills", (string)null);
                 });
 
+            modelBuilder.Entity("AssistLK.Domain.Entities.Quotation", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("Notes")
+                        .HasColumnType("text");
+
+                    b.Property<Guid>("ProviderId")
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("ServiceRequestId")
+                        .HasColumnType("uuid");
+
+                    b.Property<int>("Status")
+                        .HasColumnType("integer");
+
+                    b.Property<decimal>("TotalAmount")
+                        .HasColumnType("numeric");
+
+                    b.Property<DateTime>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.HasKey("Id");
+
+                    b.ToTable("Quotations");
+                });
+
+            modelBuilder.Entity("AssistLK.Domain.Entities.QuotationItem", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
+
+                    b.Property<decimal>("Amount")
+                        .HasColumnType("numeric");
+
+                    b.Property<string>("Description")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<int>("Quantity")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("QuotationId")
+                        .HasColumnType("integer");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("QuotationId");
+
+                    b.ToTable("QuotationItems");
+                });
+
+            modelBuilder.Entity("AssistLK.Domain.Entities.RegistrationChallenge", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<int>("AttemptCount")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer")
+                        .HasDefaultValue(0);
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("Email")
+                        .IsRequired()
+                        .HasMaxLength(255)
+                        .HasColumnType("character varying(255)");
+
+                    b.Property<DateTime>("ExpiresAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("FullName")
+                        .IsRequired()
+                        .HasMaxLength(150)
+                        .HasColumnType("character varying(150)");
+
+                    b.Property<bool>("IsConsumed")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("boolean")
+                        .HasDefaultValue(false);
+
+                    b.Property<DateTime>("LastSentAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<int>("MaxAttempts")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer")
+                        .HasDefaultValue(5);
+
+                    b.Property<string>("OtpHash")
+                        .IsRequired()
+                        .HasMaxLength(128)
+                        .HasColumnType("character varying(128)");
+
+                    b.Property<string>("PasswordHash")
+                        .IsRequired()
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)");
+
+                    b.Property<string>("PhoneNumber")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)");
+
+                    b.Property<int>("ResendCount")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer")
+                        .HasDefaultValue(0);
+
+                    b.Property<string>("Role")
+                        .IsRequired()
+                        .HasMaxLength(30)
+                        .HasColumnType("character varying(30)");
+
+                    b.Property<DateTime>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("Email");
+
+                    b.HasIndex("ExpiresAtUtc");
+
+                    b.HasIndex("PhoneNumber");
+
+                    b.ToTable("RegistrationChallenges", (string)null);
+                });
+
+            modelBuilder.Entity("AssistLK.Domain.Entities.ServiceJob", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid?>("BookingId")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTime?>("CompletedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid?>("ProviderId")
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid?>("ServiceRequestId")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTime?>("StartedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("Status")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.HasKey("Id");
+
+                    b.ToTable("ServiceJobs");
+                });
+
             modelBuilder.Entity("AssistLK.Domain.Entities.ServiceRequest", b =>
                 {
                     b.Property<Guid>("Id")
@@ -659,6 +1018,12 @@ namespace AssistLK.Infrastructure.Data.Migrations
                         .HasPrecision(9, 6)
                         .HasColumnType("numeric(9,6)");
 
+                    b.Property<DateTime?>("MatchingExpiresAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<DateTime?>("ReadyForMatchingAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
                     b.Property<string>("Status")
                         .IsConcurrencyToken()
                         .IsRequired()
@@ -686,6 +1051,8 @@ namespace AssistLK.Infrastructure.Data.Migrations
                             t.HasCheckConstraint("CK_ServiceRequests_Latitude", "\"Latitude\" IS NULL OR \"Latitude\" BETWEEN -90 AND 90");
 
                             t.HasCheckConstraint("CK_ServiceRequests_Longitude", "\"Longitude\" IS NULL OR \"Longitude\" BETWEEN -180 AND 180");
+
+                            t.HasCheckConstraint("CK_ServiceRequests_Status_Valid", "\"Status\" IN ('Created', 'Analyzing', 'AwaitingInformation', 'Analyzed', 'ReadyForMatching', 'Cancelled')");
                         });
                 });
 
@@ -800,6 +1167,38 @@ namespace AssistLK.Infrastructure.Data.Migrations
                         });
                 });
 
+            modelBuilder.Entity("AssistLK.Domain.Entities.ServiceStatusHistory", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTime>("ChangedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid?>("ChangedByUserId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("NewStatus")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<string>("Note")
+                        .HasColumnType("text");
+
+                    b.Property<string>("OldStatus")
+                        .HasColumnType("text");
+
+                    b.Property<Guid>("ServiceJobId")
+                        .HasColumnType("uuid");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("ServiceJobId");
+
+                    b.ToTable("ServiceStatusHistories");
+                });
+
             modelBuilder.Entity("AssistLK.Domain.Entities.User", b =>
                 {
                     b.Property<Guid>("Id")
@@ -824,6 +1223,11 @@ namespace AssistLK.Infrastructure.Data.Migrations
                         .HasColumnType("boolean")
                         .HasDefaultValue(true);
 
+                    b.Property<bool>("IsPhoneVerified")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("boolean")
+                        .HasDefaultValue(false);
+
                     b.Property<string>("PasswordHash")
                         .IsRequired()
                         .HasMaxLength(500)
@@ -832,6 +1236,9 @@ namespace AssistLK.Infrastructure.Data.Migrations
                     b.Property<string>("PhoneNumber")
                         .HasMaxLength(20)
                         .HasColumnType("character varying(20)");
+
+                    b.Property<DateTime?>("PhoneVerifiedAtUtc")
+                        .HasColumnType("timestamp with time zone");
 
                     b.Property<string>("Role")
                         .IsRequired()
@@ -845,6 +1252,11 @@ namespace AssistLK.Infrastructure.Data.Migrations
 
                     b.HasIndex("Email")
                         .IsUnique();
+
+                    b.HasIndex("PhoneNumber")
+                        .IsUnique()
+                        .HasDatabaseName("IX_Users_VerifiedCustomerPhoneNumber")
+                        .HasFilter("\"Role\" = 'Customer' AND \"IsPhoneVerified\" = TRUE AND \"PhoneNumber\" IS NOT NULL");
 
                     b.ToTable("Users", (string)null);
                 });
@@ -913,6 +1325,55 @@ namespace AssistLK.Infrastructure.Data.Migrations
                         .IsRequired();
 
                     b.Navigation("Workflow");
+                });
+
+            modelBuilder.Entity("AssistLK.Domain.Entities.Booking", b =>
+                {
+                    b.HasOne("AssistLK.Domain.Entities.Quotation", "Quotation")
+                        .WithOne("Booking")
+                        .HasForeignKey("AssistLK.Domain.Entities.Booking", "QuotationId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Quotation");
+                });
+
+            modelBuilder.Entity("AssistLK.Domain.Entities.BookingStatusHistory", b =>
+                {
+                    b.HasOne("AssistLK.Domain.Entities.Booking", "Booking")
+                        .WithMany("StatusHistory")
+                        .HasForeignKey("BookingId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Booking");
+                });
+
+            modelBuilder.Entity("AssistLK.Domain.Entities.Complaint", b =>
+                {
+                    b.HasOne("AssistLK.Domain.Entities.ServiceJob", null)
+                        .WithMany("Complaints")
+                        .HasForeignKey("ServiceJobId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+                });
+
+            modelBuilder.Entity("AssistLK.Domain.Entities.CompletionRecord", b =>
+                {
+                    b.HasOne("AssistLK.Domain.Entities.ServiceJob", null)
+                        .WithOne("CompletionRecord")
+                        .HasForeignKey("AssistLK.Domain.Entities.CompletionRecord", "ServiceJobId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+                });
+
+            modelBuilder.Entity("AssistLK.Domain.Entities.Feedback", b =>
+                {
+                    b.HasOne("AssistLK.Domain.Entities.ServiceJob", null)
+                        .WithOne("Feedback")
+                        .HasForeignKey("AssistLK.Domain.Entities.Feedback", "ServiceJobId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
                 });
 
             modelBuilder.Entity("AssistLK.Domain.Entities.MatchedCandidate", b =>
@@ -989,6 +1450,17 @@ namespace AssistLK.Infrastructure.Data.Migrations
                     b.Navigation("Provider");
                 });
 
+            modelBuilder.Entity("AssistLK.Domain.Entities.QuotationItem", b =>
+                {
+                    b.HasOne("AssistLK.Domain.Entities.Quotation", "Quotation")
+                        .WithMany("Items")
+                        .HasForeignKey("QuotationId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Quotation");
+                });
+
             modelBuilder.Entity("AssistLK.Domain.Entities.ServiceRequest", b =>
                 {
                     b.HasOne("AssistLK.Domain.Entities.User", "Customer")
@@ -1022,6 +1494,15 @@ namespace AssistLK.Infrastructure.Data.Migrations
                     b.Navigation("ServiceRequest");
                 });
 
+            modelBuilder.Entity("AssistLK.Domain.Entities.ServiceStatusHistory", b =>
+                {
+                    b.HasOne("AssistLK.Domain.Entities.ServiceJob", null)
+                        .WithMany("StatusHistories")
+                        .HasForeignKey("ServiceJobId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+                });
+
             modelBuilder.Entity("AssistLK.Domain.Entities.AgentWorkflow", b =>
                 {
                     b.Navigation("Approvals");
@@ -1029,6 +1510,11 @@ namespace AssistLK.Infrastructure.Data.Migrations
                     b.Navigation("AuditLogs");
 
                     b.Navigation("Executions");
+                });
+
+            modelBuilder.Entity("AssistLK.Domain.Entities.Booking", b =>
+                {
+                    b.Navigation("StatusHistory");
                 });
 
             modelBuilder.Entity("AssistLK.Domain.Entities.MatchingExecution", b =>
@@ -1043,6 +1529,24 @@ namespace AssistLK.Infrastructure.Data.Migrations
                     b.Navigation("Locations");
 
                     b.Navigation("Skills");
+                });
+
+            modelBuilder.Entity("AssistLK.Domain.Entities.Quotation", b =>
+                {
+                    b.Navigation("Booking");
+
+                    b.Navigation("Items");
+                });
+
+            modelBuilder.Entity("AssistLK.Domain.Entities.ServiceJob", b =>
+                {
+                    b.Navigation("Complaints");
+
+                    b.Navigation("CompletionRecord");
+
+                    b.Navigation("Feedback");
+
+                    b.Navigation("StatusHistories");
                 });
 
             modelBuilder.Entity("AssistLK.Domain.Entities.ServiceRequest", b =>

@@ -3,23 +3,33 @@ using Microsoft.EntityFrameworkCore.Migrations;
 
 #nullable disable
 
-namespace AssistLK.Infrastructure.Migrations
+namespace AssistLK.Infrastructure.Data.Migrations
 {
     /// <inheritdoc />
-    public partial class AddComponent4TrackingEntities : Migration
+    public partial class AddComponent4TrackingClean : Migration
     {
         /// <inheritdoc />
         protected override void Up(MigrationBuilder migrationBuilder)
         {
+            migrationBuilder.AddColumn<int>(
+                name: "TotalReviews",
+                table: "ProviderProfiles",
+                type: "integer",
+                nullable: false,
+                defaultValue: 0);
+
             migrationBuilder.CreateTable(
                 name: "ServiceJobs",
                 columns: table => new
                 {
                     Id = table.Column<Guid>(type: "uuid", nullable: false),
+                    ServiceRequestId = table.Column<Guid>(type: "uuid", nullable: true),
                     BookingId = table.Column<Guid>(type: "uuid", nullable: true),
-                    Status = table.Column<int>(type: "integer", nullable: false),
+                    ProviderId = table.Column<Guid>(type: "uuid", nullable: true),
+                    Status = table.Column<string>(type: "text", nullable: false),
                     StartedAt = table.Column<DateTime>(type: "timestamp with time zone", nullable: true),
-                    CompletedAt = table.Column<DateTime>(type: "timestamp with time zone", nullable: true)
+                    CompletedAt = table.Column<DateTime>(type: "timestamp with time zone", nullable: true),
+                    CreatedAt = table.Column<DateTime>(type: "timestamp with time zone", nullable: false)
                 },
                 constraints: table =>
                 {
@@ -32,9 +42,13 @@ namespace AssistLK.Infrastructure.Migrations
                 {
                     Id = table.Column<Guid>(type: "uuid", nullable: false),
                     ServiceJobId = table.Column<Guid>(type: "uuid", nullable: false),
+                    CustomerId = table.Column<Guid>(type: "uuid", nullable: false),
                     ComplainantId = table.Column<Guid>(type: "uuid", nullable: false),
+                    Type = table.Column<string>(type: "text", nullable: false),
                     Subject = table.Column<string>(type: "text", nullable: false),
                     Description = table.Column<string>(type: "text", nullable: false),
+                    CustomerComment = table.Column<string>(type: "text", nullable: true),
+                    AiSentiment = table.Column<string>(type: "text", nullable: true),
                     Status = table.Column<string>(type: "text", nullable: false),
                     CreatedAt = table.Column<DateTime>(type: "timestamp with time zone", nullable: false)
                 },
@@ -99,9 +113,9 @@ namespace AssistLK.Infrastructure.Migrations
                 {
                     Id = table.Column<Guid>(type: "uuid", nullable: false),
                     ServiceJobId = table.Column<Guid>(type: "uuid", nullable: false),
-                    OldStatus = table.Column<int>(type: "integer", nullable: false),
-                    NewStatus = table.Column<int>(type: "integer", nullable: false),
-                    ChangedByUserId = table.Column<Guid>(type: "uuid", nullable: false),
+                    OldStatus = table.Column<string>(type: "text", nullable: true),
+                    NewStatus = table.Column<string>(type: "text", nullable: false),
+                    ChangedByUserId = table.Column<Guid>(type: "uuid", nullable: true),
                     Note = table.Column<string>(type: "text", nullable: true),
                     ChangedAt = table.Column<DateTime>(type: "timestamp with time zone", nullable: false)
                 },
@@ -156,6 +170,10 @@ namespace AssistLK.Infrastructure.Migrations
 
             migrationBuilder.DropTable(
                 name: "ServiceJobs");
+
+            migrationBuilder.DropColumn(
+                name: "TotalReviews",
+                table: "ProviderProfiles");
         }
     }
 }

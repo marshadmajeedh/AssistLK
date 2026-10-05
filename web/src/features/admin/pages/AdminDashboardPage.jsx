@@ -8,7 +8,6 @@ import ErrorMessage from "../../../shared/components/ErrorMessage";
 import { colors, spacing, typography } from "../../../shared/theme";
 import adminServiceRequestService from "../services/adminServiceRequestService";
 import agentMonitoringService from "../../aiWorkflows/services/agentMonitoringService";
-import serviceTrackingService from "../../serviceTracking/services/serviceTrackingService";
 import { formatDuration, formatRecordedAt, isValidMetricNumber, summarizeMetrics } from "../../aiWorkflows/utils/metricFormatters";
 import { formatDate } from "../utils/monitoringFormatters";
 import { UrgencyBadge } from "../components/RequestMonitoringDetails";
@@ -93,23 +92,10 @@ export default function AdminDashboardPage() {
   const navigate = useNavigate();
   const requests = useDashboardCollection(adminServiceRequestService.getAll, "service requests");
   const executions = useDashboardCollection(agentMonitoringService.getMetrics, "AI execution metrics");
-  
-  // Component 4: Service Tracking & AI Safety Collection
-  const trackingSummary = useDashboardCollection(
-    serviceTrackingService.getComplaints,
-    "service tracking & safety logs"
-  );
-
   const requestCards = [["Total Service Requests", requests.data.length], ...lifecycle.map(([status, label]) => [label, requests.data.filter((request) => request.status === status).length])];
   const summary = summarizeMetrics(executions.data);
   const agentCards = [["Total Agent Executions", summary.total], ["Completed Executions", summary.completed],
     ["Failed Executions", summary.failed], ["Average Execution Duration", formatDuration(summary.averageDuration)], ["Total Tool Calls", summary.toolCalls]];
-
-  const safetyCards = [
-    ["Total Complaints", trackingSummary.data.length],
-    ["Open Complaints", trackingSummary.data.filter((complaint) => complaint.status === "Open").length],
-    ["Resolved Complaints", trackingSummary.data.filter((complaint) => complaint.status === "Resolved").length]
-  ];
 
   return <div className="admin-dashboard" style={{ ...typography.body, color: colors.textPrimary,
     "--dashboard-gap": `${spacing.md}px`, "--dashboard-muted": colors.textSecondary,
@@ -117,12 +103,9 @@ export default function AdminDashboardPage() {
     <section className="page-hero">
       <div className="page-hero-content">
         <div>
-          <div className="page-kicker">Admin Dashboard · Operations Overview</div>
-          <h1 className="page-hero-title">See service demand and AI workflow health in one pass.</h1>
-          <p className="page-hero-copy">
-            Real-time monitoring of service demand, provider matching activity, Component 1 lifecycle health,
-            Component 4 Service Safety, and AssistLK AI execution metrics.
-          </p>
+          <div className="page-kicker">Operations Overview</div>
+          <h1 className="page-hero-title">Dashboard</h1>
+          <p className="page-hero-copy">Real-time monitoring of service demand, provider matching activity, and active platform operations.</p>
         </div>
         <div className="page-hero-meta">
           <div className="page-stat">
@@ -136,7 +119,6 @@ export default function AdminDashboardPage() {
         </div>
       </div>
     </section>
-
     <section aria-labelledby="dashboard-requests-heading">
       <div className="dashboard-section-header"><h2 id="dashboard-requests-heading" style={typography.sectionHeading}>Service Request Overview</h2>
         <AppButton variant="outline" onClick={() => navigate("/admin/service-requests")}>View All Requests</AppButton>
@@ -159,44 +141,6 @@ export default function AdminDashboardPage() {
         </AppCard>
       </CollectionState>
     </section>
-
-    {/* Component 4: Service Tracking & AI Safety Operations Section */}
-    <section aria-labelledby="dashboard-tracking-heading">
-      <div className="dashboard-section-header">
-        <h2 id="dashboard-tracking-heading" style={typography.sectionHeading}>Service Tracking & Safety Operations</h2>
-        <AppButton variant="outline" onClick={() => navigate("/service-tracking")}>View Complaints</AppButton>
-      </div>
-      <CollectionState result={trackingSummary} loadingMessage="Loading safety & tracking metrics..." retryLabel="Retry Safety Metrics">
-        <Metrics cards={safetyCards} />
-        <AppCard className="table-shell">
-          <h3 style={typography.cardHeading}>Recent Complaints</h3>
-          {trackingSummary.data.length === 0 ? <p>No complaints found.</p> : <table className="dashboard-table">
-            <caption>Latest {Math.min(5, trackingSummary.data.length)} complaints</caption>
-            <thead>
-              <tr>
-                {["Ticket ID", "Job ID", "Customer", "Type", "Description", "AI Sentiment", "Status", "Created", "Actions"].map((label) => <th scope="col" key={label}>{label}</th>)}
-              </tr>
-            </thead>
-            <tbody>
-              {trackingSummary.data.slice(0, 5).map((complaint) => (
-                <tr key={complaint.id}>
-                  <td data-label="Ticket ID">{complaint.ticketId || complaint.id || "—"}</td>
-                  <td data-label="Job ID">{complaint.jobId || complaint.serviceJobId || "—"}</td>
-                  <td data-label="Customer">{complaint.customerName || complaint.customerId || "—"}</td>
-                  <td data-label="Type">{complaint.type || "—"}</td>
-                  <td data-label="Description">{complaint.customerComment || complaint.description || "—"}</td>
-                  <td data-label="AI Sentiment">{complaint.aiSentiment || "—"}</td>
-                  <td data-label="Status"><StatusBadge status={complaint.status} /></td>
-                  <td data-label="Created">{complaint.createdAt ? new Date(complaint.createdAt).toLocaleString() : "—"}</td>
-                  <td data-label="Actions">—</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>}
-        </AppCard>
-      </CollectionState>
-    </section>
-
     <section aria-labelledby="dashboard-ai-heading">
       <div className="dashboard-section-header"><h2 id="dashboard-ai-heading" style={typography.sectionHeading}>AssistLK AI Monitoring</h2>
         <AppButton variant="outline" onClick={() => navigate("/ai-workflows")}>View AI Workflows</AppButton>
@@ -222,7 +166,6 @@ export default function AdminDashboardPage() {
         <p className="dashboard-muted">Tool Calls count deterministic tools. Duration is the backend-measured end-to-end execution time.</p>
       </CollectionState>
     </section>
-
     <AppCard className="section-card"><details>
       <summary>Component Boundaries — architecture reference</summary>
       <p className="dashboard-muted">Project responsibilities are listed for reference. This section does not report operational status.</p>

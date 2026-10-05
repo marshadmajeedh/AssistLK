@@ -360,6 +360,112 @@ namespace AssistLK.Infrastructure.Data.Migrations
                     b.ToTable("BookingStatusHistories");
                 });
 
+            modelBuilder.Entity("AssistLK.Domain.Entities.Complaint", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("AiSentiment")
+                        .HasColumnType("text");
+
+                    b.Property<Guid>("ComplainantId")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("CustomerComment")
+                        .HasColumnType("text");
+
+                    b.Property<Guid>("CustomerId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("Description")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<Guid>("ServiceJobId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("Status")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<string>("Subject")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<string>("Type")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("ServiceJobId");
+
+                    b.ToTable("Complaints");
+                });
+
+            modelBuilder.Entity("AssistLK.Domain.Entities.CompletionRecord", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<decimal>("AdditionalCost")
+                        .HasColumnType("numeric");
+
+                    b.Property<DateTime>("CompletedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("ProofOfWorkImageUrl")
+                        .HasColumnType("text");
+
+                    b.Property<Guid>("ServiceJobId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("WorkSummary")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("ServiceJobId")
+                        .IsUnique();
+
+                    b.ToTable("CompletionRecords");
+                });
+
+            modelBuilder.Entity("AssistLK.Domain.Entities.Feedback", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("Comment")
+                        .HasColumnType("text");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid>("CustomerId")
+                        .HasColumnType("uuid");
+
+                    b.Property<int>("Rating")
+                        .HasColumnType("integer");
+
+                    b.Property<Guid>("ServiceJobId")
+                        .HasColumnType("uuid");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("ServiceJobId")
+                        .IsUnique();
+
+                    b.ToTable("Feedbacks");
+                });
+
             modelBuilder.Entity("AssistLK.Domain.Entities.MatchedCandidate", b =>
                 {
                     b.Property<Guid>("Id")
@@ -616,10 +722,10 @@ namespace AssistLK.Infrastructure.Data.Migrations
                         .HasPrecision(3, 2)
                         .HasColumnType("numeric(3,2)");
 
-                    b.Property<int>("TotalReviews")
+                    b.Property<int>("TotalCompletedJobs")
                         .HasColumnType("integer");
 
-                    b.Property<int>("TotalCompletedJobs")
+                    b.Property<int>("TotalReviews")
                         .HasColumnType("integer");
 
                     b.Property<DateTime>("UpdatedAt")
@@ -825,6 +931,39 @@ namespace AssistLK.Infrastructure.Data.Migrations
                     b.ToTable("RegistrationChallenges", (string)null);
                 });
 
+            modelBuilder.Entity("AssistLK.Domain.Entities.ServiceJob", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid?>("BookingId")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTime?>("CompletedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid?>("ProviderId")
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid?>("ServiceRequestId")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTime?>("StartedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("Status")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.HasKey("Id");
+
+                    b.ToTable("ServiceJobs");
+                });
+
             modelBuilder.Entity("AssistLK.Domain.Entities.ServiceRequest", b =>
                 {
                     b.Property<Guid>("Id")
@@ -1025,6 +1164,38 @@ namespace AssistLK.Infrastructure.Data.Migrations
                         });
                 });
 
+            modelBuilder.Entity("AssistLK.Domain.Entities.ServiceStatusHistory", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTime>("ChangedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid?>("ChangedByUserId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("NewStatus")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<string>("Note")
+                        .HasColumnType("text");
+
+                    b.Property<string>("OldStatus")
+                        .HasColumnType("text");
+
+                    b.Property<Guid>("ServiceJobId")
+                        .HasColumnType("uuid");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("ServiceJobId");
+
+                    b.ToTable("ServiceStatusHistories");
+                });
+
             modelBuilder.Entity("AssistLK.Domain.Entities.User", b =>
                 {
                     b.Property<Guid>("Id")
@@ -1175,6 +1346,33 @@ namespace AssistLK.Infrastructure.Data.Migrations
                     b.Navigation("Booking");
                 });
 
+            modelBuilder.Entity("AssistLK.Domain.Entities.Complaint", b =>
+                {
+                    b.HasOne("AssistLK.Domain.Entities.ServiceJob", null)
+                        .WithMany("Complaints")
+                        .HasForeignKey("ServiceJobId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+                });
+
+            modelBuilder.Entity("AssistLK.Domain.Entities.CompletionRecord", b =>
+                {
+                    b.HasOne("AssistLK.Domain.Entities.ServiceJob", null)
+                        .WithOne("CompletionRecord")
+                        .HasForeignKey("AssistLK.Domain.Entities.CompletionRecord", "ServiceJobId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+                });
+
+            modelBuilder.Entity("AssistLK.Domain.Entities.Feedback", b =>
+                {
+                    b.HasOne("AssistLK.Domain.Entities.ServiceJob", null)
+                        .WithOne("Feedback")
+                        .HasForeignKey("AssistLK.Domain.Entities.Feedback", "ServiceJobId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+                });
+
             modelBuilder.Entity("AssistLK.Domain.Entities.MatchedCandidate", b =>
                 {
                     b.HasOne("AssistLK.Domain.Entities.MatchingExecution", "MatchingExecution")
@@ -1293,6 +1491,15 @@ namespace AssistLK.Infrastructure.Data.Migrations
                     b.Navigation("ServiceRequest");
                 });
 
+            modelBuilder.Entity("AssistLK.Domain.Entities.ServiceStatusHistory", b =>
+                {
+                    b.HasOne("AssistLK.Domain.Entities.ServiceJob", null)
+                        .WithMany("StatusHistories")
+                        .HasForeignKey("ServiceJobId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+                });
+
             modelBuilder.Entity("AssistLK.Domain.Entities.AgentWorkflow", b =>
                 {
                     b.Navigation("Approvals");
@@ -1326,6 +1533,17 @@ namespace AssistLK.Infrastructure.Data.Migrations
                     b.Navigation("Booking");
 
                     b.Navigation("Items");
+                });
+
+            modelBuilder.Entity("AssistLK.Domain.Entities.ServiceJob", b =>
+                {
+                    b.Navigation("Complaints");
+
+                    b.Navigation("CompletionRecord");
+
+                    b.Navigation("Feedback");
+
+                    b.Navigation("StatusHistories");
                 });
 
             modelBuilder.Entity("AssistLK.Domain.Entities.ServiceRequest", b =>

@@ -170,32 +170,6 @@ def test_score_calculation_exact_formulas():
     assert res_urg2["ToolResults"][0]["score"] == 0.93
 
 
-def test_scoring_node_does_not_mutate_input_state():
-    """Graph nodes must return a new state object instead of mutating checkpoint input."""
-    state = _build_initial_state(
-        urgency=5,
-        eligible_providers=[{
-            "id": "p-test",
-            "name": "Test Plumber",
-            "rating": 4.5,
-            "verified": True,
-            "latitude": 6.9270,
-            "longitude": 79.8610,
-            "operating_radius_km": 10.0,
-            "skills": ["plumbing"],
-        }],
-    )
-    original_completed_steps = list(state["CompletedSteps"])
-    original_updated_at = state["UpdatedAt"]
-
-    result = match_and_score_providers(state)
-
-    assert result is not state
-    assert state["CompletedSteps"] == original_completed_steps
-    assert state["UpdatedAt"] == original_updated_at
-    assert result["CompletedSteps"] == ["match_and_score_providers"]
-
-
 # --- Operational Radius and Skill Filtering Tests ---
 
 

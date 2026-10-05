@@ -61,7 +61,7 @@ class ProviderService {
         : endpoint;
     await apiClient.client.post(path);
   }
-  
+
   Future<void> updateJobStatus(String jobId, String newStatus) async {
     final response = await apiClient.client.put(
       '/service-jobs/$jobId/status',

@@ -8,12 +8,6 @@
 	<string>AssistLK lets you choose optional problem photos from your photo library.</string>
 	<key>NSLocationWhenInUseUsageDescription</key>
 	<string>AssistLK uses your location to pinpoint where service is needed for your request.</string>
-	<key>NSLocationAlwaysAndWhenInUseUsageDescription</key>
-	<string>AssistLK shares the provider location during an active On The Way service.</string>
-	<key>UIBackgroundModes</key>
-	<array>
-		<string>location</string>
-	</array>
 	<key>CADisableMinimumFrameDurationOnPhone</key>
 	<true/>
 	<key>CFBundleDevelopmentRegion</key>

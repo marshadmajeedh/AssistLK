@@ -6,17 +6,12 @@ import 'package:latlong2/latlong.dart' as latlong;
 import '../auth/providers/auth_provider.dart';
 import '../../shared/theme/app_spacing.dart';
 import 'providers/provider_dashboard_provider.dart';
-import 'quotation_workspace_screen.dart';
 import 'services/provider_service.dart';
 import 'widgets/job_alert_card.dart';
-import 'widgets/provider_rating_card.dart';
-import 'widgets/update_profile_bottom_sheet.dart';
-import 'providers/web_notifications.dart';
 import 'widgets/provider_bottom_navigation.dart';
 import 'screens/provider_dashboard_tab.dart';
 import 'screens/provider_profile_tab.dart';
 import '../quotations/screens/booking_management_tab.dart';
-import '../tracking/provider_job_tracking_screen.dart';
 
 class ProviderHomeScreen extends StatefulWidget {
   const ProviderHomeScreen({super.key});
@@ -46,8 +41,6 @@ class _ProviderHomeScreenState extends State<ProviderHomeScreen> {
   }
 
   Future<void> _onAcceptMatch() async {
-    final distanceKm = _dashboardProvider?.activeJobMatch?['distanceKm'] ?? 0.0;
-
     try {
       await _dashboardProvider?.acceptJob();
       if (mounted) {
@@ -88,128 +81,18 @@ class _ProviderHomeScreenState extends State<ProviderHomeScreen> {
         ),
       ),
     );
-    showModalBottomSheet(
-      context: context,
-      isScrollControlled: true,
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
-      ),
-      builder: (sheetContext) {
-        return Padding(
-          padding: const EdgeInsets.all(AppSpacing.lg),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
-                  const Text(
-                    'Component 3 Handoff',
-                    style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
-                  ),
-                  IconButton(
-                    icon: const Icon(Icons.close),
-                    onPressed: () => Navigator.of(sheetContext).pop(),
-                  ),
-                ],
-              ),
-              const Divider(),
-              const SizedBox(height: 8),
-              const Text(
-                'Matched Candidate Contract:',
-                style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
-              ),
-              const SizedBox(height: 6),
-              Container(
-                width: double.infinity,
-                padding: const EdgeInsets.all(12),
-                decoration: BoxDecoration(
-                  color: Colors.grey.shade100,
-                  borderRadius: BorderRadius.circular(8),
-                  border: Border.all(color: Colors.grey.shade300),
-                ),
-                child: Text(
-                  '{\n'
-                  '  "ServiceRequestId": "d8b4b485-3c0b-401a-849e-f0f116219903",\n'
-                  '  "ProviderId": "prov-001",\n'
-                  '  "DistanceKm": $distanceKm,\n'
-                  '  "Status": "AcceptedForQuotation"\n'
-                  '}',
-                  style: const TextStyle(fontFamily: 'monospace', fontSize: 13),
-                ),
-              ),
-              const SizedBox(height: 16),
-              const Text(
-                'The dispatch request has been transferred to the Quotation & Booking subsystem.',
-                style: TextStyle(color: Colors.black87, fontSize: 13),
-              ),
-              const SizedBox(height: 20),
-              SizedBox(
-                width: double.infinity,
-                child: ElevatedButton(
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: Colors.green.shade700,
-                    foregroundColor: Colors.white,
-                    padding: const EdgeInsets.symmetric(vertical: 14),
-                  ),
-                  onPressed: () {
-                    final activeJob = _dashboardProvider?.activeJobMatch;
-                    final serviceJobId = activeJob?['jobId']?.toString();
-                    final jobStatus =
-                        activeJob?['jobStatus']?.toString() ?? 'Assigned';
-
-                    Navigator.of(sheetContext).pop();
-                    if (!mounted || serviceJobId == null) {
-                      return;
-                    }
-
-                    _dashboardProvider?.dismissActiveJob();
-                    setState(() {
-                      _hasAcceptedActiveMatch = true;
-                    });
-                    Navigator.of(context).push(
-                      MaterialPageRoute<void>(
-                        builder: (_) => QuotationWorkspaceScreen(
-                          serviceJobId: serviceJobId,
-                          status: jobStatus,
-                        ),
-                      ),
-                    );
-                  },
-                  child: const Text('Proceed to Quotation Workspace'),
-                ),
-              ),
-              const SizedBox(height: 10),
-            ],
-          ),
-        );
-      },
-    );
   }
 
   Future<void> _onDeclineMatch() async {
     await _dashboardProvider?.declineJob();
   }
 
-  Future<void> _onUpdateJobStatus(String newStatus) async {
-    try {
-      await _dashboardProvider?.updateActiveJobStatus(newStatus);
-    } catch (e) {
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          backgroundColor: Colors.red,
-          content: Text('Failed to update job status: $e'),
-        ),
-      );
-    }
-  }
-
   @override
   Widget build(BuildContext context) {
     if (_dashboardProvider == null) {
-      return const Scaffold(body: Center(child: CircularProgressIndicator()));
+      return const Scaffold(
+        body: Center(child: CircularProgressIndicator()),
+      );
     }
 
     return ChangeNotifierProvider.value(
@@ -218,7 +101,6 @@ class _ProviderHomeScreenState extends State<ProviderHomeScreen> {
         hasAcceptedActiveMatch: _hasAcceptedActiveMatch,
         onAcceptMatch: _onAcceptMatch,
         onDeclineMatch: _onDeclineMatch,
-        onUpdateJobStatus: _onUpdateJobStatus,
       ),
     );
   }
@@ -228,13 +110,11 @@ class _ProviderHomeView extends StatefulWidget {
   final bool hasAcceptedActiveMatch;
   final VoidCallback onAcceptMatch;
   final VoidCallback onDeclineMatch;
-  final Future<void> Function(String) onUpdateJobStatus;
 
   const _ProviderHomeView({
     required this.hasAcceptedActiveMatch,
     required this.onAcceptMatch,
     required this.onDeclineMatch,
-    required this.onUpdateJobStatus,
   });
 
   @override
@@ -314,16 +194,6 @@ class _ProviderHomeViewState extends State<_ProviderHomeView> {
     }
   }
 
-  void _openEditProfileModal(
-    BuildContext context,
-    ProviderDashboardProvider dashboard,
-  ) {
-    showModalBottomSheet<void>(
-      context: context,
-      isScrollControlled: true,
-      builder: (_) => const UpdateProfileBottomSheet(),
-    );
-  }
 
   void _openSupportDialog(BuildContext context) {
     showDialog(
@@ -383,183 +253,7 @@ class _ProviderHomeViewState extends State<_ProviderHomeView> {
     );
   }
 
-  void _openSettingsDialog(BuildContext context, ProviderDashboardProvider dashboard) {
-    showDialog(
-      context: context,
-      builder: (dialogCtx) {
-        return StatefulBuilder(
-          builder: (context, setDialogState) {
-            final permStatus = getNotificationPermissionStatus();
-            return AlertDialog(
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(16),
-              ),
-              title: const Row(
-                children: [
-                  Icon(Icons.settings, color: Colors.blue),
-                  SizedBox(width: 8),
-                  Text(
-                    'Workspace Settings',
-                    style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
-                  ),
-                ],
-              ),
-              content: Column(
-                mainAxisSize: MainAxisSize.min,
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  const Text(
-                    'Audio & Alert Preferences',
-                    style: TextStyle(
-                      fontWeight: FontWeight.bold,
-                      fontSize: 13,
-                      color: Colors.blueGrey,
-                    ),
-                  ),
-                  const SizedBox(height: 8),
-                  SwitchListTile(
-                    contentPadding: EdgeInsets.zero,
-                    secondary: Icon(
-                      dashboard.isVoiceAlertEnabled
-                          ? Icons.volume_up
-                          : Icons.volume_off,
-                      color: dashboard.isVoiceAlertEnabled
-                          ? Colors.blue
-                          : Colors.grey,
-                    ),
-                    title: const Text(
-                      'AI Voice Alert',
-                      style: TextStyle(
-                        fontSize: 14,
-                        fontWeight: FontWeight.bold,
-                      ),
-                    ),
-                    subtitle: const Text(
-                      'Speaks basic audio notification when a new job arrives',
-                      style: TextStyle(fontSize: 12),
-                    ),
-                    value: dashboard.isVoiceAlertEnabled,
-                    onChanged: (val) {
-                      dashboard.toggleVoiceAlert(val);
-                      setDialogState(() {});
-                    },
-                  ),
-                  const Divider(height: 20),
-                  const Text(
-                    'Desktop Notifications (Chrome)',
-                    style: TextStyle(
-                      fontWeight: FontWeight.bold,
-                      fontSize: 13,
-                      color: Colors.blueGrey,
-                    ),
-                  ),
-                  const SizedBox(height: 8),
-                  Row(
-                    children: [
-                      Icon(
-                        permStatus == 'granted'
-                            ? Icons.check_circle
-                            : Icons.info_outline,
-                        color: permStatus == 'granted'
-                            ? Colors.green
-                            : Colors.orange,
-                        size: 18,
-                      ),
-                      const SizedBox(width: 8),
-                      Text(
-                        'Status: ${permStatus.toUpperCase()}',
-                        style: TextStyle(
-                          fontSize: 12,
-                          fontWeight: FontWeight.bold,
-                          color: permStatus == 'granted'
-                              ? Colors.green.shade800
-                              : Colors.orange.shade800,
-                        ),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 10),
-                  Wrap(
-                    spacing: 8,
-                    runSpacing: 6,
-                    children: [
-                      ElevatedButton.icon(
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: Colors.blue.shade700,
-                          foregroundColor: Colors.white,
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: 10,
-                            vertical: 8,
-                          ),
-                          visualDensity: VisualDensity.compact,
-                        ),
-                        icon: const Icon(Icons.notifications_active, size: 16),
-                        label: const Text(
-                          'Enable Notifications',
-                          style: TextStyle(fontSize: 12),
-                        ),
-                        onPressed: () {
-                          requestNotificationPermissions();
-                          setDialogState(() {});
-                        },
-                      ),
-                      OutlinedButton.icon(
-                        style: OutlinedButton.styleFrom(
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: 10,
-                            vertical: 8,
-                          ),
-                          visualDensity: VisualDensity.compact,
-                        ),
-                        icon: const Icon(Icons.send, size: 16),
-                        label: const Text(
-                          'Test Notification',
-                          style: TextStyle(fontSize: 12),
-                        ),
-                        onPressed: () {
-                          sendTestNotification();
-                        },
-                      ),
-                    ],
-                  ),
-                  if (permStatus == 'denied') ...[
-                    const SizedBox(height: 10),
-                    Container(
-                      padding: const EdgeInsets.all(8),
-                      decoration: BoxDecoration(
-                        color: Colors.red.shade50,
-                        borderRadius: BorderRadius.circular(6),
-                        border: Border.all(color: Colors.red.shade200),
-                      ),
-                      child: Text(
-                        'Notifications are blocked by Chrome.\nTo enable: Click the tune/padlock icon on the left of the URL bar -> Site settings -> Notifications -> Set to Allow.',
-                        style: TextStyle(
-                          fontSize: 11,
-                          color: Colors.red.shade900,
-                        ),
-                      ),
-                    ),
-                  ],
-                ],
-              ),
-              actions: [
-                TextButton(
-                  onPressed: () => Navigator.of(dialogCtx).pop(),
-                  child: const Text('Done'),
-                ),
-              ],
-            );
-          },
-        );
-      },
-    );
-  }
-
-  void _confirmLogout(
-    BuildContext context,
-    ProviderDashboardProvider dashboard,
-    AuthProvider auth,
-  ) {
+  void _confirmLogout(BuildContext context, ProviderDashboardProvider dashboard, AuthProvider auth) {
     showDialog(
       context: context,
       builder: (dialogCtx) => AlertDialog(
@@ -646,7 +340,6 @@ class _ProviderHomeViewState extends State<_ProviderHomeView> {
           ),
           _buildVerifiedWorkspaceScaffold(context, dashboard, auth),
           const BookingManagementTab(),
-          _buildTrackingTab(dashboard),
           const ProviderProfileTab(),
         ],
       ),
@@ -660,46 +353,6 @@ class _ProviderHomeViewState extends State<_ProviderHomeView> {
                 });
               },
             ),
-    );
-  }
-
-  Widget _buildTrackingTab(ProviderDashboardProvider dashboard) {
-    final activeJob = dashboard.activeJobMatch;
-    final jobId = activeJob?['jobId']?.toString();
-
-    if (jobId == null || jobId.isEmpty) {
-      return const Scaffold(
-        body: Center(
-          child: Padding(
-            padding: EdgeInsets.all(24),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Icon(Icons.route_outlined, size: 48),
-                SizedBox(height: 16),
-                Text(
-                  'No active service job available for tracking.',
-                  textAlign: TextAlign.center,
-                ),
-              ],
-            ),
-          ),
-        ),
-      );
-    }
-
-    return ProviderJobTrackingScreen(
-      key: ValueKey('provider_tracking_$jobId'),
-      jobId: jobId,
-      initialStatus: activeJob?['jobStatus']?.toString() ??
-          activeJob?['status']?.toString() ??
-          'Assigned',
-      customerLatitude:
-          (activeJob?['customerLatitude'] as num?)?.toDouble(),
-      customerLongitude:
-          (activeJob?['customerLongitude'] as num?)?.toDouble(),
-      customerAddress: activeJob?['locationText']?.toString(),
-      serviceDescription: activeJob?['description']?.toString(),
     );
   }
 
@@ -871,11 +524,8 @@ class _ProviderHomeViewState extends State<_ProviderHomeView> {
                             child: Row(
                               mainAxisSize: MainAxisSize.min,
                               children: [
-                                Icon(
-                                  _getCategoryIcon(cat),
-                                  size: 15,
-                                  color: cColor,
-                                ),
+                                Icon(_getCategoryIcon(cat),
+                                    size: 15, color: cColor),
                                 const SizedBox(width: 6),
                                 Text(
                                   cat,
@@ -929,7 +579,10 @@ class _ProviderHomeViewState extends State<_ProviderHomeView> {
                     ),
                   ),
                   icon: const Icon(Icons.logout),
-                  label: const Text('Log Out', style: TextStyle(fontSize: 15)),
+                  label: const Text(
+                    'Log Out',
+                    style: TextStyle(fontSize: 15),
+                  ),
                   onPressed: () async {
                     await dashboard.onLogout();
                     if (context.mounted) {
@@ -1133,9 +786,7 @@ class _ProviderHomeViewState extends State<_ProviderHomeView> {
         : null;
 
     final jobId = dashboard.activeJobMatch?['jobId']?.toString();
-    if (jobId != null &&
-        customerLocation != null &&
-        _lastFittedJobId != jobId) {
+    if (jobId != null && customerLocation != null && _lastFittedJobId != jobId) {
       _lastFittedJobId = jobId;
       WidgetsBinding.instance.addPostFrameCallback((_) {
         _fitMapToBounds(centerLocation, customerLocation);
@@ -1171,16 +822,14 @@ class _ProviderHomeViewState extends State<_ProviderHomeView> {
                           point: centerLocation,
                           radius: dashboard.operatingRadiusKm * 1000,
                           useRadiusInMeter: true,
-                          color:
-                              (dashboard.isOnline
-                                      ? Colors.blueAccent
-                                      : Colors.grey)
-                                  .withValues(alpha: 0.12),
-                          borderColor:
-                              (dashboard.isOnline
-                                      ? Colors.blueAccent
-                                      : Colors.grey)
-                                  .withValues(alpha: 0.6),
+                          color: (dashboard.isOnline
+                                  ? Colors.blueAccent
+                                  : Colors.grey)
+                              .withValues(alpha: 0.12),
+                          borderColor: (dashboard.isOnline
+                                  ? Colors.blueAccent
+                                  : Colors.grey)
+                              .withValues(alpha: 0.6),
                           borderStrokeWidth: 2,
                         ),
                       ],
@@ -1341,8 +990,10 @@ class _ProviderHomeViewState extends State<_ProviderHomeView> {
                           backgroundColor: Colors.white,
                           foregroundColor: Colors.blueAccent,
                           elevation: 3,
-                          onPressed: () =>
-                              _fitMapToBounds(centerLocation, customerLocation),
+                          onPressed: () => _fitMapToBounds(
+                            centerLocation,
+                            customerLocation,
+                          ),
                           child: const Icon(Icons.zoom_out_map),
                         ),
                         const SizedBox(height: 8),
@@ -1352,7 +1003,8 @@ class _ProviderHomeViewState extends State<_ProviderHomeView> {
                           backgroundColor: Colors.white,
                           foregroundColor: Colors.green,
                           elevation: 3,
-                          onPressed: () => _centerOnLocation(customerLocation),
+                          onPressed: () =>
+                              _centerOnLocation(customerLocation),
                           child: const Icon(Icons.person_pin_circle),
                         ),
                         const SizedBox(height: 8),
@@ -1363,207 +1015,11 @@ class _ProviderHomeViewState extends State<_ProviderHomeView> {
                         backgroundColor: Colors.white,
                         foregroundColor: Colors.redAccent,
                         elevation: 3,
-                        onPressed: () => _centerOnLocation(centerLocation),
+                        onPressed: () =>
+                            _centerOnLocation(centerLocation),
                         child: const Icon(Icons.my_location),
                       ),
                     ],
-                  ),
-                ),
-
-                Positioned(
-                  top: 92,
-                  left: 16,
-                  right: 72,
-                  child: ProviderRatingCard(
-                    averageRating: dashboard.averageRating,
-                    totalReviews: dashboard.totalReviews,
-                  ),
-                ),
-
-                // 3. Top Floating Island Header (Profile & Quick Actions)
-                SafeArea(
-                  child: Align(
-                    alignment: Alignment.topCenter,
-                    child: Padding(
-                      padding: const EdgeInsets.fromLTRB(16, 8, 16, 0),
-                      child: ConstrainedBox(
-                        constraints: const BoxConstraints(maxWidth: 680),
-                        child: Card(
-                          elevation: 4,
-                          shadowColor: Colors.black26,
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(16),
-                          ),
-                          color: Colors.white.withValues(alpha: 0.96),
-                          child: Padding(
-                            padding: const EdgeInsets.symmetric(
-                              horizontal: 14,
-                              vertical: 10,
-                            ),
-                            child: Row(
-                              children: [
-                                CircleAvatar(
-                                  radius: 20,
-                                  backgroundColor: _getCategoryColor(
-                                    dashboard.category,
-                                  ).withValues(alpha: 0.15),
-                                  child: Icon(
-                                    _getCategoryIcon(dashboard.category),
-                                    color: _getCategoryColor(
-                                      dashboard.category,
-                                    ),
-                                    size: 22,
-                                  ),
-                                ),
-                                const SizedBox(width: 10),
-                                Expanded(
-                                  child: Column(
-                                    crossAxisAlignment:
-                                        CrossAxisAlignment.start,
-                                    mainAxisSize: MainAxisSize.min,
-                                    children: [
-                                      Row(
-                                        children: [
-                                          Flexible(
-                                            child: Text(
-                                              dashboard.fullName.isNotEmpty
-                                                  ? dashboard.fullName
-                                                  : 'Technician',
-                                              style: const TextStyle(
-                                                fontWeight: FontWeight.bold,
-                                                fontSize: 15,
-                                              ),
-                                              overflow: TextOverflow.ellipsis,
-                                            ),
-                                          ),
-                                          const SizedBox(width: 6),
-                                          Container(
-                                            padding: const EdgeInsets.symmetric(
-                                              horizontal: 6,
-                                              vertical: 2,
-                                            ),
-                                            decoration: BoxDecoration(
-                                              color: Colors.green.shade50,
-                                              borderRadius:
-                                                  BorderRadius.circular(6),
-                                              border: Border.all(
-                                                color: Colors.green.shade200,
-                                              ),
-                                            ),
-                                            child: Row(
-                                              mainAxisSize: MainAxisSize.min,
-                                              children: [
-                                                const Icon(
-                                                  Icons.star,
-                                                  size: 12,
-                                                  color: Colors.amber,
-                                                ),
-                                                const SizedBox(width: 2),
-                                                Text(
-                                                  dashboard.rating
-                                                      .toStringAsFixed(1),
-                                                  style: TextStyle(
-                                                    fontSize: 11,
-                                                    fontWeight: FontWeight.bold,
-                                                    color:
-                                                        Colors.green.shade900,
-                                                  ),
-                                                ),
-                                              ],
-                                            ),
-                                          ),
-                                        ],
-                                      ),
-                                      const SizedBox(height: 2),
-                                      Row(
-                                        children: [
-                                          Text(
-                                            dashboard.categories.length > 1
-                                                ? dashboard.categories.join(
-                                                    ' • ',
-                                                  )
-                                                : dashboard.category,
-                                            style: TextStyle(
-                                              fontSize: 11,
-                                              fontWeight: FontWeight.w600,
-                                              color: _getCategoryColor(
-                                                dashboard.category,
-                                              ),
-                                            ),
-                                          ),
-                                          if (dashboard
-                                              .businessName
-                                              .isNotEmpty) ...[
-                                            Text(
-                                              ' • ',
-                                              style: TextStyle(
-                                                fontSize: 11,
-                                                color: Colors.grey.shade500,
-                                              ),
-                                            ),
-                                            Flexible(
-                                              child: Text(
-                                                dashboard.businessName,
-                                                style: TextStyle(
-                                                  fontSize: 11,
-                                                  color: Colors.grey.shade600,
-                                                ),
-                                                overflow: TextOverflow.ellipsis,
-                                              ),
-                                            ),
-                                          ],
-                                        ],
-                                      ),
-                                    ],
-                                  ),
-                                ),
-                                IconButton(
-                                  icon: const Icon(
-                                    Icons.edit_outlined,
-                                    size: 19,
-                                  ),
-                                  tooltip: 'Edit Profile',
-                                  visualDensity: VisualDensity.compact,
-                                  onPressed: () =>
-                                      _openEditProfileModal(context, dashboard),
-                                ),
-                                IconButton(
-                                  icon: const Icon(
-                                    Icons.tune_outlined,
-                                    size: 19,
-                                  ),
-                                  tooltip: 'Alert & Audio Settings',
-                                  visualDensity: VisualDensity.compact,
-                                  onPressed: () =>
-                                      _openSettingsDialog(context, dashboard),
-                                ),
-                                IconButton(
-                                  icon: const Icon(Icons.refresh, size: 19),
-                                  tooltip: 'Refresh Status',
-                                  visualDensity: VisualDensity.compact,
-                                  onPressed: () => dashboard.fetchProfile(),
-                                ),
-                                IconButton(
-                                  icon: const Icon(
-                                    Icons.logout,
-                                    size: 19,
-                                    color: Colors.redAccent,
-                                  ),
-                                  tooltip: 'Log Out',
-                                  visualDensity: VisualDensity.compact,
-                                  onPressed: () async {
-                                    await dashboard.onLogout();
-                                    if (context.mounted) {
-                                      await auth.logout();
-                                    }
-                                  },
-                                ),
-                              ],
-                            ),
-                          ),
-                        ),
-                      ),
-                    ),
                   ),
                 ),
 
@@ -1575,39 +1031,37 @@ class _ProviderHomeViewState extends State<_ProviderHomeView> {
                   child: Center(
                     child: ConstrainedBox(
                       constraints: const BoxConstraints(maxWidth: 580),
-                      child:
-                          (dashboard.isOnline &&
+                      child: (dashboard.isOnline &&
                               dashboard.activeJobMatch != null &&
                               !widget.hasAcceptedActiveMatch &&
                               dashboard.activeJobMatch!['status'] != 'Accepted')
                           // Active Incoming Job Alert Card
                           ? JobAlertCard(
-                              category:
-                                  dashboard.activeJobMatch!['category']
+                              category: dashboard
+                                      .activeJobMatch!['category']
                                       ?.toString() ??
                                   'Service Request',
                               distance: dashboard.liveDistanceKm != null
                                   ? '${dashboard.liveDistanceKm!.toStringAsFixed(1)} km'
                                   : (dashboard.activeJobMatch!['distanceKm'] !=
-                                            null
-                                        ? '${dashboard.activeJobMatch!['distanceKm']} km'
-                                        : 'Nearby'),
-                              urgency:
-                                  dashboard.activeJobMatch!['urgency']
+                                          null
+                                      ? '${dashboard.activeJobMatch!['distanceKm']} km'
+                                      : 'Nearby'),
+                              urgency: dashboard
+                                      .activeJobMatch!['urgency']
                                       ?.toString() ??
                                   'Standard',
                               description: dashboard
                                   .activeJobMatch!['description']
                                   ?.toString(),
-                              aiRationale:
-                                  (dashboard.activeJobMatch!['detectedProblem'] ??
-                                          dashboard
-                                              .activeJobMatch!['aiRationale'] ??
-                                          dashboard
-                                              .activeJobMatch!['rationale'])
-                                      ?.toString(),
-                              isOutOfRange:
-                                  dashboard.liveDistanceKm != null &&
+                              aiRationale: (dashboard
+                                          .activeJobMatch!['detectedProblem'] ??
+                                      dashboard
+                                          .activeJobMatch!['aiRationale'] ??
+                                      dashboard
+                                          .activeJobMatch!['rationale'])
+                                  ?.toString(),
+                              isOutOfRange: dashboard.liveDistanceKm != null &&
                                   dashboard.liveDistanceKm! >
                                       dashboard.operatingRadiusKm,
                               remainingSeconds:

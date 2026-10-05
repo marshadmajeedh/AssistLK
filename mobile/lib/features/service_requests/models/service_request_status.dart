@@ -4,7 +4,6 @@ enum ServiceRequestStatus {
   awaitingInformation,
   analyzed,
   readyForMatching,
-  completed,
   cancelled;
 
   String get displayName {
@@ -19,8 +18,6 @@ enum ServiceRequestStatus {
         return 'Analyzed';
       case ServiceRequestStatus.readyForMatching:
         return 'Ready For Matching';
-      case ServiceRequestStatus.completed:
-        return 'Completed';
       case ServiceRequestStatus.cancelled:
         return 'Cancelled';
     }
@@ -38,8 +35,6 @@ enum ServiceRequestStatus {
         return 'Analyzed';
       case ServiceRequestStatus.readyForMatching:
         return 'ReadyForMatching';
-      case ServiceRequestStatus.completed:
-        return 'Completed';
       case ServiceRequestStatus.cancelled:
         return 'Cancelled';
     }

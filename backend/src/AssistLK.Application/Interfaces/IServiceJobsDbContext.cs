@@ -7,6 +7,10 @@ public interface IServiceJobsDbContext
 {
     DbSet<ServiceJob> ServiceJobs { get; }
 
+    DbSet<ServiceStatusHistory> ServiceStatusHistories { get; }
+
+    DbSet<CompletionRecord> CompletionRecords { get; }
+
     DbSet<Feedback> Feedbacks { get; }
 
     DbSet<Complaint> Complaints { get; }

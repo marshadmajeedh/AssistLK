@@ -20,7 +20,6 @@ public class AgentMonitoringController :
     }
 
     [Authorize(Roles = "Admin")]
-    [ResponseCache(NoStore = true, Location = ResponseCacheLocation.None)]
     [HttpGet]
     public async Task<IActionResult> GetMetrics()
     {

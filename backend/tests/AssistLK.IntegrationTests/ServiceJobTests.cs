@@ -19,32 +19,27 @@ public class ServiceJobTests
     public async Task UpdateJobStatus_AssignedDirectlyToCompleted_IsRejectedByValidationAgent()
     {
         var databaseId = Guid.NewGuid().ToString();
-        var applicationOptions = new DbContextOptionsBuilder<ApplicationDbContext>()
-            .UseInMemoryDatabase($"service-jobs-{databaseId}")
-            .Options;
         var assistLkOptions = new DbContextOptionsBuilder<AssistLKDbContext>()
             .UseInMemoryDatabase($"assistlk-{databaseId}")
             .Options;
 
-        await using var applicationDbContext = new ApplicationDbContext(applicationOptions);
         await using var assistLkDbContext = new AssistLKDbContext(assistLkOptions);
 
         var jobId = Guid.NewGuid();
-        applicationDbContext.ServiceJobs.Add(new ServiceJob
+        assistLkDbContext.ServiceJobs.Add(new ServiceJob
         {
             Id = jobId,
             Status = ServiceJobStatus.Assigned
         });
-        await applicationDbContext.SaveChangesAsync();
+        await assistLkDbContext.SaveChangesAsync();
 
         using var httpClient = new HttpClient(new FixedResponseHandler(
             HttpStatusCode.OK,
             "{\"status\":\"INVALID\",\"reason\":\"Assigned jobs cannot be completed directly.\"}"));
         var feedbackService = new FeedbackApplicationService(
-            applicationDbContext,
+            assistLkDbContext,
             assistLkDbContext);
         var controller = new ServiceJobsController(
-            applicationDbContext,
             assistLkDbContext,
             httpClient,
             proofOfWorkStorage: null!,
@@ -71,11 +66,11 @@ public class ServiceJobTests
             });
 
         Assert.IsType<BadRequestObjectResult>(result);
-        var savedJob = await applicationDbContext.ServiceJobs
+        var savedJob = await assistLkDbContext.ServiceJobs
             .AsNoTracking()
             .SingleAsync(job => job.Id == jobId);
         Assert.Equal(ServiceJobStatus.Assigned, savedJob.Status);
-        Assert.Empty(await applicationDbContext.ServiceStatusHistories
+        Assert.Empty(await assistLkDbContext.ServiceStatusHistories
             .Where(history => history.ServiceJobId == jobId)
             .ToListAsync());
     }
@@ -84,14 +79,10 @@ public class ServiceJobTests
     public async Task SubmitFeedback_TwiceForSameJob_ThrowsDuplicateFeedbackException()
     {
         var databaseId = Guid.NewGuid().ToString();
-        var applicationOptions = new DbContextOptionsBuilder<ApplicationDbContext>()
-            .UseInMemoryDatabase($"service-jobs-{databaseId}")
-            .Options;
         var assistLkOptions = new DbContextOptionsBuilder<AssistLKDbContext>()
             .UseInMemoryDatabase($"assistlk-{databaseId}")
             .Options;
 
-        await using var applicationDbContext = new ApplicationDbContext(applicationOptions);
         await using var assistLkDbContext = new AssistLKDbContext(assistLkOptions);
 
         var providerId = Guid.NewGuid();
@@ -118,16 +109,16 @@ public class ServiceJobTests
         await assistLkDbContext.SaveChangesAsync();
 
         var jobId = Guid.NewGuid();
-        applicationDbContext.ServiceJobs.Add(new ServiceJob
+        assistLkDbContext.ServiceJobs.Add(new ServiceJob
         {
             Id = jobId,
             ProviderId = providerId,
             Status = ServiceJobStatus.Completed
         });
-        await applicationDbContext.SaveChangesAsync();
+        await assistLkDbContext.SaveChangesAsync();
 
         var feedbackService = new FeedbackApplicationService(
-            applicationDbContext,
+            assistLkDbContext,
             assistLkDbContext);
         var command = new SubmitFeedbackCommand(
             Guid.NewGuid(),

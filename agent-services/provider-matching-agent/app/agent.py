@@ -47,30 +47,27 @@ llm = ChatGoogleGenerativeAI(
 )
 
 def match_and_score_providers(state: MatchingState) -> Dict[str, Any]:
-    next_state = dict(state)
-    next_state["CompletedSteps"] = list(state.get("CompletedSteps") or [])
-    next_state["Errors"] = list(state.get("Errors") or [])
-    next_state["UpdatedAt"] = datetime.now(timezone.utc).isoformat()
-    next_state["CurrentStep"] = "Scoring_Candidates"
+    state["UpdatedAt"] = datetime.now(timezone.utc).isoformat()
+    state["CurrentStep"] = "Scoring_Candidates"
     
     try:
         # 1. Parse urgency level (use dynamic field if passed from C#, else parse string)
-        urgency = next_state.get("urgency_level") or 2
-        if "urgency:" in next_state.get("Objective", "").lower():
+        urgency = state.get("urgency_level") or 2
+        if "urgency:" in state.get("Objective", "").lower():
             try:
-                urgency = int(next_state["Objective"].lower().split("urgency:")[1].strip()[0])
+                urgency = int(state["Objective"].lower().split("urgency:")[1].strip()[0])
             except (ValueError, IndexError):
                 pass
 
         # 2. Get customer coordinates dynamically from C# (fallback to Colombo baseline)
-        cust_lat = next_state.get("customer_latitude") or 6.9270
-        cust_lon = next_state.get("customer_longitude") or 79.8610
+        cust_lat = state.get("customer_latitude") or 6.9270
+        cust_lon = state.get("customer_longitude") or 79.8610
 
         # 3. Check for dynamic database providers sent from ASP.NET Core
-        providers = next_state.get("eligible_providers")
+        providers = state.get("eligible_providers")
 
         # Extract requested category from Objective if available
-        obj_text = next_state.get("Objective", "").lower()
+        obj_text = state.get("Objective", "").lower()
         req_category = "plumbing"
         if "category:" in obj_text:
             try:
@@ -163,22 +160,22 @@ def match_and_score_providers(state: MatchingState) -> Dict[str, Any]:
 
         # Short-circuit if no candidates qualified inside their operating radius
         if not top_candidate:
-            next_state["ToolResults"] = []
-            next_state["FinalOutcome"] = {
+            state["ToolResults"] = []
+            state["FinalOutcome"] = {
                 "recommended_candidate": None,
                 "recommended_provider": None,
                 "message": "No eligible providers found within their operational radius."
             }
-            next_state["ApprovalStatus"] = "No_Eligible_Providers"
-            next_state["CurrentStep"] = "Completed"
-            next_state["CompletedSteps"].append("match_and_score_providers")
-            return next_state
+            state["ApprovalStatus"] = "No_Eligible_Providers"
+            state["CurrentStep"] = "Completed"
+            state["CompletedSteps"].append("match_and_score_providers")
+            return state
 
         # 5. Invoke Gemini for Natural-Language Audit Rationale & Token Tracking
         try:
             prompt = [
                 SystemMessage(content="You are an expert dispatcher for the AssistLK platform. Provide a concise, professional 1-sentence audit rationale explaining why this provider is the optimal match."),
-                HumanMessage(content=f"Objective: {next_state.get('Objective', '')}. Selected: {top_candidate['name']}, Urgency: {urgency}/5, Distance: {top_candidate['distance_km']}km, Rating: {top_candidate['rating']} stars, Verified: {top_candidate['verified']}.")
+                HumanMessage(content=f"Objective: {state.get('Objective', '')}. Selected: {top_candidate['name']}, Urgency: {urgency}/5, Distance: {top_candidate['distance_km']}km, Rating: {top_candidate['rating']} stars, Verified: {top_candidate['verified']}.")
             ]
             ai_msg = llm.invoke(prompt)
 
@@ -193,42 +190,40 @@ def match_and_score_providers(state: MatchingState) -> Dict[str, Any]:
                 top_candidate["match_rationale"] = str(ai_msg.content)
 
             if hasattr(ai_msg, "usage_metadata") and ai_msg.usage_metadata:
-                next_state["usage_metadata"] = ai_msg.usage_metadata
+                state["usage_metadata"] = ai_msg.usage_metadata
         except Exception as llm_err:
             logger.warning(f"LLM rationale fallback: {llm_err}")
             top_candidate["match_rationale"] = f"Top-ranked match based on distance ({top_candidate['distance_km']}km) and score ({top_candidate['score']})."
 
-        next_state["ToolResults"] = scored_candidates
-        next_state["FinalOutcome"] = {
+        state["ToolResults"] = scored_candidates
+        state["FinalOutcome"] = {
             "recommended_candidate": top_candidate,
             "recommended_provider": top_candidate
         }
-        next_state["ApprovalStatus"] = "Pending"
-        next_state["CompletedSteps"].append("match_and_score_providers")
+        state["ApprovalStatus"] = "Pending"
+        state["CompletedSteps"].append("match_and_score_providers")
 
     except Exception as e:
         print(f"--> ERROR inside match_and_score_providers: {e}")
-        next_state["Errors"].append(str(e))
-        next_state["ApprovalStatus"] = "Failed"
+        state["Errors"].append(str(e))
+        state["ApprovalStatus"] = "Failed"
 
-    return next_state
+    return state
 
 def human_approval_gate(state: MatchingState) -> Dict[str, Any]:
-    next_state = dict(state)
-    next_state["CompletedSteps"] = list(state.get("CompletedSteps") or [])
-    next_state["UpdatedAt"] = datetime.now(timezone.utc).isoformat()
+    state["UpdatedAt"] = datetime.now(timezone.utc).isoformat()
 
     # Short-circuit if previous node failed
-    if next_state.get("ApprovalStatus") in ["Failed", "No_Eligible_Providers"] or next_state.get("Errors"):
-        next_state["CurrentStep"] = next_state.get("ApprovalStatus", "Failed")
-        return next_state
+    if state.get("ApprovalStatus") in ["Failed", "No_Eligible_Providers"] or state.get("Errors"):
+        state["CurrentStep"] = state.get("ApprovalStatus", "Failed")
+        return state
 
-    next_state["CurrentStep"] = "Awaiting_Admin_Approval"
-    final_outcome = next_state.get("FinalOutcome") or {}
+    state["CurrentStep"] = "Awaiting_Admin_Approval"
+    final_outcome = state.get("FinalOutcome") or {}
 
     decision = interrupt({
         "message": "High-impact match awaiting Admin review",
-        "workflow_id": next_state.get("WorkflowId"),
+        "workflow_id": state.get("WorkflowId"),
         "recommended": final_outcome.get("recommended_candidate")
     })
 
@@ -240,25 +235,27 @@ def human_approval_gate(state: MatchingState) -> Dict[str, Any]:
         action_str = decision
 
     if action_str.strip().lower() == "approve":
-        next_state["ApprovalStatus"] = "Approved"
+        state["ApprovalStatus"] = "Approved"
     else:
-        next_state["ApprovalStatus"] = "Rejected"
+        state["ApprovalStatus"] = "Rejected"
 
-    next_state["CompletedSteps"].append("human_approval_gate")
-    return next_state
+    if "CompletedSteps" not in state or state["CompletedSteps"] is None:
+        state["CompletedSteps"] = []
+    state["CompletedSteps"].append("human_approval_gate")
+    return state
 
 def finalize_workflow(state: MatchingState) -> Dict[str, Any]:
-    next_state = dict(state)
-    next_state["CompletedSteps"] = list(state.get("CompletedSteps") or [])
-    next_state["CompletedAt"] = datetime.now(timezone.utc).isoformat()
-    next_state["CurrentStep"] = "Completed"
+    state["CompletedAt"] = datetime.now(timezone.utc).isoformat()
+    state["CurrentStep"] = "Completed"
     
-    if next_state.get("FinalOutcome") is None:
-        next_state["FinalOutcome"] = {}
-    if "finalize_workflow" not in next_state["CompletedSteps"]:
-        next_state["CompletedSteps"].append("finalize_workflow")
+    if "FinalOutcome" not in state or state["FinalOutcome"] is None:
+        state["FinalOutcome"] = {}
+    if "CompletedSteps" not in state or state["CompletedSteps"] is None:
+        state["CompletedSteps"] = []
+    if "finalize_workflow" not in state["CompletedSteps"]:
+        state["CompletedSteps"].append("finalize_workflow")
         
-    return next_state
+    return state
 
 import pickle
 from collections import defaultdict

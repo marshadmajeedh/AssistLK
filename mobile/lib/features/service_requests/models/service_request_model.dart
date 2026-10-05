@@ -1,5 +1,4 @@
 import 'location_source.dart';
-import 'completion_record_model.dart';
 import 'problem_analysis_summary_model.dart';
 import 'service_request_clarification_model.dart';
 import 'service_request_status.dart';
@@ -9,8 +8,6 @@ class ServiceRequestModel {
   static const Object _sentinel = Object();
 
   final String serviceRequestId;
-  final String? serviceJobId;
-  final String? jobStatus;
   final String customerId;
   final String? categoryHint;
   final String category;
@@ -27,16 +24,10 @@ class ServiceRequestModel {
   final DateTime createdAt;
   final DateTime updatedAt;
   final ProblemAnalysisSummaryModel? latestAnalysis;
-  final CompletionRecordModel? completionRecord;
-  final bool hasFeedback;
-  final int? feedbackRating;
-  final String? feedbackComment;
   final List<ServiceRequestClarificationModel> clarifications;
 
   const ServiceRequestModel({
     required this.serviceRequestId,
-    this.serviceJobId,
-    this.jobStatus,
     required this.customerId,
     this.categoryHint,
     required this.category,
@@ -53,10 +44,6 @@ class ServiceRequestModel {
     required this.createdAt,
     required this.updatedAt,
     this.latestAnalysis,
-    this.completionRecord,
-    this.hasFeedback = false,
-    this.feedbackRating,
-    this.feedbackComment,
     this.clarifications = const [],
   });
 
@@ -105,8 +92,6 @@ class ServiceRequestModel {
   factory ServiceRequestModel.fromJson(Map<String, dynamic> json) {
     return ServiceRequestModel(
       serviceRequestId: json['serviceRequestId']?.toString() ?? '',
-      serviceJobId: json['serviceJobId']?.toString(),
-      jobStatus: json['jobStatus']?.toString(),
       customerId: json['customerId']?.toString() ?? '',
       categoryHint: json['categoryHint'] as String?,
       category: json['category'] as String? ?? 'Unclassified',
@@ -139,14 +124,6 @@ class ServiceRequestModel {
               Map<String, dynamic>.from(json['latestAnalysis'] as Map),
             )
           : null,
-      completionRecord: json['completionRecord'] != null
-          ? CompletionRecordModel.fromJson(
-              Map<String, dynamic>.from(json['completionRecord'] as Map),
-            )
-          : null,
-          hasFeedback: json['hasFeedback'] == true,
-          feedbackRating: (json['feedbackRating'] as num?)?.toInt(),
-          feedbackComment: json['feedbackComment'] as String?,
       clarifications:
           (json['clarifications'] as List<dynamic>?)
               ?.map(
@@ -162,7 +139,6 @@ class ServiceRequestModel {
   Map<String, dynamic> toJson() {
     return {
       'serviceRequestId': serviceRequestId,
-      'serviceJobId': serviceJobId,
       'customerId': customerId,
       'categoryHint': categoryHint,
       'category': category,
@@ -179,22 +155,12 @@ class ServiceRequestModel {
       'createdAt': createdAt.toIso8601String(),
       'updatedAt': updatedAt.toIso8601String(),
       'latestAnalysis': latestAnalysis?.toJson(),
-      'completionRecord': completionRecord == null
-          ? null
-          : {
-              'proofOfWorkImageUrl': completionRecord!.proofOfWorkImageUrl,
-              'summaryNotes': completionRecord!.summaryNotes,
-            },
-      'hasFeedback': hasFeedback,
-      'feedbackRating': feedbackRating,
-      'feedbackComment': feedbackComment,
       'clarifications': clarifications.map((c) => c.toJson()).toList(),
     };
   }
 
   ServiceRequestModel copyWith({
     String? serviceRequestId,
-    String? serviceJobId,
     String? customerId,
     Object? categoryHint = _sentinel,
     String? category,
@@ -211,15 +177,10 @@ class ServiceRequestModel {
     DateTime? createdAt,
     DateTime? updatedAt,
     Object? latestAnalysis = _sentinel,
-    Object? completionRecord = _sentinel,
-    bool? hasFeedback,
-    Object? feedbackRating = _sentinel,
-    Object? feedbackComment = _sentinel,
     List<ServiceRequestClarificationModel>? clarifications,
   }) {
     return ServiceRequestModel(
       serviceRequestId: serviceRequestId ?? this.serviceRequestId,
-      serviceJobId: serviceJobId ?? this.serviceJobId,
       customerId: customerId ?? this.customerId,
       categoryHint: identical(categoryHint, _sentinel)
           ? this.categoryHint
@@ -244,16 +205,6 @@ class ServiceRequestModel {
       latestAnalysis: identical(latestAnalysis, _sentinel)
           ? this.latestAnalysis
           : latestAnalysis as ProblemAnalysisSummaryModel?,
-      completionRecord: identical(completionRecord, _sentinel)
-          ? this.completionRecord
-          : completionRecord as CompletionRecordModel?,
-      hasFeedback: hasFeedback ?? this.hasFeedback,
-      feedbackRating: identical(feedbackRating, _sentinel)
-          ? this.feedbackRating
-          : feedbackRating as int?,
-      feedbackComment: identical(feedbackComment, _sentinel)
-          ? this.feedbackComment
-          : feedbackComment as String?,
       clarifications: clarifications ?? this.clarifications,
     );
   }

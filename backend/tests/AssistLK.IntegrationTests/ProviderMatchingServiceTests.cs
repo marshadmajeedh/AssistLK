@@ -76,7 +76,7 @@ public class ProviderMatchingServiceTests
             return Task.FromResult(response);
         });
 
-        var httpClient = new HttpClient(handler) { BaseAddress = new Uri("http://localhost:8000") };
+        var httpClient = new HttpClient(handler) { BaseAddress = new Uri("http://localhost:8002") };
         var service = new ProviderMatchingService(httpClient, _loggerMock.Object);
 
         var request = new MatchStartRequest
@@ -128,7 +128,7 @@ public class ProviderMatchingServiceTests
             return Task.FromResult(response);
         });
 
-        var httpClient = new HttpClient(handler) { BaseAddress = new Uri("http://localhost:8000") };
+        var httpClient = new HttpClient(handler) { BaseAddress = new Uri("http://localhost:8002") };
         var service = new ProviderMatchingService(httpClient, _loggerMock.Object);
 
         var request = new MatchStartRequest
@@ -148,7 +148,7 @@ public class ProviderMatchingServiceTests
         // Arrange
         var handler = new TestHttpMessageHandler(_ => throw new TaskCanceledException("Request timed out."));
 
-        var httpClient = new HttpClient(handler) { BaseAddress = new Uri("http://localhost:8000") };
+        var httpClient = new HttpClient(handler) { BaseAddress = new Uri("http://localhost:8002") };
         var service = new ProviderMatchingService(httpClient, _loggerMock.Object);
 
         var request = new MatchStartRequest { Objective = "Plumbing repair" };
@@ -177,7 +177,7 @@ public class ProviderMatchingServiceTests
             return Task.FromResult(response);
         });
 
-        var httpClient = new HttpClient(handler) { BaseAddress = new Uri("http://localhost:8000") };
+        var httpClient = new HttpClient(handler) { BaseAddress = new Uri("http://localhost:8002") };
         var service = new ProviderMatchingService(httpClient, _loggerMock.Object);
 
         // Act
@@ -212,7 +212,7 @@ public class ProviderMatchingServiceTests
             return Task.FromResult(response);
         });
 
-        var httpClient = new HttpClient(handler) { BaseAddress = new Uri("http://localhost:8000") };
+        var httpClient = new HttpClient(handler) { BaseAddress = new Uri("http://localhost:8002") };
         var service = new ProviderMatchingService(httpClient, _loggerMock.Object);
 
         // Act
@@ -234,7 +234,7 @@ public class ProviderMatchingServiceTests
             return Task.FromResult(response);
         });
 
-        var httpClient = new HttpClient(handler) { BaseAddress = new Uri("http://localhost:8000") };
+        var httpClient = new HttpClient(handler) { BaseAddress = new Uri("http://localhost:8002") };
         var service = new ProviderMatchingService(httpClient, _loggerMock.Object);
 
         // Act & Assert
@@ -250,7 +250,7 @@ public class ProviderMatchingServiceTests
         // Arrange
         var handler = new TestHttpMessageHandler(_ => throw new TaskCanceledException("Timeout"));
 
-        var httpClient = new HttpClient(handler) { BaseAddress = new Uri("http://localhost:8000") };
+        var httpClient = new HttpClient(handler) { BaseAddress = new Uri("http://localhost:8002") };
         var service = new ProviderMatchingService(httpClient, _loggerMock.Object);
 
         // Act & Assert

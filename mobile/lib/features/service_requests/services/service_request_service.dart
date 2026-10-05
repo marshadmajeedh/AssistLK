@@ -2,7 +2,6 @@ import 'dart:async';
 import 'dart:typed_data';
 
 import 'package:dio/dio.dart';
-import 'package:image_picker/image_picker.dart';
 
 import '../../../core/api/api_client.dart';
 import '../models/create_service_request_dto.dart';
@@ -180,7 +179,6 @@ class ServiceRequestService {
     );
   }
 
-  /// Service Request Analysis Endpoint
   Future<ProblemUnderstandingResultModel> analyze(String id) async {
     final response = await apiClient.client.post(
       '/service-requests/$id/analyze',
@@ -193,76 +191,6 @@ class ServiceRequestService {
     return ProblemUnderstandingResultModel.fromJson(
       Map<String, dynamic>.from(response.data as Map),
     );
-  }
-
-  /// FastAPI Agent 4 Validation Route එකට අදාළ Call එක
-  Future<Map<String, dynamic>> validateTransition({
-    required String jobId,
-    required String currentStatus,
-    required String targetStatus,
-    required double elapsedMinutes,
-    String note = '',
-  }) async {
-    final response = await apiClient.client.post(
-      '/validation/validate-status',
-      data: {
-        'job_id': jobId,
-        'current_status': currentStatus,
-        'target_status': targetStatus,
-        'elapsed_minutes': elapsedMinutes.round(),
-        'note': note,
-      },
-      options: Options(
-        receiveTimeout: const Duration(seconds: 90),
-        sendTimeout: const Duration(seconds: 30),
-      ),
-    );
-
-    return Map<String, dynamic>.from(response.data as Map);
-  }
-
-  Future<Map<String, dynamic>> updateRequestStatusToCompleted(
-    String jobId, {
-    double timeElapsedMinutes = 0,
-    String notes = 'Work completed',
-    XFile? proofOfWorkImage,
-  }) async {
-    final formData = FormData.fromMap({
-      'notes': notes,
-      'timeElapsedMinutes': timeElapsedMinutes,
-    });
-
-    if (proofOfWorkImage != null) {
-      formData.files.add(
-        MapEntry(
-          'proofOfWorkImage',
-          MultipartFile.fromBytes(
-            await proofOfWorkImage.readAsBytes(),
-            filename: proofOfWorkImage.name,
-          ),
-        ),
-      );
-    }
-
-    final response = await apiClient.client.put(
-      '/service-jobs/$jobId/complete',
-      data: formData,
-    );
-
-    return Map<String, dynamic>.from(response.data as Map);
-  }
-
-  Future<Map<String, dynamic>> analyzeSentiment(String feedbackText) async {
-    final response = await apiClient.client.post(
-      '/validation/analyze-sentiment',
-      data: {'feedback_text': feedbackText},
-      options: Options(
-        receiveTimeout: const Duration(seconds: 90),
-        sendTimeout: const Duration(seconds: 30),
-      ),
-    );
-
-    return Map<String, dynamic>.from(response.data as Map);
   }
 
   Future<ServiceRequestModel> markReadyForMatching(String id) async {
@@ -297,10 +225,6 @@ class ServiceRequestService {
   String getErrorMessage(Object error) {
     if (error is DioException) {
       final data = error.response?.data;
-
-      if (error.response?.statusCode == 500) {
-        return 'The server failed to process the request. Check the API logs.';
-      }
 
       if (data is Map && data['message'] != null) {
         return data['message'].toString();
@@ -369,18 +293,18 @@ class ServiceRequestService {
       }
 
       if (error.response?.statusCode == 400) {
-        return 'Invalid validation request details.';
+        return 'Invalid analysis request details.';
       }
 
       if (error.response?.statusCode == 404) {
-        return 'Validation endpoint not found (404).';
+        return 'Service request not found.';
       }
 
       if (error.response?.statusCode == 403) {
-        return 'You do not have permission to perform this action.';
+        return 'You do not have permission to analyze this request.';
       }
     }
 
-    return 'Validation could not be completed. Please try again.';
+    return 'Analysis could not be completed. Please try again.';
   }
 }

@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import React, { useState, useEffect } from "react";
 import { getVerificationQueue, verifyProvider, getCertificateUrl } from "./providersApi";
 import LoadingSpinner from "../../shared/components/LoadingSpinner";
 import ErrorMessage from "../../shared/components/ErrorMessage";
@@ -89,24 +89,9 @@ function ProviderVerificationQueue() {
       // Pass enum name string matching backend serialization
       const status = isApproved ? "Verified" : "Rejected";
       await verifyProvider(providerId, status);
-      await fetchQueue();
+      setProviders((prev) => prev.filter((p) => p.providerId !== providerId));
     } catch (err) {
-      console.error("Provider verification action failed", {
-        providerId,
-        isApproved,
-        responseStatus: err.response?.status,
-        responseData: err.response?.data,
-        error: err,
-      });
-
-      const errorMessage =
-        err.response?.data?.message ||
-        err.response?.data?.title ||
-        Object.values(err.response?.data?.errors || {}).flat().join(", ") ||
-        err.message ||
-        "An unexpected error occurred";
-
-      alert(`Action failed: ${errorMessage}`);
+      alert(`Action failed: ${err.response?.data?.message || err.message}`);
     } finally {
       setProcessingId(null);
     }

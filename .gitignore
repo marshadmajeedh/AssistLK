@@ -2,25 +2,14 @@
 .env
 .env.*
 !.env.example
-*.env
-.env.local
 *.key
 *.pem
 secrets.json
-**/secrets.json
 appsettings.Development.json
-**/appsettings.Development.json
-appsettings.json
-**/appsettings.json
-appsettings.Local.json
-**/appsettings.Local.json
-appsettings.Production.json
-**/appsettings.Production.json
 
 # ---------------- .NET ----------------
 **/bin/
 **/obj/
-build-validation/
 .vs/
 *.user
 *.suo
@@ -74,11 +63,6 @@ Thumbs.db
 
 # ---------------- Logs / temp ----------------
 *.log
-*.db
-*.sqlite
-*.sqlite3
-*.mdf
-*.ldf
 logs/
 tmp/
 temp/

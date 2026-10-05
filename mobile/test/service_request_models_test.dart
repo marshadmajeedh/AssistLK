@@ -1,6 +1,5 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:mobile/features/service_requests/models/canonical_service_category.dart';
-import 'package:mobile/features/service_requests/models/completion_record_model.dart';
 import 'package:mobile/features/service_requests/models/create_service_request_dto.dart';
 import 'package:mobile/features/service_requests/models/problem_analysis_summary_model.dart';
 import 'package:mobile/features/service_requests/models/problem_understanding_result_model.dart';
@@ -49,48 +48,6 @@ void main() {
   });
 
   group('ServiceRequestModel', () {
-    test('parses completion record proof of work and summary notes', () {
-      final model = ServiceRequestModel.fromJson({
-        'serviceRequestId': 'req-complete',
-        'customerId': 'cust-1',
-        'category': 'Electrical',
-        'description': 'Completed repair',
-        'locationText': 'Colombo',
-        'urgency': 'Medium',
-        'status': 'Completed',
-        'completionRecord': {
-          'proofOfWorkImageUrl': null,
-          'workSummary': 'Replaced the damaged breaker.',
-        },
-      });
-
-      expect(model.completionRecord, isA<CompletionRecordModel>());
-      expect(model.completionRecord!.proofOfWorkImageUrl, isNull);
-      expect(
-        model.completionRecord!.summaryNotes,
-        'Replaced the damaged breaker.',
-      );
-    });
-
-    test('parses submitted feedback state', () {
-      final model = ServiceRequestModel.fromJson({
-        'serviceRequestId': 'req-reviewed',
-        'customerId': 'cust-1',
-        'category': 'Electrical',
-        'description': 'Completed repair',
-        'locationText': 'Colombo',
-        'urgency': 'Medium',
-        'status': 'Completed',
-        'hasFeedback': true,
-        'feedbackRating': 4,
-        'feedbackComment': 'Good work.',
-      });
-
-      expect(model.hasFeedback, isTrue);
-      expect(model.feedbackRating, 4);
-      expect(model.feedbackComment, 'Good work.');
-    });
-
     test('parses json from backend response', () {
       final json = {
         'serviceRequestId': 'req-123',

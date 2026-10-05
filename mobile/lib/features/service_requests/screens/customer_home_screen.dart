@@ -13,8 +13,6 @@ import '../../../../shared/widgets/empty_state_card.dart';
 import '../../../../shared/widgets/section_header.dart';
 import '../../auth/providers/auth_provider.dart';
 import '../../customer/widgets/home_location_banner.dart';
-import '../../tracking/customer_job_tracking_screen.dart';
-import '../models/service_request_status.dart';
 import '../navigation/open_create_service_request.dart';
 import '../providers/service_request_provider.dart';
 import '../widgets/service_category_shortcuts.dart';
@@ -124,51 +122,6 @@ class CustomerHomeScreen extends StatelessWidget {
             AppButton(
               text: 'Create Service Request',
               onPressed: () => openCreateServiceRequest(context),
-            ),
-            // TODO: Remove after Component 4 navigation is finalized
-            OutlinedButton.icon(
-              icon: const Icon(Icons.location_on),
-              label: const Text('Test C4 (Tracking)'),
-              onPressed: () {
-                final activeRequest = requests.requests
-                    .where(
-                      (request) =>
-                          request.serviceJobId != null &&
-                          request.latitude != null &&
-                          request.longitude != null &&
-                          request.status != ServiceRequestStatus.completed &&
-                          request.status != ServiceRequestStatus.cancelled,
-                    )
-                    .toList()
-                  ..sort((a, b) => b.updatedAt.compareTo(a.updatedAt));
-
-                if (activeRequest.isEmpty) {
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(
-                      content: Text('No active service jobs found to track'),
-                    ),
-                  );
-                  return;
-                }
-
-                final request = activeRequest.first;
-                Navigator.of(context).push(
-                  MaterialPageRoute<void>(
-                    builder: (_) => CustomerJobTrackingScreen(
-                      jobId: request.serviceJobId!,
-                      status: request.jobStatus ?? request.status.toJson(),
-                      destinationLatitude: request.latitude!,
-                      destinationLongitude: request.longitude!,
-                      completionImageUrl:
-                          request.completionRecord?.proofOfWorkImageUrl,
-                      completionSummary: request.completionRecord?.summaryNotes,
-                      hasFeedback: request.hasFeedback,
-                      feedbackRating: request.feedbackRating,
-                      feedbackComment: request.feedbackComment,
-                    ),
-                  ),
-                );
-              },
             ),
             const SizedBox(height: AppSpacing.lg),
             const SectionHeader(title: 'Explore services'),

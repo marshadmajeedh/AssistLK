@@ -1,43 +1,39 @@
-using AssistLK.Agents;
 using AssistLK.Agents.Abstractions;
 using AssistLK.Agents.Adapters;
 using AssistLK.Agents.Clients;
 using AssistLK.Agents.Configuration;
 using AssistLK.Agents.Core;
 using AssistLK.Agents.Tools;
-using AssistLK.Api.Authentication;
 using AssistLK.Api.Middleware;
 using AssistLK.Api.Seed;
 using AssistLK.Infrastructure;
 using System.Text;
 using System.Text.Json.Serialization;
-using AssistLK.Application.Interfaces;
+using AssistLK.Api.Authentication;
 using AssistLK.Application.Auth;
+using AssistLK.Application.Interfaces;
 using AssistLK.Application.ServiceRequests;
 using AssistLK.Application.Services;
 using AssistLK.Application.Services.Auth;
 using AssistLK.Application.Quotations.DTOs;
 using AssistLK.Api.Features.ServiceRequests;
 using AssistLK.Domain.Entities;
-using AssistLK.Infrastructure.Data;
-using dotenv.net;
+using AssistLK.Api.Hubs;
 using FluentValidation;
 using FluentValidation.AspNetCore;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
-using AssistLK.Api.Hubs;
 using Microsoft.AspNetCore.Identity;
-using Microsoft.EntityFrameworkCore;
 using Microsoft.IdentityModel.Tokens;
 using Microsoft.OpenApi.Models;
 using Microsoft.AspNetCore.RateLimiting;
 using System.Threading.RateLimiting;
+using dotenv.net;
 using AssistLK.Infrastructure.Repositories;
 
 // Load local .env configuration into environment variables before builder initialization
 Program.LoadDotEnv();
 
 var builder = WebApplication.CreateBuilder(args);
-builder.Configuration.AddEnvironmentVariables();
 
 
 // -----------------------------
@@ -103,19 +99,8 @@ builder.Services.AddSingleton<AssistLK.Application.Attachments.IServiceRequestAt
     return new AssistLK.Infrastructure.Attachments.PrivateFileAttachmentStorage(
         options.Resolve(environment.ContentRootPath, environment.WebRootPath));
 });
-
-// DbContext Registration (PostgreSQL / Npgsql)
-builder.Services.AddDbContext<ApplicationDbContext>(options =>
-    options.UseNpgsql(connectionString, npgsqlOptions =>
-        npgsqlOptions.EnableRetryOnFailure(
-            maxRetryCount: 5,
-            maxRetryDelay: TimeSpan.FromSeconds(10),
-            errorCodesToAdd: null)));
-
-builder.Services.AddScoped<IServiceJobsDbContext>(
-    serviceProvider => serviceProvider.GetRequiredService<ApplicationDbContext>());
-builder.Services.AddScoped<IProviderProfileDbContext>(
-    serviceProvider => serviceProvider.GetRequiredService<AssistLKDbContext>());
+builder.Services.AddScoped<FeedbackApplicationService>();
+builder.Services.AddSignalR();
 
 builder.Services
     .AddControllers()
@@ -126,7 +111,6 @@ builder.Services
                 allowIntegerValues: false));
     });
 
-builder.Services.AddSignalR();
 builder.Services
     .AddFluentValidationAutoValidation()
     .AddFluentValidationClientsideAdapters()
@@ -144,8 +128,6 @@ builder.Services.AddScoped<
 builder.Services.AddScoped<
     IServiceRequestService,
     ServiceRequestService>();
-
-builder.Services.AddScoped<FeedbackApplicationService>();
 
 builder.Services.AddScoped<
     IJwtTokenService,
@@ -172,9 +154,6 @@ else
 // -----------------------------
 // Agent Infrastructure
 // -----------------------------
-
-// Agents Project Services Registration (Custom Assistant Agent DI)
-builder.Services.AddAgentServices();
 
 builder.Services.AddScoped<AgentWorkflowService>();
 builder.Services.AddScoped<AgentExecutionService>();
@@ -205,24 +184,13 @@ builder.Services.AddSingleton(sp =>
     return options;
 });
 
-// External Python Agent Client (Agent 1)
+// External Python Agent Client
 builder.Services.AddHttpClient<IProblemUnderstandingClient, ProblemUnderstandingHttpClient>((sp, client) =>
 {
     var options = sp.GetRequiredService<AgentServicesOptions>();
     var baseUrl = !string.IsNullOrWhiteSpace(options.ProblemUnderstandingUrl)
         ? options.ProblemUnderstandingUrl.TrimEnd('/')
         : "http://127.0.0.1:8001";
-    client.BaseAddress = new Uri(baseUrl);
-    client.Timeout = TimeSpan.FromSeconds(options.TimeoutSeconds > 0 ? options.TimeoutSeconds : 45);
-});
-
-// 🆕 Agent 4 (Validation & Safety Agent) HttpClient Registration
-builder.Services.AddHttpClient<ValidationSafetyAgent>((sp, client) =>
-{
-    var options = sp.GetRequiredService<AgentServicesOptions>();
-    var baseUrl = !string.IsNullOrWhiteSpace(options.TrackingValidationUrl)
-        ? options.TrackingValidationUrl.TrimEnd('/')
-        : "http://127.0.0.1:8003";
     client.BaseAddress = new Uri(baseUrl);
     client.Timeout = TimeSpan.FromSeconds(options.TimeoutSeconds > 0 ? options.TimeoutSeconds : 45);
 });
@@ -243,6 +211,7 @@ builder.Services.AddHttpClient<AssistLK.Application.Services.Providers.IProvider
 });
 builder.Services.AddScoped<AssistLK.Application.Services.Providers.IProviderMatchingCoordinator, AssistLK.Application.Services.Providers.ProviderMatchingCoordinator>();
 builder.Services.AddHostedService<AssistLK.Api.Features.Providers.ProviderMatchingBackgroundWorker>();
+
 
 builder.Services.AddScoped<ExternalProblemUnderstandingAgentAdapter>();
 
@@ -557,10 +526,7 @@ if (!Directory.Exists(uploadsPath))
 
 app.UseCors("AssistLKClients");
 
-if (!app.Environment.IsDevelopment())
-{
-    app.UseHttpsRedirection();
-}
+app.UseHttpsRedirection();
 
 app.UseStaticFiles();
 

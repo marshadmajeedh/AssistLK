@@ -87,23 +87,4 @@ public class Component1MonitoringTests
         Assert.Contains(metrics, m => m.WorkflowId == wf1);
         Assert.Contains(metrics, m => m.WorkflowId == wf2);
     }
-
-    [Fact]
-    public async Task MonitoringService_RecordsTrackingValidationAgent()
-    {
-        await using var db = CreateDb();
-        var monitoring = new AgentMonitoringService(db);
-
-        await monitoring.RecordAsync(
-            Guid.NewGuid(),
-            Guid.NewGuid(),
-            "TrackingValidationAgent",
-            "Completed",
-            75,
-            0);
-
-        var metric = await db.AgentExecutionMetrics.SingleAsync();
-        Assert.Equal("TrackingValidationAgent", metric.AgentName);
-        Assert.Equal("Completed", metric.Status);
-    }
 }

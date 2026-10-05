@@ -19,7 +19,6 @@ import PlaceholderPage from "../../shared/components/PlaceholderPage";
 import AdminDashboardPage from "../../features/admin/pages/AdminDashboardPage";
 import AdminServiceRequestListPage from "../../features/admin/pages/AdminServiceRequestListPage";
 import AiWorkflowsPage from "../../features/aiWorkflows/pages/AiWorkflowsPage";
-import ServiceTrackingPage from "../../features/serviceTracking/pages/ServiceTrackingPage";
 import ProvidersDashboardPage from "../../features/providers/ProvidersDashboardPage";
 
 function RootRedirect() {
@@ -86,7 +85,7 @@ function AppRouter() {
 						<Route
 							path="/service-tracking"
 							element={
-								<ServiceTrackingPage />
+								<PlaceholderPage title="Service Tracking" />
 							}
 						/>
 

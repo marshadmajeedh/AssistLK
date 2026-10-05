@@ -22,7 +22,7 @@ public class VisualEvidencePostgreSqlTests(PostgreSqlTestFixture fixture) : Post
             db.Add(new ServiceRequestAttachment { Id = photo, ServiceRequestId = id, Slot = 1,
                 StorageKey = Guid.NewGuid().ToString("N") + ".jpg", ContentHash = new string('a', 64), FileSizeBytes = 100, Width = 80, Height = 40 });
             await db.SaveChangesAsync();
-            var service = new ServiceRequestService(new ServiceRequestRepository(db), new ProblemAnalysisRepository(db), new TestDoubles.InMemoryServiceJobRepository());
+            var service = new ServiceRequestService(new ServiceRequestRepository(db), new ProblemAnalysisRepository(db));
             await service.ApplyProblemAnalysisResultAsync(new()
             {
                 ServiceRequestId = id, EvidenceRevision = 1, SuppliedAttachmentIds = [photo],

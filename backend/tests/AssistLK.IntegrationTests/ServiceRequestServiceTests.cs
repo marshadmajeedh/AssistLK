@@ -459,8 +459,7 @@ public class ServiceRequestServiceTests
         return (
             new ServiceRequestService(
                 new InMemoryServiceRequestRepository(requests, analyses),
-                new InMemoryProblemAnalysisRepository(analyses),
-                new TestDoubles.InMemoryServiceJobRepository()),
+                new InMemoryProblemAnalysisRepository(analyses)),
             requests,
             analyses);
     }

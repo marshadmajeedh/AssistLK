@@ -1,3 +1,5 @@
+cd C:\Users\ASUS\Desktop\AssistLK\agent-services\quotation-booking-agent
+@"
 # Local env files
 .env
 .env.local
@@ -9,6 +11,6 @@ __pycache__/
 *.pyc
 .venv/
 .pytest_cache/
+"@ | Out-File -Encoding utf8 .gitignore
 
 quotation_workflow.sqlite
-*.sqlite*

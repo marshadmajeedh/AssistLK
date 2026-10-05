@@ -23,7 +23,6 @@ namespace AssistLK.Api.Controllers
     [Route("api/service-jobs")]
     public class ServiceJobsController : ControllerBase
     {
-        private readonly ApplicationDbContext _applicationDbContext;
         private readonly AssistLKDbContext _assistLkDbContext;
         private readonly HttpClient _httpClient;
         private readonly IProofOfWorkStorage _proofOfWorkStorage;
@@ -34,8 +33,7 @@ namespace AssistLK.Api.Controllers
         private readonly ILogger<ServiceJobsController> _logger;
 
         public ServiceJobsController(
-            ApplicationDbContext context,
-            AssistLKDbContext serviceRequestContext,
+            AssistLKDbContext context,
             HttpClient httpClient,
             IProofOfWorkStorage proofOfWorkStorage,
             IHubContext<TrackingHub> trackingHubContext,
@@ -44,8 +42,7 @@ namespace AssistLK.Api.Controllers
             AgentMonitoringService agentMonitoringService,
             ILogger<ServiceJobsController> logger)
         {
-            _applicationDbContext = context;
-            _assistLkDbContext = serviceRequestContext;
+            _assistLkDbContext = context;
             _httpClient = httpClient;
             _proofOfWorkStorage = proofOfWorkStorage;
             _trackingHubContext = trackingHubContext;
@@ -61,7 +58,7 @@ namespace AssistLK.Api.Controllers
         {
             try
             {
-                var job = await _applicationDbContext.ServiceJobs.FindAsync(id);
+                var job = await _assistLkDbContext.ServiceJobs.FindAsync(id);
                 if (job == null)
                     return NotFound(new { message = "Job non-existent" });
 
@@ -133,11 +130,11 @@ namespace AssistLK.Api.Controllers
                     ChangedAt = DateTime.UtcNow
                 };
 
-                _applicationDbContext.ServiceStatusHistories.Add(historyRecord);
+                _assistLkDbContext.ServiceStatusHistories.Add(historyRecord);
 
                 if (newStatusEnum == ServiceJobStatus.Completed)
                 {
-                    var completion = await _applicationDbContext.CompletionRecords
+                    var completion = await _assistLkDbContext.CompletionRecords
                         .FirstOrDefaultAsync(record => record.ServiceJobId == id);
 
                     if (completion == null)
@@ -148,7 +145,7 @@ namespace AssistLK.Api.Controllers
                             ServiceJobId = id,
                             CompletedAt = DateTime.UtcNow
                         };
-                        _applicationDbContext.CompletionRecords.Add(completion);
+                        _assistLkDbContext.CompletionRecords.Add(completion);
                     }
 
                     var completedAt = DateTime.UtcNow;
@@ -173,7 +170,7 @@ namespace AssistLK.Api.Controllers
                     }
                 }
 
-                await _applicationDbContext.SaveChangesAsync();
+                await _assistLkDbContext.SaveChangesAsync();
 
                 if (serviceRequest != null)
                 {
@@ -303,7 +300,6 @@ namespace AssistLK.Api.Controllers
         {
             return jobStatus switch
             {
-                ServiceJobStatus.Completed => ServiceRequestStatus.Completed,
                 ServiceJobStatus.Cancelled => ServiceRequestStatus.Cancelled,
                 _ => currentStatus
             };
@@ -320,7 +316,7 @@ namespace AssistLK.Api.Controllers
         {
             try
             {
-                var job = await _applicationDbContext.ServiceJobs
+                var job = await _assistLkDbContext.ServiceJobs
                     .FirstOrDefaultAsync(item => item.Id == id, cancellationToken);
                 if (job == null)
                 {
@@ -394,7 +390,7 @@ namespace AssistLK.Api.Controllers
                 var oldStatus = job.Status;
                 job.Status = ServiceJobStatus.Completed;
                 job.CompletedAt = DateTime.UtcNow;
-                _applicationDbContext.ServiceStatusHistories.Add(new ServiceStatusHistory
+                _assistLkDbContext.ServiceStatusHistories.Add(new ServiceStatusHistory
                 {
                     Id = Guid.NewGuid(),
                     ServiceJobId = id,
@@ -406,7 +402,7 @@ namespace AssistLK.Api.Controllers
                     ChangedAt = DateTime.UtcNow
                 });
 
-                var completion = await _applicationDbContext.CompletionRecords
+                var completion = await _assistLkDbContext.CompletionRecords
                     .FirstOrDefaultAsync(record => record.ServiceJobId == id, cancellationToken);
                 if (completion == null)
                 {
@@ -415,7 +411,7 @@ namespace AssistLK.Api.Controllers
                         Id = Guid.NewGuid(),
                         ServiceJobId = id
                     };
-                    _applicationDbContext.CompletionRecords.Add(completion);
+                    _assistLkDbContext.CompletionRecords.Add(completion);
                 }
 
                 completion.WorkSummary = string.IsNullOrWhiteSpace(form.Notes)
@@ -425,7 +421,7 @@ namespace AssistLK.Api.Controllers
                 completion.AdditionalCost = 0;
                 completion.CompletedAt = DateTime.UtcNow;
 
-                await _applicationDbContext.SaveChangesAsync(cancellationToken);
+                await _assistLkDbContext.SaveChangesAsync(cancellationToken);
 
                 return Ok(new
                 {
@@ -472,11 +468,11 @@ namespace AssistLK.Api.Controllers
         {
             try
             {
-                var job = await _applicationDbContext.ServiceJobs
+                var job = await _assistLkDbContext.ServiceJobs
                     .FindAsync([id], cancellationToken);
                 if (job == null)
                 {
-                    return NotFound(new { Message = "ServiceJob sapadla nahi." });
+                    return NotFound(new { Message = "Service job was not found." });
                 }
 
                 var customerIdClaim = User.FindFirstValue(ClaimTypes.NameIdentifier);
@@ -525,46 +521,23 @@ namespace AssistLK.Api.Controllers
                     // Fallback to rating validation if sentiment agent is unreachable
                 }
 
-                var strategy = _applicationDbContext.Database.CreateExecutionStrategy();
-                var result = await strategy.ExecuteAsync(async () =>
-                {
-                    await using var transaction =
-                        await _applicationDbContext.Database.BeginTransactionAsync(cancellationToken);
-                    var applicationConnection = _applicationDbContext.Database.GetDbConnection();
-                    if (!ReferenceEquals(_assistLkDbContext.Database.GetDbConnection(), applicationConnection))
-                    {
-                        _assistLkDbContext.Database.SetDbConnection(applicationConnection);
-                    }
-                    await using var sharedTransaction =
-                        await _assistLkDbContext.Database.UseTransactionAsync(
-                        transaction.GetDbTransaction(),
-                        cancellationToken);
-
-                    var submissionResult = await _feedbackApplicationService.SubmitAsync(
-                        id,
-                        new SubmitFeedbackCommand(
-                            customerId,
-                            dto.Rating,
-                            dto.Comment,
-                            sentimentResult.ShouldRouteToComplaint || dto.Rating <= 2,
-                            sentimentResult.Sentiment),
-                        cancellationToken);
-
-                    await SyncProviderRatingAsync(
-                        job,
-                        cancellationToken);
-
-                    await transaction.CommitAsync(cancellationToken);
-                    return submissionResult;
-                });
+                var submissionResult = await _feedbackApplicationService.SubmitAsync(
+                    id,
+                    new SubmitFeedbackCommand(
+                        customerId,
+                        dto.Rating,
+                        dto.Comment,
+                        sentimentResult.ShouldRouteToComplaint || dto.Rating <= 2,
+                        sentimentResult.Sentiment),
+                    cancellationToken);
 
                 return Ok(new
                 {
-                    result.FeedbackId,
-                    result.AutoEscalatedToComplaint,
-                    result.ComplaintId,
-                    result.Sentiment,
-                    result.Message
+                    submissionResult.FeedbackId,
+                    submissionResult.AutoEscalatedToComplaint,
+                    submissionResult.ComplaintId,
+                    submissionResult.Sentiment,
+                    submissionResult.Message
                 });
             }
             catch (DuplicateFeedbackException ex)
@@ -592,42 +565,6 @@ namespace AssistLK.Api.Controllers
                 _logger.LogError(ex, "Error submitting feedback for service job {ServiceJobId}", id);
                 return StatusCode(500, new { message = "Error submitting feedback", error = ex.Message });
             }
-        }
-
-        private async Task SyncProviderRatingAsync(
-            ServiceJob job,
-            CancellationToken cancellationToken)
-        {
-            if (!job.ProviderId.HasValue)
-            {
-                return;
-            }
-
-            var provider = await _assistLkDbContext.ProviderProfiles
-                .FirstOrDefaultAsync(
-                    profile => profile.Id == job.ProviderId.Value,
-                    cancellationToken);
-
-            if (provider == null)
-            {
-                return;
-            }
-
-            var providerRatings = _applicationDbContext.Feedbacks
-                .Join(
-                    _applicationDbContext.ServiceJobs,
-                    feedback => feedback.ServiceJobId,
-                    serviceJob => serviceJob.Id,
-                    (feedback, serviceJob) => new { feedback, serviceJob })
-                .Where(item => item.serviceJob.ProviderId == job.ProviderId.Value)
-                .Select(item => item.feedback.Rating);
-
-            provider.TotalReviews = await providerRatings.CountAsync(cancellationToken);
-            provider.Rating = Math.Round(
-                await providerRatings.Select(rating => (decimal)rating).AverageAsync(cancellationToken),
-                2);
-
-            await _assistLkDbContext.SaveChangesAsync(cancellationToken);
         }
 
         private static bool IsUniqueConstraintViolation(DbUpdateException exception)

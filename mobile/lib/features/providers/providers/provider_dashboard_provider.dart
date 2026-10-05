@@ -34,14 +34,12 @@ class ProviderDashboardProvider extends ChangeNotifier {
   String? _error;
   bool _isVoiceAlertEnabled = true;
   double? _liveDistanceKm;
-  double _averageRating = 0.0;
-  int _totalReviews = 0;
 
   // Stores the real job dispatched from your Python/C# backend
   Map<String, dynamic>? activeJobMatch;
-  final Set<String> _locallyCompletedJobIds = {};
   String? _lastAnnouncedJobId;
   String? _dismissedActiveJobId;
+  final Set<String> _locallyCompletedJobIds = <String>{};
   List<latlong.LatLng> routePoints = [];
 
   List<Map<String, dynamic>> _inAppNotifications = [];
@@ -77,9 +75,6 @@ class ProviderDashboardProvider extends ChangeNotifier {
   String get fullName => profile?['fullName']?.toString() ?? '';
   String get businessName => profile?['businessName']?.toString() ?? '';
   String get category => profile?['category']?.toString() ?? 'Plumbing';
-  double get averageRating => _averageRating;
-  int get totalReviews => _totalReviews;
-  double get rating => averageRating;
   List<dynamic> get skills => (profile?['skills'] as List<dynamic>?) ?? [];
   List<String> get categories {
     final list = skills
@@ -92,6 +87,7 @@ class ProviderDashboardProvider extends ChangeNotifier {
     }
     return list;
   }
+  double get rating => (profile?['rating'] as num?)?.toDouble() ?? 0.0;
   int get totalCompletedJobs => (profile?['totalCompletedJobs'] as num?)?.toInt() ?? 0;
 
   String? _profileImagePath;
@@ -242,11 +238,6 @@ class ProviderDashboardProvider extends ChangeNotifier {
     try {
       final data = await providerService.getProfile();
       profile = data;
-
-      final num? averageRating =
-          data['averageRating'] as num? ?? data['rating'] as num?;
-      _averageRating = averageRating?.toDouble() ?? 0.0;
-      _totalReviews = (data['totalReviews'] as num?)?.toInt() ?? 0;
 
       try {
         final prefs = await SharedPreferences.getInstance();
@@ -550,28 +541,19 @@ class ProviderDashboardProvider extends ChangeNotifier {
       );
       if (response.statusCode == 200 && response.data != null) {
         final data = Map<String, dynamic>.from(response.data);
-        final jobId = data['jobId']?.toString();
-        if (jobId != null && _locallyCompletedJobIds.contains(jobId)) {
-          _clearJobState();
-          return;
-        }
-        if (jobId != null && jobId == _dismissedActiveJobId) {
-          _clearJobState();
-          return;
-        }
-
-        if (jobId != null && jobId != _dismissedActiveJobId) {
-          _dismissedActiveJobId = null;
-        }
-
         activeJobMatch = data;
         _updateLiveDistance();
 
-        final status =
-            data['status']?.toString() ?? data['matchStatus']?.toString();
-        if (jobId != null &&
-            jobId != _lastAnnouncedJobId &&
-            status != 'Accepted') {
+        final jobId = data['jobId']?.toString();
+        if (jobId != null && jobId == _dismissedActiveJobId) {
+          return;
+        }
+
+        if (jobId != null && _dismissedActiveJobId != null && jobId != _dismissedActiveJobId) {
+          _dismissedActiveJobId = null;
+        }
+        final status = data['status']?.toString();
+        if (jobId != null && jobId != _lastAnnouncedJobId && status != 'Accepted') {
           _lastAnnouncedJobId = jobId;
           unawaited(_announceJob(data));
 
@@ -588,11 +570,9 @@ class ProviderDashboardProvider extends ChangeNotifier {
 
         // Manage acceptance countdown timer for pending recommended dispatch
         if (status != 'Accepted') {
-          final int timeoutSec =
-              (data['timeoutSeconds'] as num?)?.toInt() ?? 60;
+          final int timeoutSec = (data['timeoutSeconds'] as num?)?.toInt() ?? 60;
           _totalTimeoutSeconds = timeoutSec;
-          final int remaining =
-              (data['remainingSeconds'] as num?)?.toInt() ?? timeoutSec;
+          final int remaining = (data['remainingSeconds'] as num?)?.toInt() ?? timeoutSec;
           _startAcceptCountdown(remaining, jobId);
         } else {
           _stopAcceptCountdown();
@@ -654,31 +634,27 @@ class ProviderDashboardProvider extends ChangeNotifier {
   Future<void> _announceJob(Map<String, dynamic> data) async {
     try {
       final category = data['category']?.toString() ?? 'Service Request';
-      final distance =
-          _liveDistanceKm?.toStringAsFixed(1) ??
+      final distance = _liveDistanceKm?.toStringAsFixed(1) ??
           data['distanceKm']?.toString() ??
           'unknown';
       final urgency = data['urgency']?.toString() ?? 'Standard';
-      final problemDesc =
-          (data['detectedProblem'] ??
-                  data['description'] ??
-                  'New service dispatch received.')
-              .toString();
+      final problemDesc = (data['detectedProblem'] ??
+              data['description'] ??
+              'New service dispatch received.')
+          .toString();
 
       if (kIsWeb) {
-        showWebNotification('New $category Job ($distance km)', problemDesc);
-      } else {
-        unawaited(
-          NotificationService().showJobAlertNotification(
-            id:
-                (data['jobId']?.hashCode ??
-                    DateTime.now().millisecondsSinceEpoch) &
-                0x7FFFFFFF,
-            title: '🚨 New $category Job ($distance km)',
-            body: '$problemDesc (Urgency: $urgency)',
-            payload: data['jobId']?.toString(),
-          ),
+        showWebNotification(
+          'New $category Job ($distance km)',
+          problemDesc,
         );
+      } else {
+        unawaited(NotificationService().showJobAlertNotification(
+          id: (data['jobId']?.hashCode ?? DateTime.now().millisecondsSinceEpoch) & 0x7FFFFFFF,
+          title: '🚨 New $category Job ($distance km)',
+          body: '$problemDesc (Urgency: $urgency)',
+          payload: data['jobId']?.toString(),
+        ));
       }
 
       if (_isVoiceAlertEnabled) {
@@ -722,13 +698,9 @@ class ProviderDashboardProvider extends ChangeNotifier {
 
   Future<void> _onDispatchTimedOut() async {
     try {
-      debugPrint(
-        'Job acceptance timer expired. Auto-declining and releasing to next provider.',
-      );
+      debugPrint('Job acceptance timer expired. Auto-declining and releasing to next provider.');
       final currentJobId = activeJobMatch?['jobId']?.toString();
-      final shortId = currentJobId != null && currentJobId.length > 8
-          ? currentJobId.substring(0, 8)
-          : (currentJobId ?? '');
+      final shortId = currentJobId != null && currentJobId.length > 8 ? currentJobId.substring(0, 8) : (currentJobId ?? '');
 
       _stopAcceptCountdown();
       activeJobMatch = null;
@@ -814,9 +786,7 @@ class ProviderDashboardProvider extends ChangeNotifier {
     final currentJobId = activeJobMatch?['jobId']?.toString();
     final shortId = currentJobId != null && currentJobId.length > 8 ? currentJobId.substring(0, 8) : (currentJobId ?? '');
     try {
-      await providerService.apiClient.client.post(
-        '/providers/active-dispatch/complete',
-      );
+      await providerService.apiClient.client.post('/providers/active-dispatch/complete');
     } catch (e) {
       debugPrint('Error marking dispatch completed on backend: $e');
     }

@@ -1,9 +1,6 @@
 using System;
 using System.Collections.Generic;
-using System.Data.Common;
-using System.IO;
 using System.Linq;
-using System.Net.Sockets;
 using System.Threading;
 using System.Threading.Tasks;
 using AssistLK.Application.Interfaces;
@@ -21,7 +18,6 @@ public class ProviderMatchingBackgroundWorker : BackgroundService
     private readonly IServiceScopeFactory _scopeFactory;
     private readonly ILogger<ProviderMatchingBackgroundWorker> _logger;
     private readonly TimeSpan _pollInterval = TimeSpan.FromSeconds(5);
-    private const int MaxTransientRetries = 3;
 
     public ProviderMatchingBackgroundWorker(
         IServiceScopeFactory scopeFactory,
@@ -62,16 +58,13 @@ public class ProviderMatchingBackgroundWorker : BackgroundService
         // 60-second dispatch acceptance timeout threshold
         var timeoutLimit = DateTime.UtcNow.AddSeconds(-60);
 
-        var timedOutCandidates = await ExecuteWithTransientRetryAsync(
-            () => dbContext.MatchedCandidates
-                .Include(m => m.MatchingExecution)
-                .Where(m => m.Status == MatchedCandidateStatus.Recommended
-                         && m.MatchingExecution != null
-                         && m.MatchingExecution.Status == MatchingExecutionStatus.Completed
-                         && ((m.MatchingExecution.CompletedAt ?? m.CreatedAt) < timeoutLimit))
-                .ToListAsync(stoppingToken),
-            stoppingToken,
-            "loading timed-out provider matches");
+        var timedOutCandidates = await dbContext.MatchedCandidates
+            .Include(m => m.MatchingExecution)
+            .Where(m => m.Status == MatchedCandidateStatus.Recommended
+                     && m.MatchingExecution != null
+                     && m.MatchingExecution.Status == MatchingExecutionStatus.Completed
+                     && ((m.MatchingExecution.CompletedAt ?? m.CreatedAt) < timeoutLimit))
+            .ToListAsync(stoppingToken);
 
         if (timedOutCandidates.Count == 0) return;
 
@@ -92,66 +85,24 @@ public class ProviderMatchingBackgroundWorker : BackgroundService
             candidate.MatchingExecution.Status = MatchingExecutionStatus.Failed;
             candidate.MatchingExecution.CompletedAt = DateTime.UtcNow;
 
-            await ExecuteWithTransientRetryAsync(
-                () => dbContext.SaveChangesAsync(stoppingToken),
-                stoppingToken,
-                $"saving timeout for provider match {candidate.Id}");
+            await dbContext.SaveChangesAsync(stoppingToken);
 
-            try
+            _ = Task.Run(async () =>
             {
-                using var innerScope = _scopeFactory.CreateScope();
-                var coordinator = innerScope.ServiceProvider.GetRequiredService<IProviderMatchingCoordinator>();
-                var result = await coordinator.ExecuteMatchForRequestAsync(
-                    serviceRequestId,
-                    stoppingToken,
-                    autoApprove: true);
-                _logger.LogInformation("Cascade re-matching following timeout for ServiceRequest {ServiceRequestId} concluded with status: {Status} (Success={Success}).",
-                    serviceRequestId, result.Status, result.Success);
-            }
-            catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested)
-            {
-                throw;
-            }
-            catch (Exception ex)
-            {
-                _logger.LogError(ex, "Failed to cascade re-match following timeout for ServiceRequest {ServiceRequestId}.", serviceRequestId);
-            }
+                try
+                {
+                    using var innerScope = _scopeFactory.CreateScope();
+                    var coordinator = innerScope.ServiceProvider.GetRequiredService<IProviderMatchingCoordinator>();
+                    var result = await coordinator.ExecuteMatchForRequestAsync(serviceRequestId, autoApprove: true);
+                    _logger.LogInformation("Cascade re-matching following timeout for ServiceRequest {ServiceRequestId} concluded with status: {Status} (Success={Success}).",
+                        serviceRequestId, result.Status, result.Success);
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogError(ex, "Failed to cascade re-match following timeout for ServiceRequest {ServiceRequestId}.", serviceRequestId);
+                }
+            });
         }
-    }
-
-    private async Task<T> ExecuteWithTransientRetryAsync<T>(
-        Func<Task<T>> operation,
-        CancellationToken stoppingToken,
-        string operationDescription)
-    {
-        for (var attempt = 1; ; attempt++)
-        {
-            try
-            {
-                return await operation();
-            }
-            catch (Exception ex) when (IsTransientDatabaseException(ex) && attempt < MaxTransientRetries)
-            {
-                var delay = TimeSpan.FromSeconds(Math.Pow(2, attempt));
-                _logger.LogWarning(ex,
-                    "Transient failure while {OperationDescription}. Retrying in {DelaySeconds} seconds (attempt {Attempt}/{MaxAttempts}).",
-                    operationDescription, delay.TotalSeconds, attempt, MaxTransientRetries);
-                await Task.Delay(delay, stoppingToken);
-            }
-        }
-    }
-
-    private static bool IsTransientDatabaseException(Exception exception)
-    {
-        for (var current = exception; current != null; current = current.InnerException)
-        {
-            if (current is SocketException || current is TimeoutException || current is IOException || current is DbException)
-            {
-                return true;
-            }
-        }
-
-        return false;
     }
 
     private async Task ProcessReadyRequestsAsync(CancellationToken stoppingToken)

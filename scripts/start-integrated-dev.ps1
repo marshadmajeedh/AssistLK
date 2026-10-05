@@ -364,7 +364,7 @@ if ($c2PortInUse) {
     $portInfo = Get-PortProcessDetails -Port $C2Port
     $pidStr = if ($portInfo) { "PID: $($portInfo.PID) ($($portInfo.ProcessName))" } else { "Unknown PID" }
     Write-Host "Port ${C2Port} is in use ($pidStr); verifying service identity..." -ForegroundColor DarkGray
-
+    
     $c2Probe = Get-C2Readiness -Url $c2OpenApiUrl
     if ($c2Probe.IsSuccess -and $c2Probe.IsExpectedAgent) {
         if ($ReuseAgents -or $ReuseC2) {
@@ -397,7 +397,7 @@ if ($c1PortInUse) {
     $portInfo = Get-PortProcessDetails -Port $C1Port
     $pidStr = if ($portInfo) { "PID: $($portInfo.PID) ($($portInfo.ProcessName))" } else { "Unknown PID" }
     Write-Host "Port ${C1Port} is in use ($pidStr); verifying service identity..." -ForegroundColor DarkGray
-
+    
     $c1Probe = Get-C1Health -Url $c1HealthUrl
     if ($c1Probe.IsSuccess -and $c1Probe.IsExpectedAgent) {
         if ($ReuseAgents -or $ReuseC1) {
@@ -429,7 +429,7 @@ $apiPortInUse = Test-PortInUse -Address "127.0.0.1" -Port $ApiPort
 if ($apiPortInUse) {
     $portInfo = Get-PortProcessDetails -Port $ApiPort
     $pidStr = if ($portInfo) { "PID: $($portInfo.PID) ($($portInfo.ProcessName))" } else { "Unknown PID" }
-
+    
     # Check if process is recognized as dotnet / AssistLK
     if ($portInfo -and ($portInfo.ProcessName -match "AssistLK|dotnet" -or $portInfo.CommandLine -like "*AssistLK*")) {
         Write-Host "Recognized existing AssistLK API process on port ${ApiPort} ($pidStr). Stopping for fresh launch..." -ForegroundColor Yellow

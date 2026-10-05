@@ -10,9 +10,7 @@ describe("agentMonitoringService", () => {
     const data = [{ id: "metric-1", status: "Completed" }];
     apiClient.get.mockResolvedValue({ data });
     expect(await service.getMetrics()).toBe(data);
-    expect(apiClient.get).toHaveBeenCalledExactlyOnceWith("/api/agent-monitoring", {
-      headers: { "Cache-Control": "no-cache" },
-    });
+    expect(apiClient.get).toHaveBeenCalledExactlyOnceWith("/api/agent-monitoring");
   });
   it("returns an empty response array", async () => {
     apiClient.get.mockResolvedValue({ data: [] });

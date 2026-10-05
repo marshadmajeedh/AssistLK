@@ -39,7 +39,7 @@ public class Component1EndToEndPostgreSqlTests : PostgreSqlIntegrationTestBase
 
         var requestRepo = new ServiceRequestRepository(context);
         var analysisRepo = new ProblemAnalysisRepository(context);
-        var requestService = new ServiceRequestService(requestRepo, analysisRepo, new TestDoubles.InMemoryServiceJobRepository());
+        var requestService = new ServiceRequestService(requestRepo, analysisRepo);
 
         return new ProblemUnderstandingWorkflowService(
             workflowService,
@@ -128,7 +128,7 @@ public class Component1EndToEndPostgreSqlTests : PostgreSqlIntegrationTestBase
             // 4. Mark ReadyForMatching and verify handoff
             var requestRepo = new ServiceRequestRepository(verifyContext);
             var analysisRepo = new ProblemAnalysisRepository(verifyContext);
-            var service = new ServiceRequestService(requestRepo, analysisRepo, new TestDoubles.InMemoryServiceJobRepository());
+            var service = new ServiceRequestService(requestRepo, analysisRepo);
 
             var readyResult = await service.MarkReadyForMatchingAsync(requestId, customer.Id);
             Assert.Equal(ServiceRequestStatus.ReadyForMatching, readyResult.Status);
@@ -228,7 +228,7 @@ public class Component1EndToEndPostgreSqlTests : PostgreSqlIntegrationTestBase
         {
             var requestRepo = new ServiceRequestRepository(updateContext);
             var analysisRepo = new ProblemAnalysisRepository(updateContext);
-            var requestService = new ServiceRequestService(requestRepo, analysisRepo, new TestDoubles.InMemoryServiceJobRepository());
+            var requestService = new ServiceRequestService(requestRepo, analysisRepo);
             await requestService.UpdateAsync(customer.Id, requestId, new AssistLK.Application.ServiceRequests.DTOs.UpdateServiceRequestRequest
             {
                 Description = "The refrigerator is warm and not cooling food",
@@ -282,7 +282,7 @@ public class Component1EndToEndPostgreSqlTests : PostgreSqlIntegrationTestBase
             Assert.True(mostRecent.Confidence >= 0.70m);
 
             // 6. Mark ReadyForMatching and verify matching handoff contract
-            var service = new ServiceRequestService(repo, analysisRepo, new TestDoubles.InMemoryServiceJobRepository());
+            var service = new ServiceRequestService(repo, analysisRepo);
             var readyResult = await service.MarkReadyForMatchingAsync(requestId, customer.Id);
             Assert.Equal(ServiceRequestStatus.ReadyForMatching, readyResult.Status);
 
@@ -338,7 +338,7 @@ public class Component1EndToEndPostgreSqlTests : PostgreSqlIntegrationTestBase
             // Also verify marking ready for matching succeeds
             var requestRepo = new ServiceRequestRepository(verifyContext);
             var analysisRepo = new ProblemAnalysisRepository(verifyContext);
-            var service = new ServiceRequestService(requestRepo, analysisRepo, new TestDoubles.InMemoryServiceJobRepository());
+            var service = new ServiceRequestService(requestRepo, analysisRepo);
             var readyResult = await service.MarkReadyForMatchingAsync(requestId, customer.Id);
             Assert.Equal(ServiceRequestStatus.ReadyForMatching, readyResult.Status);
         }

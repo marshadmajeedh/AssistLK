@@ -1,7 +1,6 @@
 using System.ComponentModel.DataAnnotations;
 using System.Security.Claims;
 using AssistLK.Application.Interfaces;
-using AssistLK.Api.DTOs.Providers;
 using AssistLK.Domain.Entities;
 using AssistLK.Domain.Enums;
 using AssistLK.Infrastructure.Data;
@@ -28,7 +27,6 @@ public static class ProviderCategories
 public class ProvidersController : ControllerBase
 {
     private readonly AssistLKDbContext _dbContext;
-    private readonly ApplicationDbContext _applicationDbContext;
     private readonly IServiceRequestRepository _serviceRequestRepository;
     private readonly ILogger<ProvidersController> _logger;
     private readonly IPasswordHasher<User> _passwordHasher;
@@ -37,7 +35,6 @@ public class ProvidersController : ControllerBase
 
     public ProvidersController(
         AssistLKDbContext dbContext,
-        ApplicationDbContext applicationDbContext,
         IServiceRequestRepository serviceRequestRepository,
         ILogger<ProvidersController> logger,
         IPasswordHasher<User> passwordHasher,
@@ -45,7 +42,6 @@ public class ProvidersController : ControllerBase
         IServiceScopeFactory scopeFactory)
     {
         _dbContext = dbContext;
-        _applicationDbContext = applicationDbContext;
         _serviceRequestRepository = serviceRequestRepository;
         _logger = logger;
         _passwordHasher = passwordHasher;
@@ -74,60 +70,31 @@ public class ProvidersController : ControllerBase
         var location = profile.Locations.OrderByDescending(l => l.UpdatedAt).FirstOrDefault();
         var primarySkill = profile.Skills.FirstOrDefault();
 
-        return Ok(MapProfile(profile, location, primarySkill));
-    }
-
-    /// <summary>
-    /// Public provider profile used by customer-facing provider details.
-    /// </summary>
-    [HttpGet("{id:guid}")]
-    public async Task<IActionResult> GetById(Guid id, CancellationToken cancellationToken)
-    {
-        var profile = await _dbContext.ProviderProfiles
-            .Include(p => p.User)
-            .Include(p => p.Skills)
-            .Include(p => p.Locations)
-            .FirstOrDefaultAsync(p => p.Id == id, cancellationToken);
-
-        if (profile == null) return NotFound("Provider profile not found.");
-
-        var location = profile.Locations.OrderByDescending(l => l.UpdatedAt).FirstOrDefault();
-        var primarySkill = profile.Skills.FirstOrDefault();
-
-        return Ok(MapProfile(profile, location, primarySkill));
-    }
-
-    private static ProviderProfileDto MapProfile(
-        ProviderProfile profile,
-        ProviderLocation? location,
-        ProviderSkill? primarySkill)
-    {
-        return new ProviderProfileDto
+        return Ok(new
         {
-            ProviderId = profile.Id,
-            FullName = profile.User?.FullName ?? string.Empty,
-            Email = profile.User?.Email ?? string.Empty,
-            PhoneNumber = profile.User?.PhoneNumber ?? string.Empty,
-            BusinessName = profile.BusinessName,
-            VerificationStatus = profile.VerificationStatus.ToString(),
-            AverageRating = profile.Rating,
-            TotalReviews = profile.TotalReviews,
-            TotalCompletedJobs = profile.TotalCompletedJobs,
-            IsOnline = profile.IsOnline,
-            Category = primarySkill?.Category ?? "Plumbing",
-            SkillName = primarySkill?.SkillName ?? string.Empty,
-            OperatingRadiusKm = location?.OperatingRadiusKm ?? 10.0m,
-            Latitude = location?.Latitude,
-            Longitude = location?.Longitude,
-            Skills = profile.Skills.Select(skill => new ProviderSkillDto
+            providerId = profile.Id,
+            fullName = profile.User?.FullName ?? string.Empty,
+            email = profile.User?.Email ?? string.Empty,
+            phoneNumber = profile.User?.PhoneNumber ?? string.Empty,
+            businessName = profile.BusinessName,
+            verificationStatus = profile.VerificationStatus.ToString(),
+            rating = profile.Rating,
+            totalCompletedJobs = profile.TotalCompletedJobs,
+            isOnline = profile.IsOnline,
+            category = primarySkill?.Category ?? "Plumbing",
+            skillName = primarySkill?.SkillName ?? string.Empty,
+            operatingRadiusKm = location?.OperatingRadiusKm ?? 10.0m,
+            latitude = location?.Latitude,
+            longitude = location?.Longitude,
+            skills = profile.Skills.Select(s => new
             {
-                Id = skill.Id,
-                Category = skill.Category,
-                SkillName = skill.SkillName,
-                IsVerified = skill.IsVerified,
-                CertificationUrl = skill.CertificationUrl
-            }).ToList()
-        };
+                s.Id,
+                s.Category,
+                s.SkillName,
+                s.IsVerified,
+                s.CertificationUrl
+            })
+        });
     }
 
     /// <summary>
@@ -314,21 +281,14 @@ public class ProvidersController : ControllerBase
             UpdatedAt = DateTime.UtcNow
         }).ToList();
 
-        var strategy = _dbContext.Database.CreateExecutionStrategy();
-
-await strategy.ExecuteAsync(async () =>
-{
-    await using var transaction = 
-        await _dbContext.Database.BeginTransactionAsync(cancellationToken);
-
-    _dbContext.Users.Add(user);
-    _dbContext.ProviderProfiles.Add(profile);
-    _dbContext.ProviderLocations.Add(location);
-    _dbContext.ProviderSkills.AddRange(skills);
-
-    await _dbContext.SaveChangesAsync(cancellationToken);
-    await transaction.CommitAsync(cancellationToken);
-});
+        using var transaction = await _dbContext.Database.BeginTransactionAsync(cancellationToken);
+        _dbContext.Users.Add(user);
+        _dbContext.ProviderProfiles.Add(profile);
+        _dbContext.ProviderLocations.Add(location);
+        _dbContext.ProviderSkills.AddRange(skills);
+        
+        await _dbContext.SaveChangesAsync(cancellationToken);
+        await transaction.CommitAsync(cancellationToken);
 
         return Ok(new { message = "Provider registered successfully." });
     }
@@ -343,68 +303,17 @@ await strategy.ExecuteAsync(async () =>
             
         if (profile == null) return NotFound();
 
-        var previousStatus = profile.VerificationStatus;
-
-        _logger.LogInformation(
-            "Verifying provider {ProviderId}. Current status: {CurrentStatus}. Requested status: {RequestedStatus}",
-            providerId,
-            profile.VerificationStatus,
-            request.Status);
-
-        if (profile.VerificationStatus == ProviderVerificationStatus.Verified)
-        {
-            _logger.LogInformation(
-                "Provider {ProviderId} is already verified. No update required.",
-                providerId);
-
-            return Ok(new
-            {
-                message = "Provider is already verified.",
-                providerId,
-                status = profile.VerificationStatus.ToString()
-            });
-        }
-
-        if (profile.VerificationStatus == request.Status)
-        {
-            _logger.LogInformation(
-                "Provider {ProviderId} already has requested status {Status}. No update required.",
-                providerId,
-                request.Status);
-
-            return Ok(new
-            {
-                message = $"Provider is already {request.Status.ToString().ToLowerInvariant()}.",
-                providerId,
-                status = profile.VerificationStatus.ToString()
-            });
-        }
-
         profile.VerificationStatus = request.Status;
-        profile.UpdatedAt = DateTime.UtcNow;
         if (request.Status == ProviderVerificationStatus.Verified)
         {
-            foreach (var skill in profile.Skills)
+            foreach(var skill in profile.Skills)
             {
                 skill.IsVerified = true;
             }
         }
 
-        var savedEntries = await _dbContext.SaveChangesAsync(cancellationToken);
-
-        _logger.LogInformation(
-            "Provider {ProviderId} verification updated from {PreviousStatus} to {RequestedStatus}. EF saved {SavedEntries} entries.",
-            providerId,
-            previousStatus,
-            request.Status,
-            savedEntries);
-
-        return Ok(new
-        {
-            message = "Provider verification status updated.",
-            providerId,
-            status = profile.VerificationStatus.ToString()
-        });
+        await _dbContext.SaveChangesAsync(cancellationToken);
+        return Ok();
     }
 
 
@@ -424,8 +333,7 @@ await strategy.ExecuteAsync(async () =>
         var latestMatch = await _dbContext.MatchedCandidates
             .Include(m => m.MatchingExecution)
             .Where(m => m.ProviderId == profile.Id 
-                     && (m.Status == MatchedCandidateStatus.Recommended
-                         || m.Status == MatchedCandidateStatus.Accepted)
+                     && m.Status == MatchedCandidateStatus.Accepted
                      && m.MatchingExecution != null
                      && m.MatchingExecution.Status == MatchingExecutionStatus.Completed)
             .OrderByDescending(m => m.CreatedAt)
@@ -445,11 +353,6 @@ await strategy.ExecuteAsync(async () =>
         }
 
         if (latestMatch == null) return NoContent(); 
-
-        var serviceJob = await _applicationDbContext.ServiceJobs
-            .FirstOrDefaultAsync(
-                job => job.ServiceRequestId == latestMatch.MatchingExecution!.ServiceRequestId,
-                cancellationToken);
 
         const int dispatchTimeoutSeconds = 60;
         var dispatchedAt = latestMatch.MatchingExecution?.CompletedAt ?? latestMatch.CreatedAt;
@@ -531,9 +434,7 @@ await strategy.ExecuteAsync(async () =>
 
         return Ok(new
         {
-            jobId = serviceJob?.Id ?? latestMatch.Id,
-            jobStatus = serviceJob?.Status.ToString() ?? ServiceJobStatus.Assigned.ToString(),
-            matchStatus = latestMatch.Status.ToString(),
+            jobId = latestMatch.Id,
             status = latestMatch.Status.ToString(),
             category = category,
             distanceKm = latestMatch.DistanceKm,
@@ -567,8 +468,7 @@ await strategy.ExecuteAsync(async () =>
         var candidate = await _dbContext.MatchedCandidates
             .Include(m => m.MatchingExecution)
             .Where(m => m.ProviderId == profile.Id 
-                     && (m.Status == MatchedCandidateStatus.Recommended
-                         || m.Status == MatchedCandidateStatus.Accepted)
+                     && m.Status == MatchedCandidateStatus.Recommended
                      && m.MatchingExecution != null
                      && m.MatchingExecution.Status == MatchingExecutionStatus.Completed)
             .OrderByDescending(m => m.CreatedAt)

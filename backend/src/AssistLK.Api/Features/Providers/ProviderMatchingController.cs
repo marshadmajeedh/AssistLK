@@ -2,11 +2,9 @@ using AssistLK.Application.Interfaces;
 using AssistLK.Application.Services.Providers;
 using AssistLK.Domain.Entities;
 using AssistLK.Domain.Enums;
-using AssistLK.Infrastructure.Data;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
-using Microsoft.EntityFrameworkCore.Storage;
 using System.Security.Claims;
 using Microsoft.Extensions.Logging;
 
@@ -24,7 +22,6 @@ public class ProviderMatchingController : ControllerBase
     private readonly IServiceRequestService _serviceRequestService;
     private readonly IServiceRequestRepository _serviceRequestRepository;
     private readonly IAgentWorkflowDbContext _dbContext;
-    private readonly ApplicationDbContext _applicationDbContext;
     private readonly ILogger<ProviderMatchingController> _logger;
     private readonly IServiceScopeFactory _scopeFactory;
 
@@ -34,7 +31,6 @@ public class ProviderMatchingController : ControllerBase
         IServiceRequestService serviceRequestService,
         IServiceRequestRepository serviceRequestRepository,
         IAgentWorkflowDbContext dbContext,
-        ApplicationDbContext applicationDbContext,
         ILogger<ProviderMatchingController> logger,
         IServiceScopeFactory scopeFactory)
     {
@@ -43,7 +39,6 @@ public class ProviderMatchingController : ControllerBase
         _serviceRequestService = serviceRequestService;
         _serviceRequestRepository = serviceRequestRepository;
         _dbContext = dbContext;
-        _applicationDbContext = applicationDbContext;
         _logger = logger;
         _scopeFactory = scopeFactory;
     }
@@ -355,15 +350,6 @@ public class ProviderMatchingController : ControllerBase
 
         try
         {
-            var matchedCandidate = execution.Candidates
-                .Where(candidate => candidate.ProviderId != Guid.Empty)
-                .OrderBy(candidate => candidate.Rank)
-                .FirstOrDefault();
-
-            if (isApproved && matchedCandidate == null)
-            {
-                return BadRequest("Cannot approve a match without a provider candidate.");
-            }
             var response = await _matchingService.ResumeMatchingAsync(threadId, request.Action, adminId);
 
             execution.Status = isApproved
@@ -371,43 +357,6 @@ public class ProviderMatchingController : ControllerBase
                 : MatchingExecutionStatus.Failed;
 
             execution.CompletedAt = DateTime.UtcNow;
-
-            if (isApproved && matchedCandidate != null)
-            {
-                var serviceJob = await _applicationDbContext.ServiceJobs
-                    .FirstOrDefaultAsync(
-                        job => job.ServiceRequestId == execution.ServiceRequestId,
-                        cancellationToken);
-
-                if (serviceJob == null)
-                {
-                    serviceJob = new ServiceJob
-                    {
-                        Id = Guid.NewGuid(),
-                        ServiceRequestId = execution.ServiceRequestId,
-                        ProviderId = matchedCandidate.ProviderId,
-                        Status = ServiceJobStatus.Assigned,
-                        CreatedAt = DateTime.UtcNow
-                    };
-
-                    _applicationDbContext.ServiceJobs.Add(serviceJob);
-                    _applicationDbContext.ServiceStatusHistories.Add(new ServiceStatusHistory
-                    {
-                        Id = Guid.NewGuid(),
-                        ServiceJobId = serviceJob.Id,
-                        OldStatus = null,
-                        NewStatus = ServiceJobStatus.Assigned,
-                        Note = "Service job created when match was approved.",
-                        ChangedAt = DateTime.UtcNow
-                    });
-                }
-                else
-                {
-                    serviceJob.ProviderId = matchedCandidate.ProviderId;
-                }
-
-                matchedCandidate.Status = MatchedCandidateStatus.Accepted;
-            }
 
             if (!isApproved && execution.Candidates != null)
             {
@@ -418,7 +367,6 @@ public class ProviderMatchingController : ControllerBase
                 }
             }
 
-            await _applicationDbContext.SaveChangesAsync(cancellationToken);
             await _dbContext.SaveChangesAsync(cancellationToken);
 
             if (!isApproved)

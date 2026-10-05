@@ -77,7 +77,7 @@ public class ExternalProblemUnderstandingWorkflowIntegrationTests
 
             var reqRepo = new InMemoryServiceRequestRepository(Requests, Analyses);
             var anaRepo = new InMemoryProblemAnalysisRepository(Analyses);
-            RequestService = new ServiceRequestService(reqRepo, anaRepo, new TestDoubles.InMemoryServiceJobRepository());
+            RequestService = new ServiceRequestService(reqRepo, anaRepo);
 
             Workflow = new ProblemUnderstandingWorkflowService(
                 WorkflowService,

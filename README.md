@@ -39,6 +39,43 @@ AssistLK is an integrated platform connecting customers with emergency and skill
 
 ---
 
+## Final Submission & Deployment
+
+| Resource | Link / Details |
+| --- | --- |
+| **GitHub Repository** | https://github.com/marshadmajeedh/AssistLK |
+| **Final Branch** | https://github.com/marshadmajeedh/AssistLK/tree/main |
+| **React Admin Portal** | https://assistlk-web-production.up.railway.app/login |
+| **ASP.NET Core API** | https://assistlk-backend-production.up.railway.app/ |
+| **API Health Endpoint** | https://assistlk-backend-production.up.railway.app/health |
+| **Swagger / OpenAPI** | https://assistlk-backend-production.up.railway.app/swagger/index.html |
+| **PostgreSQL** | Supabase PostgreSQL. Connection credentials are stored securely through environment configuration and are not committed to the repository. |
+| **Flutter APK Releases** | https://github.com/marshadmajeedh/AssistLK/releases |
+| **Demonstration Video** | https://mysliit-my.sharepoint.com/:f:/g/personal/it24102580_my_sliit_lk/IgBgJ4qKBtdnR7cNbCaU3cH2AUwckhAX2uwiUEGOytM3Ew0?e=nB3xTL |
+
+### Deployment Architecture
+
+AssistLK uses a separated deployment architecture:
+
+- **React Admin Portal** – deployed on Railway.
+- **ASP.NET Core Web API** – deployed on Railway and acts as the single public application backend.
+- **PostgreSQL** – hosted on Supabase.
+- **Flutter Mobile Application** – distributed as an Android APK through GitHub Releases.
+- **Agentic AI Services** – internal Python services invoked through the ASP.NET Core backend.
+
+React and Flutter communicate only with the ASP.NET Core API. They do not call the internal Python Agentic AI services directly.
+
+### Environment & Security
+
+Sensitive configuration such as database credentials, JWT configuration,
+Gemini API keys, internal service keys and agent service URLs is supplied
+through environment variables.
+
+Secret values and production database connection strings must not be included
+in README.md or committed to Git.
+
+---
+
 ### 2. Repository Structure
 
 ```text

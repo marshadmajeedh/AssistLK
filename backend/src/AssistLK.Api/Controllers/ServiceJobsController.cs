@@ -413,6 +413,7 @@ namespace AssistLK.Api.Controllers
         [HttpPut("{id:guid}/complete")]
         [Authorize]
         [RequestSizeLimit(10 * 1024 * 1024)]
+        [ApiExplorerSettings(IgnoreApi = true)]
         public async Task<IActionResult> CompleteJob(
             Guid id,
             [FromForm] CompleteJobForm form,

@@ -52,6 +52,122 @@ namespace AssistLK.Api.Controllers
             _logger = logger;
         }
 
+        [HttpGet]
+        [Authorize(Roles = "Admin")]
+        public async Task<IActionResult> GetServiceJobs(
+            [FromQuery] string? status = null,
+            CancellationToken cancellationToken = default)
+        {
+            var query = _assistLkDbContext.ServiceJobs
+                .AsNoTracking()
+                .Include(job => job.CompletionRecord)
+                .Include(job => job.Feedback)
+                .Include(job => job.Complaints)
+                .OrderByDescending(job => job.CreatedAt)
+                .AsQueryable();
+
+            if (!string.IsNullOrWhiteSpace(status) &&
+                Enum.TryParse<ServiceJobStatus>(status, true, out var parsedStatus))
+            {
+                query = query.Where(job => job.Status == parsedStatus);
+            }
+
+            var jobs = await query
+                .Select(job => new
+                {
+                    id = job.Id,
+                    serviceRequestId = job.ServiceRequestId,
+                    bookingId = job.BookingId,
+                    providerId = job.ProviderId,
+                    status = job.Status.ToString(),
+                    startedAt = job.StartedAt,
+                    completedAt = job.CompletedAt,
+                    createdAt = job.CreatedAt,
+                    completion = job.CompletionRecord == null
+                        ? null
+                        : new
+                        {
+                            proofOfWorkImageUrl = job.CompletionRecord.ProofOfWorkImageUrl,
+                            summaryNotes = job.CompletionRecord.WorkSummary,
+                            completedAt = job.CompletionRecord.CompletedAt
+                        },
+                    feedback = job.Feedback == null
+                        ? null
+                        : new
+                        {
+                            rating = job.Feedback.Rating,
+                            comment = job.Feedback.Comment
+                        },
+                                        complaintCount = job.Complaints.Count,
+                    complaints = job.Complaints
+                        .OrderByDescending(c => c.CreatedAt)
+                        .Select(c => new
+                        {
+                            id = c.Id,
+                            type = c.Type,
+                            customerComment = c.CustomerComment,
+                            aiSentiment = c.AiSentiment,
+                            status = c.Status,
+                            createdAt = c.CreatedAt
+                        })
+                })
+                .ToListAsync(cancellationToken);
+
+            return Ok(jobs);
+        }
+                [HttpPost("resolve-from-match")]
+        [Authorize(Roles = "Provider")]
+        public async Task<IActionResult> ResolveJobFromMatch(
+            [FromBody] ResolveJobFromMatchRequest request,
+            CancellationToken cancellationToken = default)
+        {
+            var userIdClaim = User.FindFirstValue(ClaimTypes.NameIdentifier);
+            if (!Guid.TryParse(userIdClaim, out var userId))
+                return Unauthorized();
+
+            var profile = await _assistLkDbContext.ProviderProfiles
+                .AsNoTracking()
+                .FirstOrDefaultAsync(p => p.UserId == userId, cancellationToken);
+            if (profile == null)
+                return NotFound(new { message = "Provider profile not found." });
+
+            var match = await _assistLkDbContext.MatchedCandidates
+                .AsNoTracking()
+                .Include(m => m.MatchingExecution)
+                .FirstOrDefaultAsync(
+                    m => m.Id == request.MatchId
+                      && m.ProviderId == profile.Id
+                      && m.Status == MatchedCandidateStatus.Accepted,
+                    cancellationToken);
+
+            if (match?.MatchingExecution == null)
+                return NotFound(new { message = "No accepted match found for this provider." });
+
+            var serviceRequestId = match.MatchingExecution.ServiceRequestId;
+
+            var job = await _assistLkDbContext.ServiceJobs
+                .Where(j => j.ServiceRequestId == serviceRequestId
+                         && j.ProviderId == profile.Id
+                         && j.Status != ServiceJobStatus.Cancelled)
+                .OrderByDescending(j => j.CreatedAt)
+                .FirstOrDefaultAsync(cancellationToken);
+
+            if (job == null)
+            {
+                job = new ServiceJob
+                {
+                    ServiceRequestId = serviceRequestId,
+                    ProviderId = profile.Id,
+                    Status = ServiceJobStatus.Assigned,
+                    CreatedAt = DateTime.UtcNow
+                };
+                _assistLkDbContext.ServiceJobs.Add(job);
+                await _assistLkDbContext.SaveChangesAsync(cancellationToken);
+            }
+
+            return Ok(new { serviceJobId = job.Id, status = job.Status.ToString() });
+        }
+
         [HttpPut("{id:guid}/status")]
         [Authorize]
         public async Task<IActionResult> UpdateJobStatus(Guid id, [FromBody] StatusUpdateRequest request)
@@ -308,6 +424,7 @@ namespace AssistLK.Api.Controllers
         [HttpPut("{id:guid}/complete")]
         [Authorize]
         [RequestSizeLimit(10 * 1024 * 1024)]
+        [ApiExplorerSettings(IgnoreApi = true)]
         public async Task<IActionResult> CompleteJob(
             Guid id,
             [FromForm] CompleteJobForm form,
@@ -580,6 +697,10 @@ namespace AssistLK.Api.Controllers
 
             return false;
         }
+    }
+        public class ResolveJobFromMatchRequest
+    {
+        public Guid MatchId { get; set; }
     }
 
     public class StatusUpdateRequest

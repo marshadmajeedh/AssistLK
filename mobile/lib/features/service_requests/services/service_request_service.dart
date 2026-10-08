@@ -222,6 +222,11 @@ class ServiceRequestService {
         .toList();
   }
 
+  Future<Map<String, dynamic>> getActivity(String id) async {
+    final response = await apiClient.client.get('/service-requests/$id/activity');
+    return Map<String, dynamic>.from(response.data as Map);
+  }
+
   String getErrorMessage(Object error) {
     if (error is DioException) {
       final data = error.response?.data;

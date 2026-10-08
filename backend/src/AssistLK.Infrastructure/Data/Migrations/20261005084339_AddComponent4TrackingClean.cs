@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using Microsoft.EntityFrameworkCore.Migrations;
 
 #nullable disable
@@ -24,7 +24,7 @@ namespace AssistLK.Infrastructure.Data.Migrations
                 {
                     Id = table.Column<Guid>(type: "uuid", nullable: false),
                     ServiceRequestId = table.Column<Guid>(type: "uuid", nullable: true),
-                    BookingId = table.Column<Guid>(type: "uuid", nullable: true),
+                    BookingId = table.Column<int>(type: "integer", nullable: true),
                     ProviderId = table.Column<Guid>(type: "uuid", nullable: true),
                     Status = table.Column<string>(type: "text", nullable: false),
                     StartedAt = table.Column<DateTime>(type: "timestamp with time zone", nullable: true),
@@ -151,6 +151,12 @@ namespace AssistLK.Infrastructure.Data.Migrations
                 name: "IX_ServiceStatusHistories_ServiceJobId",
                 table: "ServiceStatusHistories",
                 column: "ServiceJobId");
+
+            migrationBuilder.CreateIndex(
+                name: "IX_ServiceJobs_BookingId",
+                table: "ServiceJobs",
+                column: "BookingId",
+                unique: true);
         }
 
         /// <inheritdoc />

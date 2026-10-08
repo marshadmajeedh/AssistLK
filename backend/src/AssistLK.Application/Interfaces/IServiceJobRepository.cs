@@ -10,6 +10,8 @@ public sealed class ServiceRequestActivityData
     public ServiceJobStatus? JobStatus { get; init; }
     public CompletionRecordResponse? CompletionRecord { get; init; }
     public FeedbackSummaryResponse? Feedback { get; init; }
+    public Guid? ProviderId { get; init; }
+    public string? ProviderBusinessName { get; set; }
 }
 
 public interface IServiceJobRepository

@@ -11,6 +11,7 @@ import 'widgets/job_alert_card.dart';
 import 'widgets/provider_bottom_navigation.dart';
 import 'screens/provider_dashboard_tab.dart';
 import 'screens/provider_profile_tab.dart';
+import '../tracking/open_job_tracking_button.dart';
 import '../quotations/screens/booking_management_tab.dart';
 
 class ProviderHomeScreen extends StatefulWidget {
@@ -1244,6 +1245,10 @@ class _ProviderHomeViewState extends State<_ProviderHomeView> {
                                             ],
                                           ),
                                           const SizedBox(height: 6),
+              OpenJobTrackingButton(
+  apiClient: dashboard.providerService.apiClient,
+  match: dashboard.activeJobMatch,
+),
                                           InkWell(
                                             onTap: () {
                                               setState(() {

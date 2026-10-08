@@ -217,3 +217,16 @@
     grid-template-columns: 1fr;
   }
 }
+.tracking-complaint {
+  padding: 8px 10px;
+  margin-bottom: 8px;
+  border-radius: 8px;
+  background: #fff5f5;
+}
+
+.tracking-complaint-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 4px;
+}

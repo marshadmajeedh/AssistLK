@@ -98,7 +98,18 @@ namespace AssistLK.Api.Controllers
                             rating = job.Feedback.Rating,
                             comment = job.Feedback.Comment
                         },
-                    complaintCount = job.Complaints.Count
+                                        complaintCount = job.Complaints.Count,
+                    complaints = job.Complaints
+                        .OrderByDescending(c => c.CreatedAt)
+                        .Select(c => new
+                        {
+                            id = c.Id,
+                            type = c.Type,
+                            customerComment = c.CustomerComment,
+                            aiSentiment = c.AiSentiment,
+                            status = c.Status,
+                            createdAt = c.CreatedAt
+                        })
                 })
                 .ToListAsync(cancellationToken);
 

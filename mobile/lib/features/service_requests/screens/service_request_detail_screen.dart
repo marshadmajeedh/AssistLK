@@ -629,6 +629,7 @@ class _ServiceRequestDetailScreenState
                   builder: (_) => CustomerJobTrackingScreen(
                     jobId: jobId,
                     status: jobStatus,
+                    serviceRequestId: request.serviceRequestId,
                     destinationLatitude: request.latitude ?? 6.9271,
                     destinationLongitude: request.longitude ?? 79.8612,
                     providerName: providerName,

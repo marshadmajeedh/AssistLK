@@ -25,6 +25,7 @@ class CustomerJobTrackingScreen extends StatefulWidget {
   final bool hasFeedback;
   final int? feedbackRating;
   final String? feedbackComment;
+    final String? serviceRequestId;
 
   const CustomerJobTrackingScreen({
     super.key,
@@ -43,6 +44,7 @@ class CustomerJobTrackingScreen extends StatefulWidget {
     this.hasFeedback = false,
     this.feedbackRating,
     this.feedbackComment,
+        this.serviceRequestId,
   });
 
   @override
@@ -130,19 +132,27 @@ class _CustomerJobTrackingScreenState extends State<CustomerJobTrackingScreen> {
     _isPolling = true;
 
     try {
-      final response = await ApiClient().client.get('/service-requests/my');
-      final payload = response.data;
-      if (payload is! List) return;
+            final requestId = widget.serviceRequestId;
+      if (requestId == null || requestId.isEmpty) return;
 
-      Map<String, dynamic>? matchingRequest;
-      for (final item in payload) {
-        if (item is Map && item['serviceJobId']?.toString() == widget.jobId) {
-          matchingRequest = Map<String, dynamic>.from(item);
-          break;
-        }
-      }
+      final response = await ApiClient().client.get(
+        '/service-requests/$requestId/activity',
+      );
+      final data = response.data;
+      if (data is! Map || !mounted) return;
+      final activity = Map<String, dynamic>.from(data);
+      if (activity['serviceJobId']?.toString() != widget.jobId) return;
 
-      if (matchingRequest == null || !mounted) return;
+      final feedbackMap = activity['feedback'] is Map
+          ? Map<String, dynamic>.from(activity['feedback'] as Map)
+          : null;
+      final matchingRequest = <String, dynamic>{
+        'jobStatus': activity['serviceJobStatus'],
+        'completionRecord': activity['completionRecord'],
+        'hasFeedback': feedbackMap != null,
+        'feedbackRating': feedbackMap?['rating'],
+        'feedbackComment': feedbackMap?['comment'],
+      };
 
       final polledStatus = _normalizeStatus(
         matchingRequest['jobStatus']?.toString() ??
@@ -185,7 +195,7 @@ class _CustomerJobTrackingScreenState extends State<CustomerJobTrackingScreen> {
         if (polledAdditionalCost != null) {
           _additionalCost = polledAdditionalCost;
         }
-        _feedbackSubmitted = matchingRequest?['hasFeedback'] == true;
+        _feedbackSubmitted = matchingRequest['hasFeedback'] == true;
         _feedbackRating = polledFeedbackRating ?? _feedbackRating;
         _feedbackComment = polledFeedbackComment ?? _feedbackComment;
         if (_feedbackComment != null && _feedbackController.text.isEmpty) {
@@ -627,8 +637,8 @@ class _CustomerJobTrackingScreenState extends State<CustomerJobTrackingScreen> {
                 fontWeight: FontWeight.bold,
               ),
             ),
-            Row(
-              mainAxisAlignment: MainAxisAlignment.center,
+                        Wrap(
+              alignment: WrapAlignment.center,
               children: List.generate(5, (index) {
                 final rating = index + 1;
                 return IconButton(

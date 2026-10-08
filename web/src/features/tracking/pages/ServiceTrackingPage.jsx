@@ -129,7 +129,23 @@ function JobCard({ job }) {
         ) : (
           <p className="tracking-muted">No feedback submitted.</p>
         )}
-      </section>
+            </section>
+
+      {job.complaints?.length > 0 && (
+        <section className="tracking-section" aria-label="Complaints">
+          <h3 className="tracking-section-title">Complaint Details</h3>
+          {job.complaints.map((c) => (
+            <div key={c.id} className="tracking-complaint">
+              <div className="tracking-complaint-head">
+                <span className="tracking-pill is-cancelled">{c.status}</span>
+                {c.aiSentiment && <span className="tracking-muted">{c.aiSentiment}</span>}
+              </div>
+              {c.customerComment && <p className="tracking-text">{c.customerComment}</p>}
+              <span className="tracking-muted">{formatDateTime(c.createdAt)}</span>
+            </div>
+          ))}
+        </section>
+      )}
 
       <div className="tracking-card-footer">
         <span className="tracking-label">Complaints</span>

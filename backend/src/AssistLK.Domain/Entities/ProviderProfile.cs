@@ -14,6 +14,8 @@ public class ProviderProfile : BaseEntity
 
     public decimal Rating { get; set; } = 0m;
 
+    public int TotalReviews { get; set; }
+
     public int TotalCompletedJobs { get; set; }
 
     public int MaxActiveJobs { get; set; } = 1;

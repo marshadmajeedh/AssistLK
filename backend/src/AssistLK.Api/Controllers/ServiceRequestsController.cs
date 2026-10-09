@@ -6,6 +6,8 @@ using AssistLK.Application.Services;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 
+using Microsoft.EntityFrameworkCore;
+
 namespace AssistLK.Api.Controllers;
 
 [ApiController]
@@ -15,13 +17,19 @@ public class ServiceRequestsController : ControllerBase
 {
     private readonly IServiceRequestService _serviceRequestService;
     private readonly ProblemUnderstandingWorkflowService _workflowService;
+    private readonly IServiceJobRepository _serviceJobRepository;
+    private readonly IQuotationRepository _quotationRepository;
 
     public ServiceRequestsController(
         IServiceRequestService serviceRequestService,
-        ProblemUnderstandingWorkflowService workflowService)
+        ProblemUnderstandingWorkflowService workflowService,
+        IServiceJobRepository serviceJobRepository,
+        IQuotationRepository quotationRepository)
     {
         _serviceRequestService = serviceRequestService;
         _workflowService = workflowService;
+        _serviceJobRepository = serviceJobRepository;
+        _quotationRepository = quotationRepository;
     }
 
     [HttpPost]
@@ -158,6 +166,54 @@ public class ServiceRequestsController : ControllerBase
             id,
             request,
             cancellationToken);
+
+        return Ok(response);
+    }
+
+    [HttpGet("{id:guid}/activity")]
+    public async Task<ActionResult<ServiceRequestActivityResponse>> GetActivity(
+        Guid id,
+        CancellationToken cancellationToken)
+    {
+        var customerId = GetCurrentCustomerId();
+        var serviceRequest = await _serviceRequestService.GetByIdAsync(
+            id,
+            customerId,
+            cancellationToken);
+
+        var activityDict = await _serviceJobRepository.GetActivityByServiceRequestIdsAsync(
+            new[] { id }, cancellationToken);
+
+        var jobData = activityDict.GetValueOrDefault(id);
+
+        var quotations = await _quotationRepository.GetByServiceRequestIdAsync(id, cancellationToken);
+        var latestQuotation = quotations.OrderByDescending(q => q.CreatedAt).FirstOrDefault();
+
+        ProviderActivityInfo? providerInfo = null;
+        if (jobData?.ProviderId != null || latestQuotation?.ProviderId != null)
+        {
+            var providerId = jobData?.ProviderId ?? latestQuotation?.ProviderId;
+            if (providerId.HasValue)
+            {
+                providerInfo = new ProviderActivityInfo
+                {
+                    ProviderId = providerId.Value,
+                    BusinessName = jobData?.ProviderBusinessName
+                };
+            }
+        }
+
+        var response = new ServiceRequestActivityResponse
+        {
+            ServiceRequestId = id,
+            ServiceJobId = jobData?.ServiceJobId,
+            ServiceJobStatus = jobData?.JobStatus?.ToString(),
+            CompletionRecord = jobData?.CompletionRecord,
+            Feedback = jobData?.Feedback,
+            QuotationStatus = latestQuotation?.Status.ToString(),
+            BookingStatus = latestQuotation?.Status == Domain.Entities.QuotationStatus.Approved ? "Confirmed" : null,
+            Provider = providerInfo
+        };
 
         return Ok(response);
     }

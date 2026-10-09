@@ -9,6 +9,7 @@ using System.Threading.Tasks;
 using AssistLK.Application.Interfaces;
 using AssistLK.Application.Quotations;
 using AssistLK.Domain.Entities;
+using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 
 namespace AssistLK.Application.Services.Quotations;
@@ -19,17 +20,20 @@ public class QuotationService : IQuotationService
     private readonly IBookingRepository _bookingRepository;
     private readonly IServiceRequestLookup _serviceRequestLookup;
     private readonly IConfiguration _configuration;
+    private readonly IServiceJobsDbContext _serviceJobsDbContext;
 
     public QuotationService(
         IQuotationRepository quotationRepository,
         IBookingRepository bookingRepository,
         IServiceRequestLookup serviceRequestLookup,
-        IConfiguration configuration)
+        IConfiguration configuration,
+        IServiceJobsDbContext serviceJobsDbContext)
     {
         _quotationRepository = quotationRepository;
         _bookingRepository = bookingRepository;
         _serviceRequestLookup = serviceRequestLookup;
         _configuration = configuration;
+        _serviceJobsDbContext = serviceJobsDbContext;
     }
 
     // ------------------------------------------------------------------
@@ -304,7 +308,32 @@ public class QuotationService : IQuotationService
         _quotationRepository.Update(quotation);
         await _bookingRepository.SaveChangesAsync(cancellationToken);
 
-        return MapBookingToDto(booking);
+        // ------------------------------------------------------------------
+        // Component 3 -> Component 4 Hand-off: Idempotently create ServiceJob
+        // ------------------------------------------------------------------
+        var existingJob = await _serviceJobsDbContext.ServiceJobs
+            .FirstOrDefaultAsync(j => j.BookingId == booking.Id, cancellationToken);
+
+        ServiceJob serviceJob;
+        if (existingJob != null)
+        {
+            serviceJob = existingJob;
+        }
+        else
+        {
+            serviceJob = new ServiceJob
+            {
+                BookingId = booking.Id,
+                ServiceRequestId = quotation.ServiceRequestId,
+                ProviderId = quotation.ProviderId,
+                Status = ServiceJobStatus.Assigned,
+                CreatedAt = now
+            };
+            _serviceJobsDbContext.ServiceJobs.Add(serviceJob);
+            await _serviceJobsDbContext.SaveChangesAsync(cancellationToken);
+        }
+
+        return MapBookingToDto(booking, serviceJob.Id);
     }
 
     // ------------------------------------------------------------------
@@ -374,7 +403,7 @@ public class QuotationService : IQuotationService
         q.CreatedAt,
         q.UpdatedAt);
 
-    private static BookingDto MapBookingToDto(Booking b) => new(
+    private static BookingDto MapBookingToDto(Booking b, Guid? serviceJobId = null) => new(
         b.Id,
         b.QuotationId,
         b.CustomerId,
@@ -385,7 +414,8 @@ public class QuotationService : IQuotationService
         b.Latitude,
         b.Longitude,
         b.CreatedAt,
-        b.UpdatedAt);
+        b.UpdatedAt,
+        serviceJobId);
 }
 
 // ------------------------------------------------------------------

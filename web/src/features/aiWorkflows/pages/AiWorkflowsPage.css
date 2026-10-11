@@ -1,0 +1,20 @@
+.ai-workflows { container-type: inline-size; display: grid; gap: var(--workflow-gap); min-width: 0; text-align: left; overflow-wrap: anywhere; }
+.ai-workflows h1, .ai-workflows h2 { margin: 0 0 var(--workflow-gap); letter-spacing: normal; color: inherit; }
+.workflow-muted, .ai-workflows dt { color: var(--workflow-muted); }
+.workflow-summary { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 140px), 1fr)); gap: var(--workflow-gap); margin-top: var(--workflow-gap); }
+.ai-workflows dl { margin: 0; }
+.ai-workflows dd { margin: 8px 0 0; }
+.workflow-filters { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 180px), 1fr)); align-items: end; gap: var(--workflow-gap); margin-bottom: var(--workflow-gap); }
+.workflow-filters select { margin-top: 8px; }
+.ai-workflows select:focus-visible, .ai-workflows button:focus-visible { outline: 2px solid var(--workflow-focus); outline-offset: 2px; }
+.workflow-table { width: 100%; table-layout: fixed; border-collapse: collapse; }
+.workflow-table caption { text-align: left; color: var(--workflow-muted); padding-bottom: var(--workflow-gap); }
+.workflow-table th, .workflow-table td { text-align: left; vertical-align: top; padding: 12px 6px; border-bottom: 1px solid var(--workflow-border); }
+.workflow-table th { font-size: 12px; }
+@container (max-width: 700px) {
+  .workflow-table, .workflow-table tbody, .workflow-table tr { display: block; width: auto; }
+  .workflow-table thead { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); }
+  .workflow-table tr + tr { margin-top: var(--workflow-gap); }
+  .workflow-table td { display: grid; grid-template-columns: 85px minmax(0, 1fr); gap: 8px; }
+  .workflow-table td::before { content: attr(data-label); color: var(--workflow-muted); font-size: 12px; }
+}

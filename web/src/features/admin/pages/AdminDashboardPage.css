@@ -1,0 +1,26 @@
+.admin-dashboard { container-type: inline-size; display: grid; gap: 24px; text-align: left; min-width: 0; overflow-wrap: anywhere; }
+.admin-dashboard h1, .admin-dashboard h2, .admin-dashboard h3 { color: inherit; margin: 0; letter-spacing: normal; }
+.dashboard-muted, .admin-dashboard dt { color: var(--dashboard-muted); }
+.admin-dashboard section { display: grid; gap: var(--dashboard-gap); min-width: 0; }
+.dashboard-section-header { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: var(--dashboard-gap); }
+.dashboard-metrics { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 150px), 1fr)); gap: var(--dashboard-gap); }
+.admin-dashboard dl { margin: 0; }
+.admin-dashboard dd { margin: 8px 0 0; }
+.dashboard-table { width: 100%; border-collapse: collapse; table-layout: fixed; }
+.dashboard-table caption { text-align: left; color: var(--dashboard-muted); padding: 8px 0; }
+.dashboard-table th, .dashboard-table td { padding: 12px 6px; text-align: left; vertical-align: top; border-bottom: 1px solid var(--dashboard-border); }
+.dashboard-table th { font-size: 12px; }
+.dashboard-table td span { white-space: normal !important; }
+.admin-dashboard summary { cursor: pointer; font-weight: 600; }
+.admin-dashboard details p, .admin-dashboard .dashboard-boundaries { margin-top: var(--dashboard-gap); }
+.dashboard-boundaries { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 220px), 1fr)); gap: var(--dashboard-gap); }
+.admin-dashboard button:focus-visible, .admin-dashboard summary:focus-visible { outline: 2px solid var(--dashboard-focus); outline-offset: 2px; }
+.admin-dashboard .page-hero { margin-bottom: 4px; }
+.admin-dashboard .table-shell { padding-top: 18px; }
+@container (max-width: 600px) {
+  .dashboard-table, .dashboard-table tbody, .dashboard-table tr { display: block; width: auto; }
+  .dashboard-table thead { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); }
+  .dashboard-table td { display: grid; grid-template-columns: 85px minmax(0, 1fr); gap: 8px; }
+  .dashboard-table td::before { content: attr(data-label); color: var(--dashboard-muted); font-size: 12px; }
+  .dashboard-table tr + tr { margin-top: var(--dashboard-gap); }
+}

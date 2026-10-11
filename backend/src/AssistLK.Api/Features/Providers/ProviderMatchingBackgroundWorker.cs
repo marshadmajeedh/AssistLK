@@ -1,0 +1,216 @@
+using System;
+using System.Collections.Generic;
+using System.Linq;
+using System.Threading;
+using System.Threading.Tasks;
+using AssistLK.Application.Interfaces;
+using AssistLK.Application.Services.Providers;
+using AssistLK.Domain.Enums;
+using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Hosting;
+using Microsoft.Extensions.Logging;
+
+namespace AssistLK.Api.Features.Providers;
+
+public class ProviderMatchingBackgroundWorker : BackgroundService
+{
+    private readonly IServiceScopeFactory _scopeFactory;
+    private readonly ILogger<ProviderMatchingBackgroundWorker> _logger;
+    private readonly TimeSpan _pollInterval = TimeSpan.FromSeconds(5);
+
+    public ProviderMatchingBackgroundWorker(
+        IServiceScopeFactory scopeFactory,
+        ILogger<ProviderMatchingBackgroundWorker> logger)
+    {
+        _scopeFactory = scopeFactory;
+        _logger = logger;
+    }
+
+    protected override async Task ExecuteAsync(CancellationToken stoppingToken)
+    {
+        _logger.LogInformation("ProviderMatchingBackgroundWorker started. Polling interval: {Interval} seconds.", _pollInterval.TotalSeconds);
+
+        // Initial brief delay to allow API startup
+        await Task.Delay(TimeSpan.FromSeconds(2), stoppingToken);
+
+        using var timer = new PeriodicTimer(_pollInterval);
+
+        while (!stoppingToken.IsCancellationRequested && await timer.WaitForNextTickAsync(stoppingToken))
+        {
+            try
+            {
+                await ProcessTimedOutDispatchesAsync(stoppingToken);
+                await ProcessReadyRequestsAsync(stoppingToken);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Unexpected error in ProviderMatchingBackgroundWorker loop.");
+            }
+        }
+    }
+
+    private async Task ProcessTimedOutDispatchesAsync(CancellationToken stoppingToken)
+    {
+        using var scope = _scopeFactory.CreateScope();
+        var dbContext = scope.ServiceProvider.GetRequiredService<IAgentWorkflowDbContext>();
+
+        // 60-second dispatch acceptance timeout threshold
+        var timeoutLimit = DateTime.UtcNow.AddSeconds(-60);
+
+        var timedOutCandidates = await dbContext.MatchedCandidates
+            .Include(m => m.MatchingExecution)
+            .Where(m => m.Status == MatchedCandidateStatus.Recommended
+                     && m.MatchingExecution != null
+                     && m.MatchingExecution.Status == MatchingExecutionStatus.Completed
+                     && ((m.MatchingExecution.CompletedAt ?? m.CreatedAt) < timeoutLimit))
+            .ToListAsync(stoppingToken);
+
+        if (timedOutCandidates.Count == 0) return;
+
+        _logger.LogInformation("ProviderMatchingBackgroundWorker detected {Count} timed-out dispatch match(es).", timedOutCandidates.Count);
+
+        foreach (var candidate in timedOutCandidates)
+        {
+            if (stoppingToken.IsCancellationRequested) break;
+
+            var serviceRequestId = candidate.MatchingExecution.ServiceRequestId;
+            _logger.LogInformation("Match candidate {CandidateId} for provider {ProviderId} timed out after 60s. Auto-redispatching ServiceRequest {ServiceRequestId}.",
+                candidate.Id, candidate.ProviderId, serviceRequestId);
+
+            candidate.Status = MatchedCandidateStatus.Declined;
+            candidate.UpdatedAt = DateTime.UtcNow;
+            candidate.MatchRationale = (candidate.MatchRationale ?? string.Empty) + " [Timed out after 60s without acceptance]";
+
+            candidate.MatchingExecution.Status = MatchingExecutionStatus.Failed;
+            candidate.MatchingExecution.CompletedAt = DateTime.UtcNow;
+
+            await dbContext.SaveChangesAsync(stoppingToken);
+
+            _ = Task.Run(async () =>
+            {
+                try
+                {
+                    using var innerScope = _scopeFactory.CreateScope();
+                    var coordinator = innerScope.ServiceProvider.GetRequiredService<IProviderMatchingCoordinator>();
+                    var result = await coordinator.ExecuteMatchForRequestAsync(serviceRequestId, autoApprove: true);
+                    _logger.LogInformation("Cascade re-matching following timeout for ServiceRequest {ServiceRequestId} concluded with status: {Status} (Success={Success}).",
+                        serviceRequestId, result.Status, result.Success);
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogError(ex, "Failed to cascade re-match following timeout for ServiceRequest {ServiceRequestId}.", serviceRequestId);
+                }
+            });
+        }
+    }
+
+    private async Task ProcessReadyRequestsAsync(CancellationToken stoppingToken)
+    {
+        using var scope = _scopeFactory.CreateScope();
+        var serviceRequestRepository = scope.ServiceProvider.GetRequiredService<IServiceRequestRepository>();
+        var matchingCoordinator = scope.ServiceProvider.GetRequiredService<IProviderMatchingCoordinator>();
+        var dbContext = scope.ServiceProvider.GetRequiredService<IAgentWorkflowDbContext>();
+
+        var readyRequests = await serviceRequestRepository.GetByStatusAsync(
+            ServiceRequestStatus.ReadyForMatching,
+            stoppingToken);
+
+        if (readyRequests == null || readyRequests.Count == 0)
+        {
+            return;
+        }
+
+        // Filter out expired matching requests per Component 1 lifecycle contract (24-hour matching window)
+        var utcNow = DateTime.UtcNow;
+        var eligibleReadyRequests = readyRequests
+            .Where(r => (r.MatchingExpiresAtUtc.HasValue && r.MatchingExpiresAtUtc.Value > utcNow)
+                     || (!r.MatchingExpiresAtUtc.HasValue && r.CreatedAt >= utcNow.AddHours(-24)))
+            .ToList();
+
+        // Automatically cancel any ReadyForMatching requests that have exceeded their 24-hour lifetime
+        var expiredRequests = readyRequests
+            .Where(r => (r.MatchingExpiresAtUtc.HasValue && r.MatchingExpiresAtUtc.Value <= utcNow)
+                     || (!r.MatchingExpiresAtUtc.HasValue && r.CreatedAt < utcNow.AddHours(-24)))
+            .ToList();
+
+        if (expiredRequests.Count > 0)
+        {
+            foreach (var exp in expiredRequests)
+            {
+                exp.Status = ServiceRequestStatus.Cancelled;
+                exp.UpdatedAt = utcNow;
+                serviceRequestRepository.Update(exp);
+            }
+            try
+            {
+                await serviceRequestRepository.SaveChangesAsync(stoppingToken);
+                _logger.LogInformation("ProviderMatchingBackgroundWorker transitioned {Count} expired ReadyForMatching request(s) to Cancelled.", expiredRequests.Count);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogWarning(ex, "Failed to persist expired ReadyForMatching cancellations.");
+            }
+        }
+
+        if (eligibleReadyRequests.Count == 0)
+        {
+            return;
+        }
+
+        var readyIds = eligibleReadyRequests.Select(r => r.Id).ToList();
+
+        // 1. Exclude requests that already have an accepted candidate
+        var acceptedSrIds = await dbContext.MatchedCandidates
+            .Where(m => readyIds.Contains(m.MatchingExecution.ServiceRequestId) &&
+                        m.Status == MatchedCandidateStatus.Accepted)
+            .Select(m => m.MatchingExecution.ServiceRequestId)
+            .Distinct()
+            .ToListAsync(stoppingToken);
+
+        // 2. Exclude requests that already have an active/pending/dispatched execution
+        var activeSrIds = await dbContext.MatchingExecutions
+            .Where(e => readyIds.Contains(e.ServiceRequestId) &&
+                       (e.Status == MatchingExecutionStatus.Running
+                     || e.Status == MatchingExecutionStatus.PendingApproval
+                     || (e.Status == MatchingExecutionStatus.Completed && e.Candidates.Any(c => c.Status == MatchedCandidateStatus.Recommended))))
+            .Select(e => e.ServiceRequestId)
+            .Distinct()
+            .ToListAsync(stoppingToken);
+
+        // 3. Exclude requests that recently failed (within the last 2 minutes) to avoid spamming the AI engine
+        var recentlyFailedSrIds = await dbContext.MatchingExecutions
+            .Where(e => readyIds.Contains(e.ServiceRequestId) &&
+                       e.Status == MatchingExecutionStatus.Failed &&
+                       e.CompletedAt != null &&
+                       e.CompletedAt > DateTime.UtcNow.AddMinutes(-2))
+            .Select(e => e.ServiceRequestId)
+            .Distinct()
+            .ToListAsync(stoppingToken);
+
+        var excludedIds = acceptedSrIds.Concat(activeSrIds).Concat(recentlyFailedSrIds).ToHashSet();
+        var toMatchIds = readyIds.Where(id => !excludedIds.Contains(id)).ToList();
+
+        if (toMatchIds.Count == 0)
+        {
+            return;
+        }
+
+        _logger.LogInformation("ProviderMatchingBackgroundWorker found {Count} ready request(s) to match.", toMatchIds.Count);
+
+        foreach (var id in toMatchIds)
+        {
+            if (stoppingToken.IsCancellationRequested) break;
+
+            try
+            {
+                var result = await matchingCoordinator.ExecuteMatchForRequestAsync(id, stoppingToken);
+                _logger.LogInformation("Auto-dispatched match for ServiceRequest {Id}: Status={Status}, ThreadId={ThreadId}", id, result.Status, result.ThreadId);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Failed to auto-dispatch matching for ServiceRequest {ServiceRequestId}", id);
+            }
+        }
+    }
+}

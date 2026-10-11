@@ -1,0 +1,43 @@
+# Lines starting with '#' are comments.
+# Each line is a file pattern followed by one or more owners.
+# More details: https://docs.github.com/en/repositories/managing-your-repositorys-settings-and-features/customizing-your-repository/about-code-owners
+
+# ==============================================================================
+# Component 1 (Service Request & Problem Understanding) Ownership
+# Owner: @marshadmajeedh
+# ==============================================================================
+
+# Domain models & lifecycle enums
+/backend/src/AssistLK.Domain/Entities/ServiceRequest.cs @marshadmajeedh
+/backend/src/AssistLK.Domain/Entities/ProblemAnalysis.cs @marshadmajeedh
+/backend/src/AssistLK.Domain/Enums/ServiceRequestStatus.cs @marshadmajeedh
+/backend/src/AssistLK.Domain/Enums/ServiceRequestUrgency.cs @marshadmajeedh
+
+# Application service & command/query handlers
+/backend/src/AssistLK.Application/Services/ServiceRequestService.cs @marshadmajeedh
+/backend/src/AssistLK.Application/Services/ProblemUnderstandingWorkflowService.cs @marshadmajeedh
+/backend/src/AssistLK.Application/ServiceRequests/ @marshadmajeedh
+
+# API Controllers
+/backend/src/AssistLK.Api/Controllers/ServiceRequestsController.cs @marshadmajeedh
+/backend/src/AssistLK.Api/Controllers/AdminServiceRequestsController.cs @marshadmajeedh
+
+# Infrastructure (Specific C1 Repositories & Configurations)
+/backend/src/AssistLK.Infrastructure/Repositories/ServiceRequestRepository.cs @marshadmajeedh
+/backend/src/AssistLK.Infrastructure/Repositories/ProblemAnalysisRepository.cs @marshadmajeedh
+
+# Note: Do NOT CODEOWNER the entire Data/Migrations/ directory to avoid blocking C2/C3/C4.
+# Specific C1 lifecycle migrations can be reviewed specifically:
+/backend/src/AssistLK.Infrastructure/Data/Migrations/*ServiceRequest*.cs @marshadmajeedh
+
+# C1 Mobile (Flutter)
+/mobile/lib/features/service_requests/ @marshadmajeedh
+
+# C1 Web Frontend (React)
+/web/src/features/serviceRequests/ @marshadmajeedh
+/web/src/features/admin/pages/AdminServiceRequestListPage.jsx @marshadmajeedh
+/web/src/features/admin/pages/AdminServiceRequestListPage.css @marshadmajeedh
+/web/src/features/admin/components/RequestLocation.jsx @marshadmajeedh
+/web/src/features/admin/components/RequestMonitoringDetails.jsx @marshadmajeedh
+/web/src/features/admin/services/adminServiceRequestService.js @marshadmajeedh
+/web/src/features/admin/utils/monitoringFormatters.js @marshadmajeedh

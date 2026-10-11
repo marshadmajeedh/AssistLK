@@ -1,0 +1,6 @@
+@AssistLK.Api_HostAddress = http://localhost:5012
+
+GET {{AssistLK.Api_HostAddress}}/weatherforecast/
+Accept: application/json
+
+###

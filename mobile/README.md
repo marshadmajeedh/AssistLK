@@ -1,20 +1,56 @@
-# Flutter Mobile Application
+# AssistLK Mobile Application (`mobile/`)
 
-Primary users:
+Flutter cross-platform mobile application for AssistLK customers and service providers.
 
-- Customer
-- Service Provider
+---
 
-Customer flow:
+## Quick Start
 
-```text
-Report problem → photo/GPS → provider/quotation → approval → tracking → completion → feedback
+### 1. Prerequisites
+- Flutter SDK (3.19+ or compatible)
+- Android Studio / Xcode / Chrome for testing
+
+### 2. Install Dependencies
+```bash
+cd mobile
+flutter pub get
 ```
 
-Provider flow:
+### 3. Run Development App
+- **For Chrome (Web):**
+  ```bash
+  flutter run -d chrome
+  ```
+- **For Android Emulator (uses http://10.0.2.2:5012/api automatically):**
+  ```bash
+  flutter run
+  ```
+- **For Physical Device (Specify backend IP):**
+  ```bash
+  flutter run --dart-define=API_BASE_URL=http://<YOUR_LOCAL_IP>:5012/api
+  ```
 
-```text
-Availability → incoming request → accept/reject → quotation → active job → status updates → completion
+### 4. Run Automated Tests
+```bash
+flutter test
 ```
 
-Required mobile/device features can include GPS and camera/image picker.
+---
+
+## Directory Architecture
+
+```text
+mobile/lib/
+├── app/                  # App initialization and routing
+├── core/                 # ApiClient, TokenStorage, AppConfig
+├── shared/               # Design system (theme tokens & shared widgets)
+└── features/             # Vertical business features (1 per component)
+    ├── auth/             # Login & Registration
+    ├── service_requests/ # Component 1
+    ├── providers/        # Component 2
+    ├── quotations/       # Component 3
+    └── tracking/         # Component 4
+```
+
+For complete mobile team standards, see:
+👉 **[Flutter Development Guide](../docs/development/flutter-development-guide.md)**

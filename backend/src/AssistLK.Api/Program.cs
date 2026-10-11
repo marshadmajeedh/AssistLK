@@ -212,9 +212,7 @@ builder.Services.AddHttpClient<AssistLK.Application.Services.Providers.IProvider
 });
 builder.Services.AddScoped<AssistLK.Application.Services.Providers.IProviderMatchingCoordinator, AssistLK.Application.Services.Providers.ProviderMatchingCoordinator>();
 
-// TEMP: disabled during development to reduce Supabase connection load.
-// Re-enable before final demo/viva.
-// builder.Services.AddHostedService<AssistLK.Api.Features.Providers.ProviderMatchingBackgroundWorker>();
+builder.Services.AddHostedService<AssistLK.Api.Features.Providers.ProviderMatchingBackgroundWorker>();
 
 
 builder.Services.AddScoped<ExternalProblemUnderstandingAgentAdapter>();

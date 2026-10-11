@@ -1,5 +1,6 @@
 using System.Net;
 using System.Text.Json;
+using System;
 using AssistLK.Agents.Abstractions;
 using AssistLK.Agents.Clients;
 using AssistLK.Agents.Configuration;
@@ -20,14 +21,17 @@ public class QuotationBookingAgentClientTests
             QuotationBookingUrl = "http://localhost:8002",
             InternalApiKey = "test-key",
         };
+        var serviceRequestId = Guid.NewGuid();
+        var providerId = Guid.NewGuid();
         IQuotationBookingAgentClient client = new QuotationBookingAgentClient(
             httpClient, options, NullLogger<QuotationBookingAgentClient>.Instance);
+        Assert.Equal(TimeSpan.FromSeconds(60), httpClient.Timeout);
 
         var started = await client.StartWorkflowAsync(new QuotationWorkflowStartRequest
         {
             QuotationId = 42,
-            ServiceRequestId = 9,
-            ProviderId = 17,
+            ServiceRequestId = serviceRequestId,
+            ProviderId = providerId,
             Items = [new QuotationWorkflowItem
             {
                 Description = "Repair",
@@ -45,6 +49,12 @@ public class QuotationBookingAgentClientTests
 
         Assert.Equal("thread-42", started.ThreadId);
         Assert.Equal(42, started.ApprovalRequest?.QuotationId);
+        Assert.Equal(
+            Guid.Parse("00000000-0000-0000-0000-000000000009"),
+            started.ApprovalRequest?.ServiceRequestId);
+        Assert.Equal(
+            Guid.Parse("00000000-0000-0000-0000-000000000017"),
+            started.ApprovalRequest?.ProviderId);
         Assert.Equal("completed", resumed.Status);
         Assert.Equal(42, resumed.FinalState?.QuotationId);
         Assert.Equal("approve", resumed.FinalState?.CustomerDecision);
@@ -56,6 +66,12 @@ public class QuotationBookingAgentClientTests
                 Assert.Equal("test-key", start.InternalApiKey);
                 using var payload = JsonDocument.Parse(start.Body!);
                 Assert.Equal(42, payload.RootElement.GetProperty("quotation_id").GetInt32());
+                Assert.Equal(
+                    serviceRequestId.ToString(),
+                    payload.RootElement.GetProperty("service_request_id").GetString());
+                Assert.Equal(
+                    providerId.ToString(),
+                    payload.RootElement.GetProperty("provider_id").GetString());
                 Assert.Equal(25m, payload.RootElement.GetProperty("items")[0].GetProperty("amount").GetDecimal());
             },
             resume =>
@@ -83,7 +99,7 @@ public class QuotationBookingAgentClientTests
 
             var responseBody = request.RequestUri.AbsolutePath == "/workflows/start"
                 ? """
-                  {"thread_id":"thread-42","status":"waiting_for_approval","approval_request":{"type":"quotation_approval","quotation_id":42,"service_request_id":9,"provider_id":17,"total_amount":50,"allowed_actions":["approve","reject"],"message":"Approve?"}}
+                  {"thread_id":"thread-42","status":"waiting_for_approval","approval_request":{"type":"quotation_approval","quotation_id":42,"service_request_id":"00000000-0000-0000-0000-000000000009","provider_id":"00000000-0000-0000-0000-000000000017","total_amount":50,"allowed_actions":["approve","reject"],"message":"Approve?"}}
                   """
                 : """
                   {"thread_id":"thread-42","status":"completed","final_state":{"quotation_id":42,"customer_decision":"approve","customer_remarks":"Approved","final_message":"Customer approved the quotation."}}

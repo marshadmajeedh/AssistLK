@@ -317,6 +317,13 @@ The backend supports three complementary configuration methods for local develop
      ```bash
      dotnet user-secrets set "ConnectionStrings:DefaultConnection" "<YOUR_SUPABASE_CONNECTION_STRING>" --project backend/src/AssistLK.Api
      ```
+   - The API also requires a unique OTP pepper for local development. Generate 32 random bytes and store the Base64 value in User Secrets (do not commit or reuse it):
+     ```powershell
+     $bytes = New-Object byte[] 32
+     [Security.Cryptography.RandomNumberGenerator]::Create().GetBytes($bytes)
+     $pepper = [Convert]::ToBase64String($bytes)
+     dotnet user-secrets set "AuthOtp:OtpPepper" $pepper --project backend/src/AssistLK.Api
+     ```
 
 3. **Operating System / Process Environment Variables**:
    - Standard OS environment variables can be exported in your shell or set in container/CI environments:

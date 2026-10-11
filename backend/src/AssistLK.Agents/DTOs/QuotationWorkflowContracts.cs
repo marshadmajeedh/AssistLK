@@ -9,10 +9,10 @@ public sealed class QuotationWorkflowStartRequest
     public int QuotationId { get; set; }
 
     [JsonPropertyName("service_request_id")]
-    public int? ServiceRequestId { get; set; }
+    public Guid? ServiceRequestId { get; set; }
 
     [JsonPropertyName("provider_id")]
-    public int? ProviderId { get; set; }
+    public Guid? ProviderId { get; set; }
 
     [JsonPropertyName("items")]
     public List<QuotationWorkflowItem> Items { get; set; } = new();
@@ -69,10 +69,10 @@ public sealed class QuotationApprovalRequest
     public int QuotationId { get; set; }
 
     [JsonPropertyName("service_request_id")]
-    public int? ServiceRequestId { get; set; }
+    public Guid? ServiceRequestId { get; set; }
 
     [JsonPropertyName("provider_id")]
-    public int? ProviderId { get; set; }
+    public Guid? ProviderId { get; set; }
 
     [JsonPropertyName("total_amount")]
     public decimal? TotalAmount { get; set; }
@@ -82,6 +82,39 @@ public sealed class QuotationApprovalRequest
 
     [JsonPropertyName("message")]
     public string Message { get; set; } = string.Empty;
+
+    [JsonPropertyName("risk_assessment")]
+    public QuotationRiskAssessment? RiskAssessment { get; set; }
+}
+
+public sealed class QuotationRiskAssessment
+{
+    [JsonPropertyName("risk_level")]
+    public string? RiskLevel { get; set; }
+
+    [JsonPropertyName("confidence")]
+    public double? Confidence { get; set; }
+
+    [JsonPropertyName("rationale")]
+    public string? Rationale { get; set; }
+
+    [JsonPropertyName("suggested_concerns")]
+    public List<string>? SuggestedConcerns { get; set; }
+
+    [JsonPropertyName("recommendation")]
+    public string? Recommendation { get; set; }
+
+    [JsonPropertyName("model")]
+    public string? Model { get; set; }
+
+    [JsonPropertyName("prompt_tokens")]
+    public int? PromptTokens { get; set; }
+
+    [JsonPropertyName("completion_tokens")]
+    public int? CompletionTokens { get; set; }
+
+    [JsonPropertyName("total_tokens")]
+    public int? TotalTokens { get; set; }
 }
 
 public sealed class QuotationWorkflowResumeResponse

@@ -13,6 +13,7 @@ The Service Coordination Agent supports quotation and booking workflow coordinat
 ## Main integration points
 
 - ASP.NET quotation endpoints start and resume the Python workflow. The start response includes a `threadId`, which the authenticated customer supplies when approving or rejecting.
+- The authenticated customer quotation inbox uses `GET /api/quotations/mine` to list sent quotations for that customer's service requests, including their itemized prices and totals.
 - ASP.NET validates the resumed quotation ID and decision, then owns quotation status changes and booking persistence.
 - React staff workflows
 - Flutter customer and provider workflows

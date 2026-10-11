@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Security.Claims;
 using System.Threading;
 using System.Threading.Tasks;
+using AssistLK.Agents.Abstractions;
 using AssistLK.Api.Controllers;
 using AssistLK.Application.Interfaces;
 using AssistLK.Application.Quotations;
@@ -16,7 +17,6 @@ using AssistLK.Infrastructure.Repositories;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
-using Microsoft.Extensions.Configuration;
 using Moq;
 using Xunit;
 
@@ -35,16 +35,77 @@ public class QuotationHandoffAndActivityTests
         var quotationRepo = new QuotationRepository(dbContext);
         var bookingRepo = new BookingRepository(dbContext);
         var lookup = new ServiceRequestLookup(dbContext);
-        var config = new ConfigurationBuilder().Build();
-
         var quotationService = new QuotationService(
             quotationRepo,
             bookingRepo,
             lookup,
-            config,
+            new Mock<IQuotationBookingAgentClient>().Object,
             dbContext);
 
         return (dbContext, quotationService);
+    }
+
+    [Fact]
+    public async Task GetForCustomerAsync_ReturnsVisibleQuotesWithItemsOnlyForOwnedRequests()
+    {
+        var (dbContext, service) = CreateTestContext();
+        var customerId = Guid.NewGuid();
+        var otherCustomerId = Guid.NewGuid();
+        var ownRequestId = Guid.NewGuid();
+        var otherRequestId = Guid.NewGuid();
+
+        dbContext.Users.AddRange(
+            new User { Id = customerId, FullName = "Teshan", Email = "teshan@example.test" },
+            new User { Id = otherCustomerId, FullName = "Other", Email = "other@example.test" });
+        dbContext.ServiceRequests.AddRange(
+            new ServiceRequest { Id = ownRequestId, CustomerId = customerId },
+            new ServiceRequest { Id = otherRequestId, CustomerId = otherCustomerId });
+        await dbContext.SaveChangesAsync();
+
+        var customerQuotation = new Quotation
+        {
+            ServiceRequestId = ownRequestId,
+            ProviderId = Guid.NewGuid(),
+            Status = QuotationStatus.WaitingForCustomerApproval,
+            TotalAmount = 5500m,
+            CreatedAt = DateTime.UtcNow,
+            UpdatedAt = DateTime.UtcNow,
+            Items = new List<QuotationItem>
+            {
+                new() { Description = "Service charge", Amount = 5000m, Quantity = 1 },
+                new() { Description = "Visiting charge", Amount = 500m, Quantity = 1 }
+            }
+        };
+        dbContext.Quotations.AddRange(
+            customerQuotation,
+            new Quotation
+            {
+                ServiceRequestId = ownRequestId,
+                ProviderId = Guid.NewGuid(),
+                Status = QuotationStatus.Draft,
+                TotalAmount = 100m,
+                CreatedAt = DateTime.UtcNow,
+                UpdatedAt = DateTime.UtcNow
+            },
+            new Quotation
+            {
+                ServiceRequestId = otherRequestId,
+                ProviderId = Guid.NewGuid(),
+                Status = QuotationStatus.WaitingForCustomerApproval,
+                TotalAmount = 200m,
+                CreatedAt = DateTime.UtcNow,
+                UpdatedAt = DateTime.UtcNow
+            });
+        await dbContext.SaveChangesAsync();
+
+        var quotations = await service.GetForCustomerAsync(customerId);
+
+        var quotation = Assert.Single(quotations);
+        Assert.Equal(customerQuotation.Id, quotation.Id);
+        Assert.Equal(5500m, quotation.TotalAmount);
+        Assert.Equal(2, quotation.Items.Count);
+        Assert.Equal("Service charge", quotation.Items[0].Description);
+        Assert.Equal("Visiting charge", quotation.Items[1].Description);
     }
 
     [Fact]

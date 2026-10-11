@@ -39,6 +39,21 @@ public class QuotationRepository : IQuotationRepository
             .ToListAsync(cancellationToken);
     }
 
+    public async Task<IReadOnlyList<Quotation>> GetByCustomerIdAsync(
+        Guid customerId,
+        CancellationToken cancellationToken = default)
+    {
+        return await _context.Quotations
+            .Include(q => q.Items)
+            .Where(q =>
+                q.Status != QuotationStatus.Draft &&
+                _context.ServiceRequests.Any(request =>
+                    request.Id == q.ServiceRequestId &&
+                    request.CustomerId == customerId))
+            .OrderByDescending(q => q.CreatedAt)
+            .ToListAsync(cancellationToken);
+    }
+
     public async Task AddAsync(Quotation quotation, CancellationToken cancellationToken = default)
     {
         await _context.Quotations.AddAsync(quotation, cancellationToken);

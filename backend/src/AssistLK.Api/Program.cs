@@ -7,6 +7,7 @@ using AssistLK.Agents.Tools;
 using AssistLK.Api.Middleware;
 using AssistLK.Api.Seed;
 using AssistLK.Infrastructure;
+using AssistLK.Infrastructure.Services;   // ← NEW (for ProviderBookingQueryService)
 using System.Text;
 using System.Text.Json.Serialization;
 using AssistLK.Api.Authentication;
@@ -210,7 +211,10 @@ builder.Services.AddHttpClient<AssistLK.Application.Services.Providers.IProvider
     client.Timeout = TimeSpan.FromSeconds(90);
 });
 builder.Services.AddScoped<AssistLK.Application.Services.Providers.IProviderMatchingCoordinator, AssistLK.Application.Services.Providers.ProviderMatchingCoordinator>();
-builder.Services.AddHostedService<AssistLK.Api.Features.Providers.ProviderMatchingBackgroundWorker>();
+
+// TEMP: disabled during development to reduce Supabase connection load.
+// Re-enable before final demo/viva.
+// builder.Services.AddHostedService<AssistLK.Api.Features.Providers.ProviderMatchingBackgroundWorker>();
 
 
 builder.Services.AddScoped<ExternalProblemUnderstandingAgentAdapter>();
@@ -283,7 +287,9 @@ builder.Services.AddSingleton(sp =>
     return options;
 });
 builder.Services.AddScoped<IStaleAnalysisRecoveryService, StaleAnalysisRecoveryService>();
-builder.Services.AddHostedService<StaleAnalysisRecoveryBackgroundService>();
+
+// TEMP: disabled during development to reduce Supabase connection load.
+// builder.Services.AddHostedService<StaleAnalysisRecoveryBackgroundService>();
 
 // C1 Service Request Lifecycle Expiration
 builder.Services.AddSingleton(sp =>
@@ -295,7 +301,9 @@ builder.Services.AddSingleton(sp =>
     return options;
 });
 builder.Services.AddScoped<IServiceRequestLifecycleExpirationService, ServiceRequestLifecycleExpirationService>();
-builder.Services.AddHostedService<ServiceRequestLifecycleExpirationBackgroundService>();
+
+// TEMP: disabled during development to reduce Supabase connection load.
+// builder.Services.AddHostedService<ServiceRequestLifecycleExpirationBackgroundService>();
 
 // C1 Attachment Reconciliation
 builder.Services.AddSingleton(sp =>
@@ -306,7 +314,9 @@ builder.Services.AddSingleton(sp =>
     options.Validate();
     return options;
 });
-builder.Services.AddHostedService<AttachmentReconciliationBackgroundService>();
+
+// TEMP: disabled during development to reduce Supabase connection load.
+// builder.Services.AddHostedService<AttachmentReconciliationBackgroundService>();
 
 // Challenge Retention Cleanup
 builder.Services.AddSingleton(sp =>
@@ -318,11 +328,24 @@ builder.Services.AddSingleton(sp =>
     return options;
 });
 builder.Services.AddScoped<IRegistrationChallengeCleanupService, RegistrationChallengeCleanupService>();
-builder.Services.AddHostedService<RegistrationChallengeCleanupBackgroundService>();
+
+// TEMP: disabled during development to reduce Supabase connection load.
+// builder.Services.AddHostedService<RegistrationChallengeCleanupBackgroundService>();
 
 builder.Services.AddScoped<
     DemoProviderSearchTool>();
 
+
+// -----------------------------
+// Component 3 — Provider Bookings Query Service
+// -----------------------------
+// Owned by Component 3 (Quotation & Booking Management).
+// Reads ServiceJobs, ServiceRequests, Quotations, Bookings read-only to
+// assemble the provider's bookings list. Component 4's controller is
+// NOT touched; this reads the shared DB through its own service.
+builder.Services.AddScoped<
+    AssistLK.Application.Services.IProviderBookingQueryService,
+    AssistLK.Infrastructure.Services.ProviderBookingQueryService>();
 
 
 // -----------------------------

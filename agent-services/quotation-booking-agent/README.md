@@ -36,7 +36,9 @@ copy .env.example .env
 
 Set `INTERNAL_API_KEY` when service-to-service authentication is required. Use
 the same value for ASP.NET `AgentServices:InternalApiKey`; leave both unset only
-for isolated local development.
+for isolated local development. When configured, the service accepts either
+`X-Internal-Api-Key` or `X-Api-Key` and trims surrounding quotes or whitespace so
+requests from internal callers remain compatible.
 
 ## Run
 

@@ -1,12 +1,15 @@
 using System;
 using System.Collections.Generic;
+using System.Linq;
 using System.Security.Claims;
 using System.Threading;
 using System.Threading.Tasks;
+using AssistLK.Application.Interfaces;
 using AssistLK.Application.Quotations;
 using AssistLK.Application.Services.Quotations;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.EntityFrameworkCore;
 
 namespace AssistLK.Api.Controllers;
 
@@ -21,10 +24,14 @@ namespace AssistLK.Api.Controllers;
 public class QuotationsController : ControllerBase
 {
     private readonly IQuotationService _quotationService;
+    private readonly IProviderProfileDbContext _providerProfiles;
 
-    public QuotationsController(IQuotationService quotationService)
+    public QuotationsController(
+        IQuotationService quotationService,
+        IProviderProfileDbContext providerProfiles)
     {
         _quotationService = quotationService;
+        _providerProfiles = providerProfiles;
     }
 
     /// <summary>
@@ -40,8 +47,15 @@ public class QuotationsController : ControllerBase
         [FromBody] CreateQuotationDto dto,
         CancellationToken cancellationToken)
     {
-        var providerUserId = GetCurrentUserId();
-        var created = await _quotationService.CreateAsync(dto, providerUserId, cancellationToken);
+        var providerId = await GetCurrentProviderProfileIdAsync(cancellationToken);
+        if (providerId is null)
+            return Unauthorized();
+
+        if (dto.ProviderId != providerId.Value)
+            return Forbid();
+
+        var created = await _quotationService.CreateAsync(
+            dto, providerId.Value.ToString(), cancellationToken);
         return CreatedAtAction(nameof(GetById), new { id = created.Id }, created);
     }
 
@@ -74,6 +88,25 @@ public class QuotationsController : ControllerBase
     }
 
     /// <summary>
+    /// Lists non-draft quotations for service requests owned by the customer.
+    /// </summary>
+    [HttpGet("mine")]
+    [Authorize(Roles = "Customer")]
+    [ProducesResponseType(typeof(IEnumerable<QuotationDto>), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    public async Task<ActionResult<IEnumerable<QuotationDto>>> GetForCurrentCustomer(
+        CancellationToken cancellationToken)
+    {
+        if (!Guid.TryParse(GetCurrentUserId(), out var customerId))
+            return Unauthorized();
+
+        var quotations = await _quotationService.GetForCustomerAsync(
+            customerId,
+            cancellationToken);
+        return Ok(quotations);
+    }
+
+    /// <summary>
     /// Provider submits a draft quotation for customer approval.
     /// This is the point where the Agentic AI workflow pauses —
     /// the AI cannot decide pricing.
@@ -87,9 +120,12 @@ public class QuotationsController : ControllerBase
         int id,
         CancellationToken cancellationToken)
     {
-        var providerUserId = GetCurrentUserId();
+        var providerId = await GetCurrentProviderProfileIdAsync(cancellationToken);
+        if (providerId is null)
+            return Unauthorized();
+
         var workflow = await _quotationService.StartApprovalWorkflowAsync(
-            id, providerUserId, cancellationToken);
+            id, providerId.Value.ToString(), cancellationToken);
         return Ok(workflow);
     }
 
@@ -111,6 +147,11 @@ public class QuotationsController : ControllerBase
         [FromBody] ApproveQuotationDto dto,
         CancellationToken cancellationToken)
     {
+        if (dto is null)
+        {
+            return BadRequest("Request body is required.");
+        }
+
         if (string.IsNullOrWhiteSpace(dto.ThreadId))
         {
             return BadRequest("threadId is required; start the quotation workflow first.");
@@ -142,6 +183,11 @@ public class QuotationsController : ControllerBase
         [FromBody] RejectQuotationDto dto,
         CancellationToken cancellationToken)
     {
+        if (dto is null)
+        {
+            return BadRequest("Request body is required.");
+        }
+
         if (string.IsNullOrWhiteSpace(dto.ThreadId))
         {
             return BadRequest("threadId is required; start the quotation workflow first.");
@@ -162,5 +208,20 @@ public class QuotationsController : ControllerBase
                      ?? User.FindFirstValue("sub")
                      ?? throw new UnauthorizedAccessException("User identity not found in token.");
         return userId;
+    }
+
+    private async Task<Guid?> GetCurrentProviderProfileIdAsync(
+        CancellationToken cancellationToken)
+    {
+        if (!Guid.TryParse(GetCurrentUserId(), out var userId))
+            return null;
+
+        var providerProfileId = await _providerProfiles.ProviderProfiles
+            .AsNoTracking()
+            .Where(profile => profile.UserId == userId)
+            .Select(profile => (Guid?)profile.Id)
+            .SingleOrDefaultAsync(cancellationToken);
+
+        return providerProfileId ?? userId;
     }
 }

@@ -116,6 +116,11 @@ class QuotationModel {
       updatedAt: json['updatedAt'] != null
           ? DateTime.parse(json['updatedAt'] as String)
           : DateTime.now(),
+      riskAssessment: json['riskAssessment'] is Map
+          ? QuotationRiskAssessment.fromJson(
+              Map<String, dynamic>.from(json['riskAssessment'] as Map),
+            )
+          : null,
     );
   }
 

@@ -6,7 +6,6 @@ import '../../../shared/theme/app_radius.dart';
 import '../../../shared/theme/app_spacing.dart';
 import '../../../shared/theme/app_text_styles.dart';
 import '../../../shared/widgets/app_button.dart';
-import '../../../shared/widgets/app_card.dart';
 import '../../auth/providers/auth_provider.dart';
 import '../models/quotation_model.dart';
 import '../providers/quotation_provider.dart';
@@ -37,9 +36,7 @@ class _QuotationDetailScreenState extends State<QuotationDetailScreen> {
     super.initState();
     final auth = context.read<AuthProvider>();
     _provider = QuotationProvider(
-      quotationService: QuotationService(
-        apiClient: auth.authService.apiClient,
-      ),
+      quotationService: QuotationService(apiClient: auth.authService.apiClient),
     );
 
     if (widget.initialQuotation != null) {
@@ -140,10 +137,7 @@ class _QuotationDetailScreenState extends State<QuotationDetailScreen> {
 
   Future<void> _onReject(QuotationModel q) async {
     if (q.workflowThreadId == null) {
-      _snack(
-        'This quotation is not ready for review yet.',
-        AppColors.warning,
-      );
+      _snack('This quotation is not ready for review yet.', AppColors.warning);
       return;
     }
 
@@ -156,8 +150,7 @@ class _QuotationDetailScreenState extends State<QuotationDetailScreen> {
           controller: controller,
           maxLines: 3,
           decoration: const InputDecoration(
-            hintText:
-                'Tell the provider why you are rejecting this quotation.',
+            hintText: 'Tell the provider why you are rejecting this quotation.',
             border: OutlineInputBorder(),
           ),
         ),
@@ -216,15 +209,19 @@ class _QuotationDetailScreenState extends State<QuotationDetailScreen> {
           // Loading without data
           if (q == null && provider.isLoading) {
             return Scaffold(
-              appBar: AppBar(title: const Text('Quotation Details')),
-              body: const Center(child: CircularProgressIndicator()),
+              backgroundColor: AppColors.background,
+              appBar: _buildAppBar('Quotation Details'),
+              body: const Center(
+                child: CircularProgressIndicator(color: AppColors.primary),
+              ),
             );
           }
 
           // No data + no loading
           if (q == null) {
             return Scaffold(
-              appBar: AppBar(title: const Text('Quotation Details')),
+              backgroundColor: AppColors.background,
+              appBar: _buildAppBar('Quotation Details'),
               body: Center(
                 child: Padding(
                   padding: const EdgeInsets.all(AppSpacing.lg),
@@ -243,10 +240,7 @@ class _QuotationDetailScreenState extends State<QuotationDetailScreen> {
                         textAlign: TextAlign.center,
                       ),
                       const SizedBox(height: AppSpacing.md),
-                      AppButton(
-                        text: 'Retry',
-                        onPressed: _load,
-                      ),
+                      AppButton(text: 'Retry', onPressed: _load),
                     ],
                   ),
                 ),
@@ -256,161 +250,311 @@ class _QuotationDetailScreenState extends State<QuotationDetailScreen> {
 
           // Detail view
           return Scaffold(
-            appBar: AppBar(title: Text('Quotation #${q.id}')),
-            body: SingleChildScrollView(
-              padding: const EdgeInsets.all(AppSpacing.lg),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
-                  // Status
-                  AppCard(
-                    child: Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                      children: [
-                        const Text(
-                          'Status',
-                          style: AppTextStyles.cardHeading,
-                        ),
-                        QuotationStatusBadge(status: q.status),
-                      ],
-                    ),
+            backgroundColor: AppColors.background,
+            appBar: _buildAppBar('Quotation #${q.id}'),
+            body: LayoutBuilder(
+              builder: (context, constraints) {
+                final horizontalPadding = constraints.maxWidth >= 900
+                    ? AppSpacing.xl
+                    : AppSpacing.md;
+                return SingleChildScrollView(
+                  padding: EdgeInsets.symmetric(
+                    horizontal: horizontalPadding,
+                    vertical: AppSpacing.lg,
                   ),
-                  const SizedBox(height: AppSpacing.md),
-
-                  // AI Risk Assessment
-                  if (q.riskAssessment != null &&
-                      q.riskAssessment!.hasData) ...[
-                    RiskAssessmentCard(assessment: q.riskAssessment!),
-                    const SizedBox(height: AppSpacing.md),
-                  ],
-
-                  // Line items
-                  AppCard(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        const Text(
-                          'Line Items',
-                          style: AppTextStyles.cardHeading,
-                        ),
-                        const SizedBox(height: AppSpacing.sm),
-                        ...q.items.map(
-                          (item) => Padding(
-                            padding: const EdgeInsets.symmetric(vertical: 6),
+                  child: Center(
+                    child: ConstrainedBox(
+                      constraints: const BoxConstraints(maxWidth: 1000),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.stretch,
+                        children: [
+                          // Status
+                          _detailCard(
                             child: Row(
-                              crossAxisAlignment: CrossAxisAlignment.start,
                               children: [
-                                Expanded(
+                                Container(
+                                  width: 42,
+                                  height: 42,
+                                  decoration: BoxDecoration(
+                                    color: AppColors.primarySurface,
+                                    borderRadius: BorderRadius.circular(13),
+                                  ),
+                                  child: const Icon(
+                                    Icons.fact_check_outlined,
+                                    color: AppColors.primary,
+                                  ),
+                                ),
+                                const SizedBox(width: AppSpacing.md),
+                                const Expanded(
                                   child: Column(
                                     crossAxisAlignment:
                                         CrossAxisAlignment.start,
                                     children: [
                                       Text(
-                                        item.description,
-                                        style: AppTextStyles.body.copyWith(
-                                          fontWeight: FontWeight.w600,
+                                        'Quotation status',
+                                        style: TextStyle(
+                                          color: AppColors.textPrimary,
+                                          fontSize: 15,
+                                          fontWeight: FontWeight.w700,
                                         ),
                                       ),
-                                      const SizedBox(height: 2),
+                                      SizedBox(height: 3),
                                       Text(
-                                        'Rs. ${item.amount.toStringAsFixed(2)} × ${item.quantity}',
-                                        style: AppTextStyles.small.copyWith(
+                                        'Current response from the provider',
+                                        style: TextStyle(
                                           color: AppColors.textSecondary,
+                                          fontSize: 12,
                                         ),
                                       ),
                                     ],
                                   ),
                                 ),
-                                Text(
-                                  'Rs. ${item.lineTotal.toStringAsFixed(2)}',
-                                  style: AppTextStyles.body.copyWith(
-                                    fontWeight: FontWeight.w600,
+                                QuotationStatusBadge(status: q.status),
+                              ],
+                            ),
+                          ),
+                          const SizedBox(height: AppSpacing.md),
+
+                          // AI Risk Assessment
+                          if (q.riskAssessment != null &&
+                              q.riskAssessment!.hasData) ...[
+                            RiskAssessmentCard(assessment: q.riskAssessment!),
+                            const SizedBox(height: AppSpacing.md),
+                          ],
+
+                          // Line items
+                          _detailCard(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                const Row(
+                                  children: [
+                                    Icon(
+                                      Icons.receipt_long_rounded,
+                                      color: AppColors.primary,
+                                      size: 20,
+                                    ),
+                                    SizedBox(width: AppSpacing.sm),
+                                    Text(
+                                      'Price breakdown',
+                                      style: TextStyle(
+                                        color: AppColors.textPrimary,
+                                        fontSize: 16,
+                                        fontWeight: FontWeight.w700,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                                const SizedBox(height: AppSpacing.sm),
+                                ...q.items.indexed.map((entry) {
+                                  final (index, item) = entry;
+                                  return Padding(
+                                    padding: const EdgeInsets.only(top: 8),
+                                    child: Container(
+                                      padding: const EdgeInsets.all(
+                                        AppSpacing.sm,
+                                      ),
+                                      decoration: BoxDecoration(
+                                        color: const Color(0xFFF8FAFC),
+                                        borderRadius: BorderRadius.circular(12),
+                                        border: Border.all(
+                                          color: const Color(0xFFE8EEF5),
+                                        ),
+                                      ),
+                                      child: Row(
+                                        crossAxisAlignment:
+                                            CrossAxisAlignment.center,
+                                        children: [
+                                          Container(
+                                            width: 30,
+                                            height: 30,
+                                            alignment: Alignment.center,
+                                            decoration: BoxDecoration(
+                                              color: AppColors.primarySurface,
+                                              borderRadius:
+                                                  BorderRadius.circular(9),
+                                            ),
+                                            child: Text(
+                                              '${index + 1}',
+                                              style: const TextStyle(
+                                                color: AppColors.primary,
+                                                fontSize: 12,
+                                                fontWeight: FontWeight.w700,
+                                              ),
+                                            ),
+                                          ),
+                                          const SizedBox(width: AppSpacing.sm),
+                                          Expanded(
+                                            child: Column(
+                                              crossAxisAlignment:
+                                                  CrossAxisAlignment.start,
+                                              children: [
+                                                Text(
+                                                  item.description,
+                                                  style: AppTextStyles.body
+                                                      .copyWith(
+                                                        fontWeight:
+                                                            FontWeight.w600,
+                                                      ),
+                                                ),
+                                                const SizedBox(height: 3),
+                                                Text(
+                                                  'Rs. ${item.amount.toStringAsFixed(2)} × ${item.quantity}',
+                                                  style: AppTextStyles.small
+                                                      .copyWith(
+                                                        color: AppColors
+                                                            .textSecondary,
+                                                      ),
+                                                ),
+                                              ],
+                                            ),
+                                          ),
+                                          const SizedBox(width: AppSpacing.sm),
+                                          Text(
+                                            'Rs. ${item.lineTotal.toStringAsFixed(2)}',
+                                            style: AppTextStyles.body.copyWith(
+                                              color: AppColors.textPrimary,
+                                              fontWeight: FontWeight.w700,
+                                            ),
+                                          ),
+                                        ],
+                                      ),
+                                    ),
+                                  );
+                                }),
+                                const SizedBox(height: AppSpacing.md),
+                                Container(
+                                  padding: const EdgeInsets.symmetric(
+                                    horizontal: AppSpacing.md,
+                                    vertical: AppSpacing.md,
+                                  ),
+                                  decoration: BoxDecoration(
+                                    color: AppColors.primarySurface,
+                                    borderRadius: BorderRadius.circular(13),
+                                    border: Border.all(
+                                      color: AppColors.primary.withValues(
+                                        alpha: 0.12,
+                                      ),
+                                    ),
+                                  ),
+                                  child: Row(
+                                    mainAxisAlignment:
+                                        MainAxisAlignment.spaceBetween,
+                                    children: [
+                                      const Text(
+                                        'Total',
+                                        style: TextStyle(
+                                          color: AppColors.textPrimary,
+                                          fontSize: 15,
+                                          fontWeight: FontWeight.w700,
+                                        ),
+                                      ),
+                                      Text(
+                                        'Rs. ${q.totalAmount.toStringAsFixed(2)}',
+                                        style: const TextStyle(
+                                          color: AppColors.primary,
+                                          fontSize: 19,
+                                          fontWeight: FontWeight.w800,
+                                        ),
+                                      ),
+                                    ],
                                   ),
                                 ),
                               ],
                             ),
                           ),
-                        ),
-                        const Divider(
-                          height: AppSpacing.lg,
-                          color: AppColors.border,
-                        ),
-                        Row(
-                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                          children: [
-                            const Text(
-                              'Total',
-                              style: AppTextStyles.cardHeading,
+                          const SizedBox(height: AppSpacing.md),
+
+                          // Actions
+                          if (q.canApprove) ...[
+                            AppButton(
+                              text: 'Approve Quotation',
+                              isLoading: provider.isSubmitting,
+                              onPressed: () => _onApprove(q),
                             ),
-                            Text(
-                              'Rs. ${q.totalAmount.toStringAsFixed(2)}',
-                              style: AppTextStyles.cardHeading.copyWith(
-                                color: AppColors.primary,
+                            const SizedBox(height: AppSpacing.sm),
+                            OutlinedButton(
+                              onPressed: provider.isSubmitting
+                                  ? null
+                                  : () => _onReject(q),
+                              style: OutlinedButton.styleFrom(
+                                foregroundColor: AppColors.error,
+                                side: const BorderSide(color: AppColors.error),
+                                minimumSize: const Size(double.infinity, 48),
+                                shape: RoundedRectangleBorder(
+                                  borderRadius: BorderRadius.circular(
+                                    AppRadius.medium,
+                                  ),
+                                ),
                               ),
+                              child: const Text('Reject Quotation'),
+                            ),
+                          ] else if (q.status.isApproved) ...[
+                            _StatusBanner(
+                              icon: Icons.check_circle_rounded,
+                              color: AppColors.success,
+                              message: 'This quotation has been approved.',
+                            ),
+                          ] else if (q.status.isRejected) ...[
+                            _StatusBanner(
+                              icon: Icons.cancel_rounded,
+                              color: AppColors.error,
+                              message: 'This quotation has been rejected.',
+                            ),
+                          ] else if (q.status.isDraft) ...[
+                            _StatusBanner(
+                              icon: Icons.edit_note_rounded,
+                              color: AppColors.textSecondary,
+                              message: 'The provider is still preparing this quotation.',
+                            ),
+                          ] else if (q.status.isPendingApproval &&
+                              q.workflowThreadId == null) ...[
+                            _StatusBanner(
+                              icon: Icons.hourglass_top_rounded,
+                              color: AppColors.warning,
+                              message: 'Waiting for the provider to submit this quotation for your approval.',
                             ),
                           ],
-                        ),
-                      ],
+                        ],
+                      ),
                     ),
                   ),
-                  const SizedBox(height: AppSpacing.md),
-
-                  // Actions
-                  if (q.canApprove) ...[
-                    AppButton(
-                      text: 'Approve Quotation',
-                      isLoading: provider.isSubmitting,
-                      onPressed: () => _onApprove(q),
-                    ),
-                    const SizedBox(height: AppSpacing.sm),
-                    OutlinedButton(
-                      onPressed: provider.isSubmitting
-                          ? null
-                          : () => _onReject(q),
-                      style: OutlinedButton.styleFrom(
-                        foregroundColor: AppColors.error,
-                        side: const BorderSide(color: AppColors.error),
-                        minimumSize: const Size(double.infinity, 48),
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(AppRadius.medium),
-                        ),
-                      ),
-                      child: const Text('Reject Quotation'),
-                    ),
-                  ] else if (q.status.isApproved) ...[
-                    _StatusBanner(
-                      icon: Icons.check_circle_rounded,
-                      color: AppColors.success,
-                      message: 'This quotation has been approved.',
-                    ),
-                  ] else if (q.status.isRejected) ...[
-                    _StatusBanner(
-                      icon: Icons.cancel_rounded,
-                      color: AppColors.error,
-                      message: 'This quotation has been rejected.',
-                    ),
-                  ] else if (q.status.isDraft) ...[
-                    _StatusBanner(
-                      icon: Icons.edit_note_rounded,
-                      color: AppColors.textSecondary,
-                      message:
-                          'The provider is still preparing this quotation.',
-                    ),
-                  ] else if (q.status.isPendingApproval &&
-                      q.workflowThreadId == null) ...[
-                    _StatusBanner(
-                      icon: Icons.hourglass_top_rounded,
-                      color: AppColors.warning,
-                      message:
-                          'Waiting for the provider to submit this quotation for your approval.',
-                    ),
-                  ],
-                ],
-              ),
+                );
+              },
             ),
           );
         },
       ),
+    );
+  }
+
+  PreferredSizeWidget _buildAppBar(String title) {
+    return AppBar(
+      title: Text(title),
+      backgroundColor: AppColors.primary,
+      foregroundColor: Colors.white,
+      elevation: 0,
+      scrolledUnderElevation: 0,
+      centerTitle: false,
+    );
+  }
+
+  Widget _detailCard({required Widget child}) {
+    return Container(
+      padding: const EdgeInsets.all(AppSpacing.md),
+      decoration: BoxDecoration(
+        color: AppColors.surface,
+        borderRadius: BorderRadius.circular(18),
+        border: Border.all(color: const Color(0xFFE2E8F0)),
+        boxShadow: const [
+          BoxShadow(
+            color: Color(0x0D182230),
+            blurRadius: 14,
+            offset: Offset(0, 4),
+          ),
+        ],
+      ),
+      child: child,
     );
   }
 }

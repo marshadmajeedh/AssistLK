@@ -6,14 +6,13 @@ import '../../../shared/theme/app_spacing.dart';
 import '../../../shared/theme/app_text_styles.dart';
 import '../../../shared/widgets/app_button.dart';
 import '../../../shared/widgets/empty_state_card.dart';
-import '../../../shared/widgets/section_header.dart';
 import '../../auth/providers/auth_provider.dart';
 import '../providers/quotation_provider.dart';
 import '../services/quotation_service.dart';
 import '../widgets/quotation_card.dart';
 import 'quotation_detail_screen.dart';
 
-/// Customer-side screen: shows all quotations for a service request.
+/// Customer-side screen: shows quotations for the signed-in customer's requests.
 class CustomerQuotationsListScreen extends StatefulWidget {
   final String serviceRequestId;
 
@@ -36,9 +35,7 @@ class _CustomerQuotationsListScreenState
     super.initState();
     final auth = context.read<AuthProvider>();
     _provider = QuotationProvider(
-      quotationService: QuotationService(
-        apiClient: auth.authService.apiClient,
-      ),
+      quotationService: QuotationService(apiClient: auth.authService.apiClient),
     );
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted) return;
@@ -54,19 +51,19 @@ class _CustomerQuotationsListScreenState
 
   Future<void> _load() async {
     _provider.clearError();
-    await _provider.loadForServiceRequest(widget.serviceRequestId);
+    await _provider.loadForCurrentCustomer();
     if (!mounted) return;
     // Log for debugging in Chrome console
     debugPrint(
-      '[QuotationList] serviceRequestId=${widget.serviceRequestId} '
-      'count=${_provider.quotations.length} '
+      '[QuotationList] openedFromRequestId=${widget.serviceRequestId} '
+      'customerQuotationCount=${_provider.quotations.length} '
       'error=${_provider.error}',
     );
   }
 
   Future<void> _refresh() async {
     _provider.clearError();
-    await _provider.loadForServiceRequest(widget.serviceRequestId);
+    await _provider.loadForCurrentCustomer();
   }
 
   @override
@@ -74,20 +71,19 @@ class _CustomerQuotationsListScreenState
     return ChangeNotifierProvider<QuotationProvider>.value(
       value: _provider,
       child: Scaffold(
-        appBar: AppBar(title: const Text('Quotations')),
+        backgroundColor: AppColors.background,
         body: Consumer<QuotationProvider>(
           builder: (context, provider, _) {
             // Loading state
             if (provider.isLoading && provider.quotations.isEmpty) {
-              return const Center(child: CircularProgressIndicator());
+              return const Center(
+                child: CircularProgressIndicator(color: AppColors.primary),
+              );
             }
 
             // Error state
             if (provider.error != null && provider.quotations.isEmpty) {
-              return _ErrorState(
-                message: provider.error!,
-                onRetry: _load,
-              );
+              return _ErrorState(message: provider.error!, onRetry: _load);
             }
 
             // Empty state
@@ -102,8 +98,7 @@ class _CustomerQuotationsListScreenState
                     EmptyStateCard(
                       icon: Icons.receipt_long_outlined,
                       title: 'No quotations yet',
-                      description:
-                          'When providers respond to this request, their quotations will appear here for your review.',
+                      description: 'When providers send quotations for your service requests, they will appear here for your review.',
                     ),
                   ],
                 ),
@@ -117,29 +112,89 @@ class _CustomerQuotationsListScreenState
                 physics: const AlwaysScrollableScrollPhysics(),
                 padding: const EdgeInsets.all(AppSpacing.lg),
                 itemCount: provider.quotations.length + 1,
-                separatorBuilder: (_,_) =>
+                separatorBuilder: (_, _) =>
                     const SizedBox(height: AppSpacing.sm),
                 itemBuilder: (context, index) {
                   if (index == 0) {
-                    return const SectionHeader(
-                      title: 'Quotations',
-                      subtitle: 'Review the details before you decide',
+                    return Center(
+                      child: ConstrainedBox(
+                        constraints: const BoxConstraints(maxWidth: 1200),
+                        child: Container(
+                          padding: const EdgeInsets.all(AppSpacing.md),
+                          decoration: BoxDecoration(
+                            gradient: const LinearGradient(
+                              colors: [
+                                AppColors.primary,
+                                AppColors.primaryDark,
+                              ],
+                              begin: Alignment.topLeft,
+                              end: Alignment.bottomRight,
+                            ),
+                            borderRadius: BorderRadius.circular(18),
+                            boxShadow: const [
+                              BoxShadow(
+                                color: Color(0x241F4E78),
+                                blurRadius: 14,
+                                offset: Offset(0, 6),
+                              ),
+                            ],
+                          ),
+                          child: const Row(
+                            children: [
+                              Icon(
+                                Icons.receipt_long_rounded,
+                                color: Colors.white,
+                                size: 26,
+                              ),
+                              SizedBox(width: AppSpacing.md),
+                              Expanded(
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Text(
+                                      'Quotation Details',
+                                      style: TextStyle(
+                                        color: Colors.white,
+                                        fontSize: 18,
+                                        fontWeight: FontWeight.w700,
+                                      ),
+                                    ),
+                                    SizedBox(height: AppSpacing.xs),
+                                    Text(
+                                      'Review the details before you decide',
+                                      style: TextStyle(
+                                        color: Color(0xFFDCEBFA),
+                                        fontSize: 13,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
                     );
                   }
                   final q = provider.quotations[index - 1];
-                  return QuotationCard(
-                    quotation: q,
-                    onTap: () {
-                      provider.setCurrentQuotation(q);
-                      Navigator.of(context).push(
-                        MaterialPageRoute<void>(
-                          builder: (_) => QuotationDetailScreen(
-                            quotationId: q.id,
-                            initialQuotation: q,
-                          ),
-                        ),
-                      );
-                    },
+                  return Center(
+                    child: ConstrainedBox(
+                      constraints: const BoxConstraints(maxWidth: 1200),
+                      child: QuotationCard(
+                        quotation: q,
+                        onTap: () {
+                          provider.setCurrentQuotation(q);
+                          Navigator.of(context).push(
+                            MaterialPageRoute<void>(
+                              builder: (_) => QuotationDetailScreen(
+                                quotationId: q.id,
+                                initialQuotation: q,
+                              ),
+                            ),
+                          );
+                        },
+                      ),
+                    ),
                   );
                 },
               ),

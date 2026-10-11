@@ -4,7 +4,7 @@ class BookingModel {
   final int quotationId;
   final String customerId;
   final String providerId;
-  final String status;         // "Confirmed" (extended enum values possible)
+  final String status; // "Confirmed" (extended enum values possible)
   final DateTime scheduledAt;
   final String? locationText;
   final double? latitude;
@@ -60,5 +60,73 @@ class BookingModel {
         'longitude': longitude,
         'createdAt': createdAt.toIso8601String(),
         'updatedAt': updatedAt.toIso8601String(),
+      };
+}
+
+/// Summary row returned by GET /api/provider/bookings.
+/// Used to render the provider's "My Bookings" tab.
+class ProviderBookingSummaryModel {
+  final String id;
+  /// The service request that this booking/quotation belongs to.
+  /// Needed to create a quotation when the row is a "Pending Quote".
+  final String? serviceRequestId;
+  final String providerId;
+  final String customerName;
+  final String serviceTitle;
+  final String locationText;
+  final double amount;
+  final String statusLabel;
+  final int statusCode;
+  final DateTime? scheduledAt;
+  final bool isCompleted;
+  final bool isPendingQuote;
+
+  const ProviderBookingSummaryModel({
+    required this.id,
+    this.serviceRequestId,
+    required this.providerId,
+    required this.customerName,
+    required this.serviceTitle,
+    required this.locationText,
+    required this.amount,
+    required this.statusLabel,
+    required this.statusCode,
+    this.scheduledAt,
+    required this.isCompleted,
+    required this.isPendingQuote,
+  });
+
+  factory ProviderBookingSummaryModel.fromJson(Map<String, dynamic> json) {
+    return ProviderBookingSummaryModel(
+      id: json['id']?.toString() ?? '',
+      serviceRequestId: json['serviceRequestId']?.toString(),
+      providerId: json['providerId']?.toString() ?? '',
+      customerName: json['customerName']?.toString() ?? 'Customer',
+      serviceTitle: json['serviceTitle']?.toString() ?? '',
+      locationText: json['locationText']?.toString() ?? '',
+      amount: (json['amount'] as num?)?.toDouble() ?? 0.0,
+      statusLabel: json['statusLabel']?.toString() ?? 'CONFIRMED',
+      statusCode: (json['statusCode'] as num?)?.toInt() ?? 0,
+      scheduledAt: json['scheduledAt'] != null
+          ? DateTime.tryParse(json['scheduledAt'].toString())
+          : null,
+      isCompleted: json['isCompleted'] as bool? ?? false,
+      isPendingQuote: json['isPendingQuote'] as bool? ?? false,
+    );
+  }
+
+  Map<String, dynamic> toJson() => {
+        'id': id,
+        'serviceRequestId': serviceRequestId,
+        'providerId': providerId,
+        'customerName': customerName,
+        'serviceTitle': serviceTitle,
+        'locationText': locationText,
+        'amount': amount,
+        'statusLabel': statusLabel,
+        'statusCode': statusCode,
+        'scheduledAt': scheduledAt?.toIso8601String(),
+        'isCompleted': isCompleted,
+        'isPendingQuote': isPendingQuote,
       };
 }

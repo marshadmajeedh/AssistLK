@@ -2,13 +2,13 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Threading.Tasks;
+using AssistLK.Agents.Abstractions;
 using AssistLK.Application.Quotations;
 using AssistLK.Application.Services.Quotations;
 using AssistLK.Domain.Entities;
 using AssistLK.Infrastructure.Data;
 using AssistLK.Infrastructure.Repositories;
 using Microsoft.EntityFrameworkCore;
-using Microsoft.Extensions.Configuration;
 using Xunit;
 
 namespace AssistLK.IntegrationTests.PostgreSql;
@@ -20,14 +20,6 @@ public class QuotationBookingWorkflowTests : PostgreSqlIntegrationTestBase
     {
     }
 
-    private static IConfiguration BuildConfig()
-        => new ConfigurationBuilder()
-            .AddInMemoryCollection(new Dictionary<string, string?>
-            {
-                ["AgentServices:QuotationBookingUrl"] = "http://localhost:8002"
-            })
-            .Build();
-
     // Each call creates a fresh DbContext so we mirror the scoped-request
     // lifetime used in production. Never reuse a service across contexts.
     private QuotationService CreateService(AssistLKDbContext context)
@@ -35,7 +27,12 @@ public class QuotationBookingWorkflowTests : PostgreSqlIntegrationTestBase
         var quotationRepo = new QuotationRepository(context);
         var bookingRepo = new BookingRepository(context);
         var lookup = new ServiceRequestLookup(context);
-        return new QuotationService(quotationRepo, bookingRepo, lookup, BuildConfig());
+        return new QuotationService(
+            quotationRepo,
+            bookingRepo,
+            lookup,
+            new Moq.Mock<IQuotationBookingAgentClient>().Object,
+            context);
     }
 
     private async Task TransitionToWaitingAsync(int quotationId)

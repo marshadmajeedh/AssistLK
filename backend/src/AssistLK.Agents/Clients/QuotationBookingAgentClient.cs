@@ -20,7 +20,8 @@ public sealed class QuotationBookingAgentClient : IQuotationBookingAgentClient
         _logger = logger;
 
         _httpClient.BaseAddress ??= new Uri(options.QuotationBookingUrl);
-        _httpClient.Timeout = TimeSpan.FromSeconds(options.TimeoutSeconds);
+        _httpClient.Timeout = TimeSpan.FromSeconds(
+            Math.Max(options.TimeoutSeconds, 60));
 
         if (!string.IsNullOrWhiteSpace(options.InternalApiKey))
         {

@@ -18,6 +18,7 @@ public sealed class NoopQuotationService : IQuotationService
     public QuotationDto? CreateResult { get; set; }
     public QuotationDto? GetByIdResult { get; set; }
     public List<QuotationDto> GetByServiceRequestResult { get; set; } = new();
+    public List<QuotationDto> GetForCustomerResult { get; set; } = new();
     public QuotationApprovalWorkflowDto? StartApprovalWorkflowResult { get; set; }
     public BookingDto? ApproveResult { get; set; }
     public QuotationDto? RejectResult { get; set; }
@@ -37,6 +38,11 @@ public sealed class NoopQuotationService : IQuotationService
 
     public Task<IEnumerable<QuotationDto>> GetByServiceRequestAsync(Guid serviceRequestId)
         => Task.FromResult<IEnumerable<QuotationDto>>(GetByServiceRequestResult);
+
+    public Task<IEnumerable<QuotationDto>> GetForCustomerAsync(
+        Guid customerId,
+        CancellationToken cancellationToken = default)
+        => Task.FromResult<IEnumerable<QuotationDto>>(GetForCustomerResult);
 
     public Task<QuotationApprovalWorkflowDto> StartApprovalWorkflowAsync(int quotationId, string providerUserId, CancellationToken cancellationToken = default)
     {

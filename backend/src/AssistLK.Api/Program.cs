@@ -7,6 +7,7 @@ using AssistLK.Agents.Tools;
 using AssistLK.Api.Middleware;
 using AssistLK.Api.Seed;
 using AssistLK.Infrastructure;
+using AssistLK.Infrastructure.Services;   // ← NEW (for ProviderBookingQueryService)
 using System.Text;
 using System.Text.Json.Serialization;
 using AssistLK.Api.Authentication;
@@ -334,6 +335,17 @@ builder.Services.AddScoped<IRegistrationChallengeCleanupService, RegistrationCha
 builder.Services.AddScoped<
     DemoProviderSearchTool>();
 
+
+// -----------------------------
+// Component 3 — Provider Bookings Query Service
+// -----------------------------
+// Owned by Component 3 (Quotation & Booking Management).
+// Reads ServiceJobs, ServiceRequests, Quotations, Bookings read-only to
+// assemble the provider's bookings list. Component 4's controller is
+// NOT touched; this reads the shared DB through its own service.
+builder.Services.AddScoped<
+    AssistLK.Application.Services.IProviderBookingQueryService,
+    AssistLK.Infrastructure.Services.ProviderBookingQueryService>();
 
 
 // -----------------------------

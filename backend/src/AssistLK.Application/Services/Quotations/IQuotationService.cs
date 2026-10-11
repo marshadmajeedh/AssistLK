@@ -20,6 +20,10 @@ public interface IQuotationService
 
     Task<IEnumerable<QuotationDto>> GetByServiceRequestAsync(Guid serviceRequestId);
 
+    Task<IEnumerable<QuotationDto>> GetForCustomerAsync(
+        Guid customerId,
+        CancellationToken cancellationToken = default);
+
     // ------------------------------------------------------------------
     // Agentic AI workflow bridge
     // ------------------------------------------------------------------

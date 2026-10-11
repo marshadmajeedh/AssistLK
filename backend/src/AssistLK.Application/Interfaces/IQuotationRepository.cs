@@ -14,6 +14,10 @@ public interface IQuotationRepository
         Guid serviceRequestId,                                // ✅ Guid now
         CancellationToken cancellationToken = default);
 
+    Task<IReadOnlyList<Quotation>> GetByCustomerIdAsync(
+        Guid customerId,
+        CancellationToken cancellationToken = default);
+
     Task AddAsync(Quotation quotation, CancellationToken cancellationToken = default);
 
     void Update(Quotation quotation);

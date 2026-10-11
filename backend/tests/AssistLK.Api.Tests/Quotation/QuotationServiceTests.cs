@@ -3,11 +3,14 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
+using AssistLK.Agents.Abstractions;
+using AssistLK.Agents.DTOs;
 using AssistLK.Application.Interfaces;
 using AssistLK.Application.Quotations;
 using AssistLK.Application.Services.Quotations;
 using AssistLK.Domain.Entities;
-using Microsoft.Extensions.Configuration;
+using AssistLK.Infrastructure.Data;
+using Microsoft.EntityFrameworkCore;
 using Moq;
 using Xunit;
 using QuotationEntity = AssistLK.Domain.Entities.Quotation;
@@ -19,20 +22,15 @@ public class QuotationServiceTests
     private static QuotationService CreateService(
         Mock<IQuotationRepository>? quotationRepo = null,
         Mock<IBookingRepository>? bookingRepo = null,
-        Mock<IServiceRequestLookup>? lookup = null)
+        Mock<IServiceRequestLookup>? lookup = null,
+        IServiceJobsDbContext? serviceJobsDbContext = null)
     {
-        var config = new ConfigurationBuilder()
-            .AddInMemoryCollection(new Dictionary<string, string?>
-            {
-                ["AgentServices:QuotationBookingUrl"] = "http://localhost:8002"
-            })
-            .Build();
-
         return new QuotationService(
             (quotationRepo ?? new Mock<IQuotationRepository>()).Object,
             (bookingRepo ?? new Mock<IBookingRepository>()).Object,
             (lookup ?? new Mock<IServiceRequestLookup>()).Object,
-            config);
+            new Mock<IQuotationBookingAgentClient>().Object,
+            serviceJobsDbContext ?? new Mock<IServiceJobsDbContext>().Object);
     }
 
     // -----------------------------------------------------------------
@@ -139,6 +137,71 @@ public class QuotationServiceTests
             service.CreateAsync(dto, "not-a-guid"));
     }
 
+    [Fact]
+    public async Task StartApprovalWorkflowAsync_UsesConfiguredAgentClientAndPersistsThread()
+    {
+        var serviceRequestId = Guid.NewGuid();
+        var providerId = Guid.NewGuid();
+        var quotation = new QuotationEntity
+        {
+            Id = 12,
+            ServiceRequestId = serviceRequestId,
+            ProviderId = providerId,
+            Status = QuotationStatus.Draft,
+            Items = new List<QuotationItem>
+            {
+                new() { Description = "Service charge", Amount = 5000m, Quantity = 1 }
+            }
+        };
+        var quotationRepo = new Mock<IQuotationRepository>();
+        quotationRepo
+            .Setup(r => r.GetByIdAsync(12, true, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(quotation);
+        quotationRepo
+            .Setup(r => r.SaveChangesAsync(It.IsAny<CancellationToken>()))
+            .Returns(Task.CompletedTask);
+
+        var agentClient = new Mock<IQuotationBookingAgentClient>();
+        QuotationWorkflowStartRequest? capturedRequest = null;
+        agentClient
+            .Setup(c => c.StartWorkflowAsync(
+                It.IsAny<QuotationWorkflowStartRequest>(),
+                It.IsAny<CancellationToken>()))
+            .Callback<QuotationWorkflowStartRequest, CancellationToken>(
+                (request, _) => capturedRequest = request)
+            .ReturnsAsync(new QuotationWorkflowStartResponse
+            {
+                ThreadId = "thread-12",
+                Status = "waiting_for_approval",
+                ApprovalRequest = new QuotationApprovalRequest
+                {
+                    Type = "quotation_approval",
+                    QuotationId = 12,
+                    ServiceRequestId = serviceRequestId,
+                    ProviderId = providerId,
+                    TotalAmount = 5000m,
+                    AllowedActions = new List<string> { "approve", "reject" },
+                    Message = "Approve?"
+                }
+            });
+
+        var service = new QuotationService(
+            quotationRepo.Object,
+            new Mock<IBookingRepository>().Object,
+            new Mock<IServiceRequestLookup>().Object,
+            agentClient.Object,
+            new Mock<IServiceJobsDbContext>().Object);
+
+        var result = await service.StartApprovalWorkflowAsync(
+            12, providerId.ToString());
+
+        Assert.Equal(serviceRequestId, capturedRequest?.ServiceRequestId);
+        Assert.Equal(providerId, capturedRequest?.ProviderId);
+        Assert.Equal("thread-12", quotation.WorkflowThreadId);
+        Assert.Equal("thread-12", result.ThreadId);
+        Assert.Equal("waiting_for_approval", result.Status);
+    }
+
     // -----------------------------------------------------------------
     // ApproveAsync
     // -----------------------------------------------------------------
@@ -221,7 +284,16 @@ public class QuotationServiceTests
         lookup.Setup(l => l.GetByIdAsync(It.IsAny<Guid>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync((ServiceRequest?)null);
 
-        var service = CreateService(quotationRepo, bookingRepo, lookup);
+        var dbContextOptions = new DbContextOptionsBuilder<AssistLKDbContext>()
+            .UseInMemoryDatabase(Guid.NewGuid().ToString())
+            .Options;
+        await using var serviceJobsDbContext = new AssistLKDbContext(dbContextOptions);
+
+        var service = CreateService(
+            quotationRepo,
+            bookingRepo,
+            lookup,
+            serviceJobsDbContext);
         var customerId = Guid.NewGuid();
 
         var result = await service.ApproveAsync(

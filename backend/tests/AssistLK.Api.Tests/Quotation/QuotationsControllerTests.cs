@@ -4,10 +4,14 @@ using System.Security.Claims;
 using System.Threading;
 using System.Threading.Tasks;
 using AssistLK.Api.Controllers;
+using AssistLK.Application.Interfaces;
 using AssistLK.Application.Quotations;
 using AssistLK.Application.Services.Quotations;
+using AssistLK.Domain.Entities;
+using AssistLK.Infrastructure.Data;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.EntityFrameworkCore;
 using Moq;
 using Xunit;
 
@@ -16,10 +20,16 @@ namespace AssistLK.Api.Tests.Quotation;
 public class QuotationsControllerTests
 {
     private readonly Mock<IQuotationService> _service = new();
+    private readonly Mock<IProviderProfileDbContext> _providerProfiles = new();
 
-    private QuotationsController CreateController(Guid? userId = null, string role = "Customer")
+    private QuotationsController CreateController(
+        Guid? userId = null,
+        string role = "Customer",
+        IProviderProfileDbContext? providerProfiles = null)
     {
-        var controller = new QuotationsController(_service.Object);
+        var controller = new QuotationsController(
+            _service.Object,
+            providerProfiles ?? _providerProfiles.Object);
         if (userId.HasValue)
         {
             var claims = new[]
@@ -50,10 +60,12 @@ public class QuotationsControllerTests
     [Fact]
     public async Task Create_Returns201CreatedAtAction()
     {
+        var providerUserId = Guid.NewGuid();
         var providerId = Guid.NewGuid();
         _service.Setup(s => s.CreateAsync(It.IsAny<CreateQuotationDto>(), providerId.ToString(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(SampleQuotation(42));
-        var controller = CreateController(providerId, "Provider");
+        var dbContext = await CreateProviderContext(providerUserId, providerId);
+        var controller = CreateController(providerUserId, "Provider", dbContext);
         var dto = new CreateQuotationDto(Guid.NewGuid(), providerId,
             new List<CreateQuotationItemDto> { new("Repair", 1000m, 1) }, null);
 
@@ -61,6 +73,7 @@ public class QuotationsControllerTests
 
         var created = Assert.IsType<CreatedAtActionResult>(result.Result);
         Assert.Equal(201, created.StatusCode);
+        await dbContext.DisposeAsync();
     }
 
     [Fact]
@@ -99,8 +112,27 @@ public class QuotationsControllerTests
     }
 
     [Fact]
+    public async Task GetForCurrentCustomer_ReturnsOnlyCustomerQuotationList()
+    {
+        var customerId = Guid.NewGuid();
+        var quotations = new List<QuotationDto> { SampleQuotation() };
+        _service.Setup(s => s.GetForCustomerAsync(customerId, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(quotations);
+        var controller = CreateController(customerId);
+
+        var result = await controller.GetForCurrentCustomer(CancellationToken.None);
+
+        var ok = Assert.IsType<OkObjectResult>(result.Result);
+        Assert.Same(quotations, ok.Value);
+        _service.Verify(
+            s => s.GetForCustomerAsync(customerId, It.IsAny<CancellationToken>()),
+            Times.Once);
+    }
+
+    [Fact]
     public async Task SendForApproval_ReturnsOkWorkflow()
     {
+        var providerUserId = Guid.NewGuid();
         var providerId = Guid.NewGuid();
         var workflow = new QuotationApprovalWorkflowDto(
             SampleQuotation(1), "thread-1", "waiting_for_approval",
@@ -109,11 +141,31 @@ public class QuotationsControllerTests
 
         _service.Setup(s => s.StartApprovalWorkflowAsync(1, providerId.ToString(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(workflow);
-        var controller = CreateController(providerId, "Provider");
+        var dbContext = await CreateProviderContext(providerUserId, providerId);
+        var controller = CreateController(providerUserId, "Provider", dbContext);
 
         var result = await controller.SendForApproval(1, CancellationToken.None);
 
         Assert.IsType<OkObjectResult>(result.Result);
+        await dbContext.DisposeAsync();
+    }
+
+    private static async Task<AssistLKDbContext> CreateProviderContext(
+        Guid providerUserId,
+        Guid providerId)
+    {
+        var options = new DbContextOptionsBuilder<AssistLKDbContext>()
+            .UseInMemoryDatabase(Guid.NewGuid().ToString())
+            .Options;
+        var context = new AssistLKDbContext(options);
+        context.ProviderProfiles.Add(new ProviderProfile
+        {
+            Id = providerId,
+            UserId = providerUserId,
+            BusinessName = "Test provider",
+        });
+        await context.SaveChangesAsync();
+        return context;
     }
 
     [Fact]
@@ -179,12 +231,13 @@ public class QuotationsControllerTests
     }
 
     [Fact]
-    public void Controller_OnlyDependsOn_IQuotationService()
+    public void Controller_DependsOnQuotationServiceAndProviderProfileContext()
     {
         var ctors = typeof(QuotationsController).GetConstructors();
         Assert.Single(ctors);
         var paramTypes = ctors[0].GetParameters().Select(p => p.ParameterType).ToList();
-        Assert.Single(paramTypes);
-        Assert.Equal(typeof(IQuotationService), paramTypes[0]);
+        Assert.Equal(2, paramTypes.Count);
+        Assert.Contains(typeof(IQuotationService), paramTypes);
+        Assert.Contains(typeof(IProviderProfileDbContext), paramTypes);
     }
 }

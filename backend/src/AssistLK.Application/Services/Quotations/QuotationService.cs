@@ -1,16 +1,14 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
-using System.Net.Http;
-using System.Net.Http.Json;
-using System.Text.Json.Serialization;
 using System.Threading;
 using System.Threading.Tasks;
+using AssistLK.Agents.Abstractions;
+using AssistLK.Agents.DTOs;
 using AssistLK.Application.Interfaces;
 using AssistLK.Application.Quotations;
 using AssistLK.Domain.Entities;
 using Microsoft.EntityFrameworkCore;
-using Microsoft.Extensions.Configuration;
 
 namespace AssistLK.Application.Services.Quotations;
 
@@ -19,20 +17,20 @@ public class QuotationService : IQuotationService
     private readonly IQuotationRepository _quotationRepository;
     private readonly IBookingRepository _bookingRepository;
     private readonly IServiceRequestLookup _serviceRequestLookup;
-    private readonly IConfiguration _configuration;
+    private readonly IQuotationBookingAgentClient _quotationBookingAgentClient;
     private readonly IServiceJobsDbContext _serviceJobsDbContext;
 
     public QuotationService(
         IQuotationRepository quotationRepository,
         IBookingRepository bookingRepository,
         IServiceRequestLookup serviceRequestLookup,
-        IConfiguration configuration,
+        IQuotationBookingAgentClient quotationBookingAgentClient,
         IServiceJobsDbContext serviceJobsDbContext)
     {
         _quotationRepository = quotationRepository;
         _bookingRepository = bookingRepository;
         _serviceRequestLookup = serviceRequestLookup;
-        _configuration = configuration;
+        _quotationBookingAgentClient = quotationBookingAgentClient;
         _serviceJobsDbContext = serviceJobsDbContext;
     }
 
@@ -101,6 +99,16 @@ public class QuotationService : IQuotationService
         return quotations.Select(MapToDto);
     }
 
+    public async Task<IEnumerable<QuotationDto>> GetForCustomerAsync(
+        Guid customerId,
+        CancellationToken cancellationToken = default)
+    {
+        var quotations = await _quotationRepository.GetByCustomerIdAsync(
+            customerId,
+            cancellationToken);
+        return quotations.Select(MapToDto);
+    }
+
     // ------------------------------------------------------------------
     // 4. Start the Agentic AI approval workflow
     // ------------------------------------------------------------------
@@ -125,52 +133,25 @@ public class QuotationService : IQuotationService
             await _quotationRepository.SaveChangesAsync(cancellationToken);
         }
 
-        var agentBaseUrl = _configuration["AgentServices:QuotationBookingUrl"]
-                           ?? "http://localhost:8002";
-
-        var payload = new
-        {
-            quotation_id = quotation.Id,
-            service_request_id = quotation.ServiceRequestId,
-            provider_id = quotation.ProviderId,
-            items = quotation.Items.Select(i => new
+        var result = await _quotationBookingAgentClient.StartWorkflowAsync(
+            new QuotationWorkflowStartRequest
             {
-                description = i.Description,
-                amount = i.Amount,
-                quantity = i.Quantity
-            }).ToList(),
-            notes = quotation.Notes
-        };
-
-        using var httpClient = new HttpClient { Timeout = TimeSpan.FromSeconds(60) };
-        var response = await httpClient.PostAsJsonAsync(
-            $"{agentBaseUrl.TrimEnd('/')}/workflows/start",
-            payload,
+                QuotationId = quotation.Id,
+                ServiceRequestId = quotation.ServiceRequestId,
+                ProviderId = quotation.ProviderId,
+                Items = quotation.Items.Select(i => new QuotationWorkflowItem
+                {
+                    Description = i.Description,
+                    Amount = i.Amount,
+                    Quantity = i.Quantity
+                }).ToList(),
+                Notes = quotation.Notes
+            },
             cancellationToken);
-
-        var rawBody = await response.Content.ReadAsStringAsync(cancellationToken);
-
-        if (!response.IsSuccessStatusCode)
-        {
-            throw new InvalidOperationException(
-                $"Agent service returned {(int)response.StatusCode} {response.StatusCode}. " +
-                $"Body: {rawBody}");
-        }
-
-        var result = System.Text.Json.JsonSerializer.Deserialize<StartWorkflowResponse>(
-            rawBody,
-            new System.Text.Json.JsonSerializerOptions
-            {
-                PropertyNameCaseInsensitive = true
-            });
-
-        if (result is null)
-            throw new InvalidOperationException("Agent service returned an empty response.");
 
         if (string.IsNullOrWhiteSpace(result.ThreadId))
             throw new InvalidOperationException(
-                "Agent service returned a response without a thread_id. " +
-                $"Raw body: {rawBody}");
+                "Quotation agent returned a response without a thread_id.");
 
         // Persist the LangGraph thread ID so clients can resume the workflow.
         quotation.WorkflowThreadId = result.ThreadId;
@@ -178,7 +159,6 @@ public class QuotationService : IQuotationService
         _quotationRepository.Update(quotation);
         await _quotationRepository.SaveChangesAsync(cancellationToken);
 
-        // Build the risk assessment DTO if the Python agent returned one.
         QuotationRiskAssessmentDto? riskDto = null;
         if (result.ApprovalRequest?.RiskAssessment is { } ra)
         {
@@ -222,29 +202,14 @@ public class QuotationService : IQuotationService
         if (decision is not ("approve" or "reject"))
             throw new ArgumentException("decision must be 'approve' or 'reject'.");
 
-        var agentBaseUrl = _configuration["AgentServices:QuotationBookingUrl"]
-                           ?? "http://localhost:8002";
-
-        var payload = new
-        {
-            thread_id = threadId,
-            decision,
-            remarks
-        };
-
-        using var httpClient = new HttpClient { Timeout = TimeSpan.FromSeconds(60) };
-        var response = await httpClient.PostAsJsonAsync(
-            $"{agentBaseUrl.TrimEnd('/')}/workflows/resume",
-            payload,
+        await _quotationBookingAgentClient.ResumeWorkflowAsync(
+            new QuotationWorkflowResumeRequest
+            {
+                ThreadId = threadId,
+                Decision = decision,
+                Remarks = remarks
+            },
             cancellationToken);
-
-        if (!response.IsSuccessStatusCode)
-        {
-            var body = await response.Content.ReadAsStringAsync(cancellationToken);
-            throw new InvalidOperationException(
-                $"Agent service resume returned {(int)response.StatusCode} {response.StatusCode}. " +
-                $"Body: {body}");
-        }
     }
 
     // ------------------------------------------------------------------
@@ -417,58 +382,3 @@ public class QuotationService : IQuotationService
         b.UpdatedAt,
         serviceJobId);
 }
-
-// ------------------------------------------------------------------
-// Internal helper records for the Python agent responses.
-// The Python service uses snake_case. We map via JsonPropertyName.
-// ------------------------------------------------------------------
-internal sealed record StartWorkflowResponse(
-    [property: JsonPropertyName("thread_id")]
-    string ThreadId,
-
-    [property: JsonPropertyName("status")]
-    string? Status,
-
-    [property: JsonPropertyName("approval_request")]
-    ApprovalRequestResponse? ApprovalRequest);
-
-internal sealed record ApprovalRequestResponse(
-    [property: JsonPropertyName("type")]
-    string? Type,
-
-    [property: JsonPropertyName("allowed_actions")]
-    List<string>? AllowedActions,
-
-    [property: JsonPropertyName("message")]
-    string? Message,
-
-    [property: JsonPropertyName("risk_assessment")]
-    RiskAssessmentResponse? RiskAssessment);            // ← NEW
-
-internal sealed record RiskAssessmentResponse(
-    [property: JsonPropertyName("risk_level")]
-    string? RiskLevel,
-
-    [property: JsonPropertyName("confidence")]
-    double? Confidence,
-
-    [property: JsonPropertyName("rationale")]
-    string? Rationale,
-
-    [property: JsonPropertyName("suggested_concerns")]
-    List<string>? SuggestedConcerns,
-
-    [property: JsonPropertyName("recommendation")]
-    string? Recommendation,
-
-    [property: JsonPropertyName("model")]
-    string? Model,
-
-    [property: JsonPropertyName("prompt_tokens")]
-    int? PromptTokens,
-
-    [property: JsonPropertyName("completion_tokens")]
-    int? CompletionTokens,
-
-    [property: JsonPropertyName("total_tokens")]
-    int? TotalTokens);

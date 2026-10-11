@@ -49,7 +49,7 @@ public class QuotationsController : ControllerBase
     {
         var providerId = await GetCurrentProviderProfileIdAsync(cancellationToken);
         if (providerId is null)
-            return NotFound("Provider profile not found.");
+            return Unauthorized();
 
         if (dto.ProviderId != providerId.Value)
             return Forbid();
@@ -122,7 +122,7 @@ public class QuotationsController : ControllerBase
     {
         var providerId = await GetCurrentProviderProfileIdAsync(cancellationToken);
         if (providerId is null)
-            return NotFound("Provider profile not found.");
+            return Unauthorized();
 
         var workflow = await _quotationService.StartApprovalWorkflowAsync(
             id, providerId.Value.ToString(), cancellationToken);
@@ -216,10 +216,12 @@ public class QuotationsController : ControllerBase
         if (!Guid.TryParse(GetCurrentUserId(), out var userId))
             return null;
 
-        return await _providerProfiles.ProviderProfiles
+        var providerProfileId = await _providerProfiles.ProviderProfiles
             .AsNoTracking()
             .Where(profile => profile.UserId == userId)
             .Select(profile => (Guid?)profile.Id)
             .SingleOrDefaultAsync(cancellationToken);
+
+        return providerProfileId ?? userId;
     }
 }

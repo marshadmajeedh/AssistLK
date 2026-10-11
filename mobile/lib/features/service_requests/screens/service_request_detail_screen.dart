@@ -32,6 +32,9 @@ import '../widgets/urgency_chip.dart';
 import 'edit_service_request_screen.dart';
 import '../../tracking/customer_job_tracking_screen.dart';
 
+// ─── Component 3 — Quotation & Booking integration ───
+import '../../quotations/screens/customer_quotations_list_screen.dart';
+
 class ServiceRequestDetailScreen extends StatefulWidget {
   final String requestId;
   final ProblemImagePicker? imagePicker;
@@ -100,6 +103,17 @@ class _ServiceRequestDetailScreenState
     _photos.removeListener(_photoChanged);
     _photos.dispose();
     super.dispose();
+  }
+
+  // ─── Component 3 — navigate to the customer's quotations list ───
+  void _openQuotations(ServiceRequestModel request) {
+    Navigator.of(context).push(
+      MaterialPageRoute<void>(
+        builder: (_) => CustomerQuotationsListScreen(
+          serviceRequestId: request.serviceRequestId,
+        ),
+      ),
+    );
   }
 
   String _getAiClassificationText(ServiceRequestModel request) {
@@ -470,6 +484,31 @@ class _ServiceRequestDetailScreenState
                           ),
                         ],
                       ),
+
+                      // ─── Component 3: View Quotations button ───
+                      // Shown once the request is Analyzed or ReadyForMatching
+                      // — the states where a provider may have quoted.
+                      if (request.status == ServiceRequestStatus.analyzed ||
+                          request.status ==
+                              ServiceRequestStatus.readyForMatching) ...[
+                        const SizedBox(height: AppSpacing.sm),
+                        const Divider(
+                          height: 1,
+                          color: AppColors.border,
+                        ),
+                        const SizedBox(height: AppSpacing.sm),
+                        SizedBox(
+                          width: double.infinity,
+                          child: OutlinedButton.icon(
+                            icon: const Icon(
+                              Icons.receipt_long_outlined,
+                              size: 18,
+                            ),
+                            label: const Text('View Quotations'),
+                            onPressed: () => _openQuotations(request),
+                          ),
+                        ),
+                      ],
                     ],
                   ),
                 ),

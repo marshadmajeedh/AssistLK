@@ -36,10 +36,13 @@ class _CustomerQuotationsListScreenState
     super.initState();
     final auth = context.read<AuthProvider>();
     _provider = QuotationProvider(
-      quotationService: QuotationService(apiClient: auth.authService.apiClient),
+      quotationService: QuotationService(
+        apiClient: auth.authService.apiClient,
+      ),
     );
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      _provider.loadForServiceRequest(widget.serviceRequestId);
+      if (!mounted) return;
+      _load();
     });
   }
 
@@ -49,7 +52,20 @@ class _CustomerQuotationsListScreenState
     super.dispose();
   }
 
+  Future<void> _load() async {
+    _provider.clearError();
+    await _provider.loadForServiceRequest(widget.serviceRequestId);
+    if (!mounted) return;
+    // Log for debugging in Chrome console
+    debugPrint(
+      '[QuotationList] serviceRequestId=${widget.serviceRequestId} '
+      'count=${_provider.quotations.length} '
+      'error=${_provider.error}',
+    );
+  }
+
   Future<void> _refresh() async {
+    _provider.clearError();
     await _provider.loadForServiceRequest(widget.serviceRequestId);
   }
 
@@ -61,17 +77,20 @@ class _CustomerQuotationsListScreenState
         appBar: AppBar(title: const Text('Quotations')),
         body: Consumer<QuotationProvider>(
           builder: (context, provider, _) {
+            // Loading state
             if (provider.isLoading && provider.quotations.isEmpty) {
               return const Center(child: CircularProgressIndicator());
             }
 
+            // Error state
             if (provider.error != null && provider.quotations.isEmpty) {
               return _ErrorState(
                 message: provider.error!,
-                onRetry: _refresh,
+                onRetry: _load,
               );
             }
 
+            // Empty state
             if (provider.quotations.isEmpty) {
               return RefreshIndicator(
                 onRefresh: _refresh,
@@ -91,13 +110,14 @@ class _CustomerQuotationsListScreenState
               );
             }
 
+            // List of quotations
             return RefreshIndicator(
               onRefresh: _refresh,
               child: ListView.separated(
                 physics: const AlwaysScrollableScrollPhysics(),
                 padding: const EdgeInsets.all(AppSpacing.lg),
                 itemCount: provider.quotations.length + 1,
-                separatorBuilder: (_, _) =>
+                separatorBuilder: (_,_) =>
                     const SizedBox(height: AppSpacing.sm),
                 itemBuilder: (context, index) {
                   if (index == 0) {

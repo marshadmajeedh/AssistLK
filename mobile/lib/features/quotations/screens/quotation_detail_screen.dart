@@ -37,14 +37,43 @@ class _QuotationDetailScreenState extends State<QuotationDetailScreen> {
     super.initState();
     final auth = context.read<AuthProvider>();
     _provider = QuotationProvider(
-      quotationService: QuotationService(apiClient: auth.authService.apiClient),
+      quotationService: QuotationService(
+        apiClient: auth.authService.apiClient,
+      ),
     );
+
     if (widget.initialQuotation != null) {
       _provider.setCurrentQuotation(widget.initialQuotation);
+      // Still refresh from backend in the background to get latest
+      // (including the risk assessment if not present on the initial object).
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!mounted) return;
+        _refreshFromBackend();
+      });
     } else {
       WidgetsBinding.instance.addPostFrameCallback((_) {
-        _provider.loadById(widget.quotationId);
+        if (!mounted) return;
+        _load();
       });
+    }
+  }
+
+  Future<void> _load() async {
+    _provider.clearError();
+    await _provider.loadById(widget.quotationId);
+    if (!mounted) return;
+    debugPrint(
+      '[QuotationDetail] id=${widget.quotationId} '
+      'error=${_provider.error}',
+    );
+  }
+
+  Future<void> _refreshFromBackend() async {
+    // Best-effort refresh; keeps the initial data if the fetch fails.
+    try {
+      await _provider.loadById(widget.quotationId);
+    } catch (_) {
+      // silent — the initial object is still showing
     }
   }
 
@@ -56,7 +85,10 @@ class _QuotationDetailScreenState extends State<QuotationDetailScreen> {
 
   Future<void> _onApprove(QuotationModel q) async {
     if (q.workflowThreadId == null) {
-      _snack('This quotation is not ready for approval yet.', AppColors.warning);
+      _snack(
+        'This quotation is not ready for approval yet.',
+        AppColors.warning,
+      );
       return;
     }
 
@@ -108,7 +140,10 @@ class _QuotationDetailScreenState extends State<QuotationDetailScreen> {
 
   Future<void> _onReject(QuotationModel q) async {
     if (q.workflowThreadId == null) {
-      _snack('This quotation is not ready for review yet.', AppColors.warning);
+      _snack(
+        'This quotation is not ready for review yet.',
+        AppColors.warning,
+      );
       return;
     }
 
@@ -121,7 +156,8 @@ class _QuotationDetailScreenState extends State<QuotationDetailScreen> {
           controller: controller,
           maxLines: 3,
           decoration: const InputDecoration(
-            hintText: 'Tell the provider why you are rejecting this quotation.',
+            hintText:
+                'Tell the provider why you are rejecting this quotation.',
             border: OutlineInputBorder(),
           ),
         ),
@@ -154,8 +190,10 @@ class _QuotationDetailScreenState extends State<QuotationDetailScreen> {
     if (!mounted) return;
 
     if (updated != null) {
-      _snack('Quotation rejected. The provider has been notified.',
-          AppColors.textSecondary);
+      _snack(
+        'Quotation rejected. The provider has been notified.',
+        AppColors.textSecondary,
+      );
     } else {
       _snack(_provider.error ?? 'Rejection failed.', AppColors.error);
     }
@@ -175,6 +213,7 @@ class _QuotationDetailScreenState extends State<QuotationDetailScreen> {
         builder: (context, provider, _) {
           final q = provider.currentQuotation;
 
+          // Loading without data
           if (q == null && provider.isLoading) {
             return Scaffold(
               appBar: AppBar(title: const Text('Quotation Details')),
@@ -182,22 +221,40 @@ class _QuotationDetailScreenState extends State<QuotationDetailScreen> {
             );
           }
 
+          // No data + no loading
           if (q == null) {
             return Scaffold(
               appBar: AppBar(title: const Text('Quotation Details')),
               body: Center(
                 child: Padding(
                   padding: const EdgeInsets.all(AppSpacing.lg),
-                  child: Text(
-                    provider.error ?? 'Quotation not found.',
-                    style: AppTextStyles.body,
-                    textAlign: TextAlign.center,
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      const Icon(
+                        Icons.error_outline_rounded,
+                        size: 48,
+                        color: AppColors.error,
+                      ),
+                      const SizedBox(height: AppSpacing.md),
+                      Text(
+                        provider.error ?? 'Quotation not found.',
+                        style: AppTextStyles.body,
+                        textAlign: TextAlign.center,
+                      ),
+                      const SizedBox(height: AppSpacing.md),
+                      AppButton(
+                        text: 'Retry',
+                        onPressed: _load,
+                      ),
+                    ],
                   ),
                 ),
               ),
             );
           }
 
+          // Detail view
           return Scaffold(
             appBar: AppBar(title: Text('Quotation #${q.id}')),
             body: SingleChildScrollView(
@@ -210,7 +267,10 @@ class _QuotationDetailScreenState extends State<QuotationDetailScreen> {
                     child: Row(
                       mainAxisAlignment: MainAxisAlignment.spaceBetween,
                       children: [
-                        const Text('Status', style: AppTextStyles.cardHeading),
+                        const Text(
+                          'Status',
+                          style: AppTextStyles.cardHeading,
+                        ),
                         QuotationStatusBadge(status: q.status),
                       ],
                     ),
@@ -218,7 +278,8 @@ class _QuotationDetailScreenState extends State<QuotationDetailScreen> {
                   const SizedBox(height: AppSpacing.md),
 
                   // AI Risk Assessment
-                  if (q.riskAssessment != null && q.riskAssessment!.hasData) ...[
+                  if (q.riskAssessment != null &&
+                      q.riskAssessment!.hasData) ...[
                     RiskAssessmentCard(assessment: q.riskAssessment!),
                     const SizedBox(height: AppSpacing.md),
                   ],
@@ -228,13 +289,14 @@ class _QuotationDetailScreenState extends State<QuotationDetailScreen> {
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        const Text('Line Items',
-                            style: AppTextStyles.cardHeading),
+                        const Text(
+                          'Line Items',
+                          style: AppTextStyles.cardHeading,
+                        ),
                         const SizedBox(height: AppSpacing.sm),
                         ...q.items.map(
                           (item) => Padding(
-                            padding:
-                                const EdgeInsets.symmetric(vertical: 6),
+                            padding: const EdgeInsets.symmetric(vertical: 6),
                             child: Row(
                               crossAxisAlignment: CrossAxisAlignment.start,
                               children: [
@@ -310,8 +372,7 @@ class _QuotationDetailScreenState extends State<QuotationDetailScreen> {
                         side: const BorderSide(color: AppColors.error),
                         minimumSize: const Size(double.infinity, 48),
                         shape: RoundedRectangleBorder(
-                          borderRadius:
-                              BorderRadius.circular(AppRadius.medium),
+                          borderRadius: BorderRadius.circular(AppRadius.medium),
                         ),
                       ),
                       child: const Text('Reject Quotation'),
@@ -334,6 +395,14 @@ class _QuotationDetailScreenState extends State<QuotationDetailScreen> {
                       color: AppColors.textSecondary,
                       message:
                           'The provider is still preparing this quotation.',
+                    ),
+                  ] else if (q.status.isPendingApproval &&
+                      q.workflowThreadId == null) ...[
+                    _StatusBanner(
+                      icon: Icons.hourglass_top_rounded,
+                      color: AppColors.warning,
+                      message:
+                          'Waiting for the provider to submit this quotation for your approval.',
                     ),
                   ],
                 ],

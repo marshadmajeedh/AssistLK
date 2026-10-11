@@ -128,3 +128,36 @@ def test_correct_internal_key_returns_200(monkeypatch):
             assert r.json()["status"] == "waiting_for_approval"
 
     asyncio.run(run())
+
+
+# ------------------------------------------------------------------
+# TC-C3-AI-27 — Resume succeeds when thread is in checkpointer but missing from registry
+# ------------------------------------------------------------------
+def test_resume_from_checkpointer_when_registry_missing(monkeypatch):
+    monkeypatch.delenv("INTERNAL_API_KEY", raising=False)
+
+    async def run():
+        async with await _client() as client:
+            # 1. Start a workflow
+            started = await client.post("/workflows/start", json=_payload())
+            assert started.status_code == 200
+            thread_id = started.json()["thread_id"]
+
+            # 2. Simulate registry loss (e.g. server restart / pre-registry thread)
+            import app.main as main_mod
+            if main_mod._registry_conn is not None:
+                main_mod._registry_conn.execute(
+                    "DELETE FROM workflow_threads WHERE thread_id = ?",
+                    (thread_id,),
+                )
+                main_mod._registry_conn.commit()
+
+            # 3. Resume should still succeed via checkpointer resilience
+            resumed = await client.post(
+                "/workflows/resume",
+                json={"thread_id": thread_id, "decision": "approve"},
+            )
+            assert resumed.status_code == 200
+            assert resumed.json()["status"] == "completed"
+
+    asyncio.run(run())

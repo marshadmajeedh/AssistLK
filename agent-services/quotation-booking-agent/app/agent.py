@@ -270,6 +270,9 @@ async def finalize_node(state: QuotationState) -> QuotationState:
 
     if decision == "approve":
         return {
+            "quotation_id": state.get("quotation_id"),
+            "customer_decision": decision,
+            "customer_remarks": state.get("customer_remarks"),
             "booking_id": None,
             "booking_status": None,
             "final_message": "Customer approved the quotation.",
@@ -282,6 +285,9 @@ async def finalize_node(state: QuotationState) -> QuotationState:
             or "Customer rejected the quotation."
         )
         return {
+            "quotation_id": state.get("quotation_id"),
+            "customer_decision": decision,
+            "customer_remarks": state.get("customer_remarks"),
             "booking_id": None,
             "booking_status": None,
             "rejection_reason": reason,
@@ -289,6 +295,8 @@ async def finalize_node(state: QuotationState) -> QuotationState:
         }
 
     return {
+        "quotation_id": state.get("quotation_id"),
+        "customer_decision": decision,
         "error": f"Unknown customer decision: {decision}",
         "final_message": "Workflow ended without a valid decision.",
     }

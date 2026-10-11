@@ -13,3 +13,15 @@ Future<String?> resolveServiceJobId(ApiClient apiClient, String matchId) async {
   }
   return null;
 }
+/// Reads the real status of a ServiceJob from the server (GET /service-jobs/{id}).
+Future<String?> fetchServiceJobStatus(
+  ApiClient apiClient,
+  String serviceJobId,
+) async {
+  final response = await apiClient.client.get('/service-jobs/$serviceJobId');
+  final data = response.data;
+  if (data is Map) {
+    return data['status']?.toString();
+  }
+  return null;
+}

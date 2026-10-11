@@ -28,14 +28,24 @@ class OpenJobTrackingButton extends StatelessWidget {
         final dashboardProvider = context.read<ProviderDashboardProvider>();
     try {
       final serviceJobId = await resolveServiceJobId(apiClient, matchId);
-      if (serviceJobId == null || serviceJobId.isEmpty) return;
-            navigator.push(
+            if (serviceJobId == null || serviceJobId.isEmpty) return;
+
+      String? serverStatus;
+      try {
+        serverStatus = await fetchServiceJobStatus(apiClient, serviceJobId);
+      } catch (_) {
+        // Fall back to the locally known status if the server read fails.
+      }
+
+      navigator.push(
         MaterialPageRoute(
           builder: (_) => ChangeNotifierProvider<ProviderDashboardProvider>.value(
             value: dashboardProvider,
             child: ProviderJobTrackingScreen(
               jobId: serviceJobId,
-              initialStatus: current['jobStatus']?.toString() ?? 'Assigned',
+                           initialStatus: serverStatus ??
+                  current['jobStatus']?.toString() ??
+                  'Assigned',
               customerLatitude: (current['customerLatitude'] as num?)?.toDouble(),
               customerLongitude: (current['customerLongitude'] as num?)?.toDouble(),
               customerAddress: current['locationText']?.toString(),

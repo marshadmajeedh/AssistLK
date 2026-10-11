@@ -167,6 +167,42 @@ namespace AssistLK.Api.Controllers
 
             return Ok(new { serviceJobId = job.Id, status = job.Status.ToString() });
         }
+                [HttpGet("{id:guid}")]
+        [Authorize(Roles = "Admin,Provider")]
+        public async Task<IActionResult> GetServiceJobById(
+            Guid id,
+            CancellationToken cancellationToken = default)
+        {
+            var job = await _assistLkDbContext.ServiceJobs
+                .AsNoTracking()
+                .FirstOrDefaultAsync(item => item.Id == id, cancellationToken);
+            if (job == null)
+            {
+                return NotFound(new { message = "Service job was not found." });
+            }
+
+            if (!User.IsInRole("Admin"))
+            {
+                var userIdClaim = User.FindFirstValue(ClaimTypes.NameIdentifier);
+                var ownsJob = job.ProviderId.HasValue &&
+                    Guid.TryParse(userIdClaim, out var userId) &&
+                    await _assistLkDbContext.ProviderProfiles.AnyAsync(
+                        profile => profile.Id == job.ProviderId.Value && profile.UserId == userId,
+                        cancellationToken);
+                if (!ownsJob)
+                {
+                    return Forbid();
+                }
+            }
+
+            return Ok(new
+            {
+                id = job.Id,
+                status = job.Status.ToString(),
+                startedAt = job.StartedAt,
+                completedAt = job.CompletedAt
+            });
+        }
 
         [HttpPut("{id:guid}/status")]
         [Authorize]
@@ -335,10 +371,13 @@ namespace AssistLK.Api.Controllers
 
             try
             {
+                                using var timeoutCts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+                timeoutCts.CancelAfter(TimeSpan.FromSeconds(8));
+
                 using var response = await _httpClient.PostAsJsonAsync(
                     "http://localhost:8003/agent/validate",
                     payload,
-                    cancellationToken);
+                    timeoutCts.Token);
 
                 if (!response.IsSuccessStatusCode)
                 {
@@ -350,7 +389,7 @@ namespace AssistLK.Api.Controllers
                 }
                 else
                 {
-                    var content = await response.Content.ReadAsStringAsync(cancellationToken);
+                       var content = await response.Content.ReadAsStringAsync(timeoutCts.Token);
                     result = JsonSerializer.Deserialize<AgentValidationResponse>(
                         content,
                         new JsonSerializerOptions { PropertyNameCaseInsensitive = true });
@@ -616,13 +655,16 @@ namespace AssistLK.Api.Controllers
 
                 try
                 {
+                    using var sentimentCts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+                    sentimentCts.CancelAfter(TimeSpan.FromSeconds(8));
+
                     var response = await _httpClient.PostAsJsonAsync(
                         "http://localhost:8003/agent/analyze-sentiment",
                         new { feedback_text = dto.Comment },
-                        cancellationToken);
+                        sentimentCts.Token);
                     if (response.IsSuccessStatusCode)
                     {
-                        var content = await response.Content.ReadAsStringAsync(cancellationToken);
+                        var content = await response.Content.ReadAsStringAsync(sentimentCts.Token);
                         var parsed = JsonSerializer.Deserialize<SentimentResponse>(content, new JsonSerializerOptions
                         {
                             PropertyNameCaseInsensitive = true

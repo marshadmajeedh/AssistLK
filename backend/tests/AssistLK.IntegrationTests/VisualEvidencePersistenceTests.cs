@@ -10,6 +10,19 @@ using Microsoft.EntityFrameworkCore;
 
 namespace AssistLK.IntegrationTests;
 
+/// <summary>
+/// What this class tests:
+///   Persistence, validation, and privacy filtering of visual evidence metadata (ProblemAnalysisVisualEvidence, ProblemAnalysisVisualObservation), covering text-only defaults ("not_requested"), customer detail vs summary/admin/matching isolation, domain validation against base64/reasoning leaks, evidence revision concurrency checks, and cancellation retention.
+/// Why these tests are needed:
+///   Ensures vision insights derived from customer photos are stored safely, prevents private image keys/base64/chain-of-thought from leaking to customer API responses or provider matching DTOs, and invalidates visual evidence if photos change.
+/// What is real and what is mocked/faked:
+///   - Real: ServiceRequestService, ServiceRequestRepository, and ProblemAnalysisRepository backed by EF Core In-Memory database.
+///   - Mocked/Faked: None.
+/// Prerequisites:
+///   None. Runs in-memory.
+/// Run from repository root:
+///   dotnet test backend/AssistLK.sln --filter "FullyQualifiedName~AssistLK.IntegrationTests.VisualEvidencePersistenceTests"
+/// </summary>
 public class VisualEvidencePersistenceTests
 {
     private sealed class Fixture : IDisposable
@@ -45,6 +58,13 @@ public class VisualEvidencePersistenceTests
         public void Dispose() => Db.Dispose();
     }
 
+    /// <summary>
+    /// Purpose: Checks that text-only problem analyses default their vision status to "not_requested" with empty observations.
+    /// Why: Preserves backwards compatibility for service requests created without any photo attachments.
+    /// Scenario: Applies problem analysis result with null attachment IDs.
+    /// Pass condition: Stored VisionStatus and Customer Detail DTO VisionStatus both equal "not_requested".
+    /// Run from repository root: dotnet test backend/AssistLK.sln --filter "FullyQualifiedName=AssistLK.IntegrationTests.VisualEvidencePersistenceTests.TextOnlyAndLegacyAnalysisDefaultToNotRequested"
+    /// </summary>
     [Fact]
     public async Task TextOnlyAndLegacyAnalysisDefaultToNotRequested()
     {
@@ -56,6 +76,13 @@ public class VisualEvidencePersistenceTests
         Assert.Empty(new ProblemAnalysis().VisualEvidence.Observations);
     }
 
+    /// <summary>
+    /// Purpose: Checks that visual evidence persists correctly up to maximum limits (3 photos, 5 observations) and is exposed only in Customer Detail view, never in List, Admin, or Provider Matching DTOs.
+    /// Why: Privacy & architecture requirement: only the owning customer sees visual analysis observations; service provider matching DTOs must not contain private visual inspection notes.
+    /// Scenario: Persists visual analysis for 3 photos, then inspects serialized JSON across Customer Detail, Customer List, Admin List, and Provider Matching DTOs.
+    /// Pass condition: 5 observations saved; JSON does not contain storageKey, contentHash, base64, or provider tokens; visualEvidence is omitted from list, admin, and matching JSON.
+    /// Run from repository root: dotnet test backend/AssistLK.sln --filter "FullyQualifiedName=AssistLK.IntegrationTests.VisualEvidencePersistenceTests.MaximumEvidencePersistsAndOnlyCustomerDetailExposesSafeValue"
+    /// </summary>
     [Fact]
     public async Task MaximumEvidencePersistsAndOnlyCustomerDetailExposesSafeValue()
     {
@@ -81,6 +108,14 @@ public class VisualEvidencePersistenceTests
             Assert.DoesNotContain(field, matching);
     }
 
+    /// <summary>
+    /// Purpose: Checks that malformed or malicious visual evidence (unknown IDs, foreign IDs, >5 observations, >240 chars, base64, provider tokens, reasoning text) is rejected without persisting analysis.
+    /// Why: Enforces strict data hygiene preventing prompt injection, base64 data dumping, or model reasoning leaks into database fields.
+    /// Scenario: Tests 9 fault conditions: unknown ID, unused ID, foreign ID, too-many (>5), long (>240 chars), partial status, base64, provider tokens, reasoning tokens.
+    /// Pass condition: Throws ArgumentException, zero ProblemAnalysis entities created, request status remains Created.
+    /// Note: Parameterized test (Theory). The command below executes all 9 InlineData cases.
+    /// Run from repository root: dotnet test backend/AssistLK.sln --filter "FullyQualifiedName~AssistLK.IntegrationTests.VisualEvidencePersistenceTests.InvalidDomainEvidenceNeverCreatesAnalysis"
+    /// </summary>
     [Theory]
     [InlineData("unknown")] [InlineData("unused")] [InlineData("foreign")]
     [InlineData("too-many")] [InlineData("long")] [InlineData("partial")]
@@ -104,6 +139,13 @@ public class VisualEvidencePersistenceTests
         Assert.Empty(f.Db.ProblemAnalyses); Assert.Equal(ServiceRequestStatus.Created, f.Request.Status);
     }
 
+    /// <summary>
+    /// Purpose: Checks that incrementing EvidenceRevision (e.g. customer uploads/replaces a photo) rejects analyses referencing older revisions and hides stale visual insights.
+    /// Why: Concurrency safety: prevents applying visual analysis generated from an outdated set of photos.
+    /// Scenario: Analysis applied, customer evidence revision incremented, then re-applying older result or querying detail.
+    /// Pass condition: Throws ConflictException on apply, and GetByIdAsync hides stale VisualEvidence (returns null).
+    /// Run from repository root: dotnet test backend/AssistLK.sln --filter "FullyQualifiedName=AssistLK.IntegrationTests.VisualEvidencePersistenceTests.StaleRevisionRejectsNewVisualAnalysisAndHidesOldInsights"
+    /// </summary>
     [Fact]
     public async Task StaleRevisionRejectsNewVisualAnalysisAndHidesOldInsights()
     {
@@ -117,6 +159,13 @@ public class VisualEvidencePersistenceTests
         Assert.Null(detail.LatestAnalysis!.VisualEvidence);
     }
 
+    /// <summary>
+    /// Purpose: Checks that cancelling a service request preserves the existing accepted analysis and attachment records for auditing.
+    /// Why: Regulatory/audit compliance: cancelling a request must retain photo attachments and historical analysis.
+    /// Scenario: Cancels a request that has 3 attachments and visual analysis.
+    /// Pass condition: Status is Cancelled, attachment IDs used remain in visual evidence, and 3 attachment records remain in DB.
+    /// Run from repository root: dotnet test backend/AssistLK.sln --filter "FullyQualifiedName=AssistLK.IntegrationTests.VisualEvidencePersistenceTests.CancellationKeepsAcceptedAnalysisAndPhotoReferences"
+    /// </summary>
     [Fact]
     public async Task CancellationKeepsAcceptedAnalysisAndPhotoReferences()
     {

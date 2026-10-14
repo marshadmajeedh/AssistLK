@@ -4,6 +4,24 @@ using Microsoft.EntityFrameworkCore;
 
 namespace AssistLK.IntegrationTests.PostgreSql;
 
+// =========================================================================================
+// Class: RelationshipPostgreSqlTests
+// What this class tests:
+//   Foreign key relationship behaviors (Restrict on User delete, Cascade on ServiceRequest delete,
+//   and Eager Loading) in PostgreSQL.
+// Why these tests are needed:
+//   Validates relational database rules: deleting a customer with existing requests is blocked
+//   (ON DELETE RESTRICT) to prevent orphaned data, deleting a service request cascades
+//   (ON DELETE CASCADE) to clean up its problem analyses, and EF Core navigation joins operate properly.
+// What is real vs mocked/faked:
+//   - REAL: Live PostgreSQL instance, foreign key constraints, and EF Core SQL JOIN queries.
+//   - MOCKED: None.
+// Prerequisites:
+//   A running PostgreSQL database instance configured via ASSISTLK_TEST_POSTGRESQL_CONNECTION,
+//   ConnectionStrings__TestConnection, or local User Secrets.
+// Run from repository root:
+//   dotnet test backend/AssistLK.sln --filter "FullyQualifiedName~AssistLK.IntegrationTests.PostgreSql.RelationshipPostgreSqlTests"
+// =========================================================================================
 public class RelationshipPostgreSqlTests : PostgreSqlIntegrationTestBase
 {
     public RelationshipPostgreSqlTests(PostgreSqlTestFixture fixture)
@@ -11,6 +29,11 @@ public class RelationshipPostgreSqlTests : PostgreSqlIntegrationTestBase
     {
     }
 
+    // Purpose: Verifies that attempting to delete a User who owns existing ServiceRequest records is blocked by PostgreSQL ON DELETE RESTRICT.
+    // Why: Prevents accidental customer deletion from corrupting or breaking foreign keys of active or historical service requests.
+    // Scenario: Creates a user and service request, then attempts to remove the user from the database.
+    // Pass condition: SaveChangesAsync throws DbUpdateException with an inner PostgreSQL foreign key violation.
+    // Run from repository root: dotnet test backend/AssistLK.sln --filter "FullyQualifiedName=AssistLK.IntegrationTests.PostgreSql.RelationshipPostgreSqlTests.UserDelete_WithExistingServiceRequest_ThrowsDbUpdateExceptionDueToRestrict"
     [Fact]
     public async Task UserDelete_WithExistingServiceRequest_ThrowsDbUpdateExceptionDueToRestrict()
     {
@@ -43,6 +66,11 @@ public class RelationshipPostgreSqlTests : PostgreSqlIntegrationTestBase
         }
     }
 
+    // Purpose: Verifies that deleting a ServiceRequest cascades in PostgreSQL to automatically delete its linked ProblemAnalysis rows.
+    // Why: Ensures child analysis records do not become orphaned when their parent service request is deleted.
+    // Scenario: Inserts a request and problem analysis, deletes the request, and queries for the analysis in a fresh context.
+    // Pass condition: verifyContext.ProblemAnalyses.FindAsync(analysisId) returns null.
+    // Run from repository root: dotnet test backend/AssistLK.sln --filter "FullyQualifiedName=AssistLK.IntegrationTests.PostgreSql.RelationshipPostgreSqlTests.ServiceRequestDelete_CascadesAndDeletesAssociatedProblemAnalyses"
     [Fact]
     public async Task ServiceRequestDelete_CascadesAndDeletesAssociatedProblemAnalyses()
     {
@@ -94,6 +122,11 @@ public class RelationshipPostgreSqlTests : PostgreSqlIntegrationTestBase
         }
     }
 
+    // Purpose: Verifies that Include(r => r.Customer) and Include(r => r.ProblemAnalyses) eagerly load related entities via SQL JOINs.
+    // Why: Confirms that navigation property mappings generate valid PostgreSQL JOIN queries and populate domain entity graphs.
+    // Scenario: Queries a service request with eager loading for Customer and ProblemAnalyses navigation properties.
+    // Pass condition: loaded.Customer is not null with correct customer full name, and loaded.ProblemAnalyses contains the linked problem analysis.
+    // Run from repository root: dotnet test backend/AssistLK.sln --filter "FullyQualifiedName=AssistLK.IntegrationTests.PostgreSql.RelationshipPostgreSqlTests.ServiceRequest_CanEagerlyLoadCustomerAndProblemAnalyses"
     [Fact]
     public async Task ServiceRequest_CanEagerlyLoadCustomerAndProblemAnalyses()
     {

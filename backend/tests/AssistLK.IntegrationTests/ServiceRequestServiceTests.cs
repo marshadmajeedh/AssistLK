@@ -7,8 +7,35 @@ using AssistLK.Domain.Enums;
 
 namespace AssistLK.IntegrationTests;
 
+// ==============================================================================
+// TEST SUITE: ServiceRequestServiceTests
+// What this class tests:
+//   - ServiceRequestService business logic in the application layer.
+//   - Request creation defaults (Unclassified, Unknown urgency, Created status) and category hint validation.
+//   - Request updates: customer ownership enforcement, editable status checks (Created, AwaitingInformation),
+//     and concurrency protection (blocking updates during Analyzing status).
+//   - Cancellation lifecycle rules and record preservation.
+//   - Applying problem analysis results (updating category, urgency, status, and confidence range validation).
+//   - Readiness contract for provider matching (GetReadyForMatchingAsync customer data redaction).
+//   - Admin listing, filtering (status, category, urgency), and single-item retrieval.
+// Why these tests are needed:
+//   - Guarantees core business rules and lifecycle constraints for service requests are strictly enforced
+//     independently of the database engine or web API controllers.
+// What is real and what is mocked/faked:
+//   - Real: ServiceRequestService application service.
+//   - In-Memory/Faked: InMemoryServiceRequestRepository and InMemoryProblemAnalysisRepository (in-memory C# lists).
+// Prerequisites:
+//   - None (runs purely in-memory).
+// Run from repository root:
+//   dotnet test backend/AssistLK.sln --filter "FullyQualifiedName~AssistLK.IntegrationTests.ServiceRequestServiceTests"
+// ==============================================================================
 public class ServiceRequestServiceTests
 {
+    // Purpose: Checks that creating a service request initializes default server-controlled values (Unclassified, Urgency.Unknown, Status.Created).
+    // Why: Prevents customers or clients from artificially setting status, urgency, or category on creation.
+    // Scenario: Customer creates request with only description and location text.
+    // Pass condition: Category is "Unclassified", Urgency is Unknown, Status is Created, CategoryHint is null, and a non-empty GUID is assigned.
+    // Run from repository root: dotnet test backend/AssistLK.sln --filter "FullyQualifiedName=AssistLK.IntegrationTests.ServiceRequestServiceTests.CreateAsync_UsesInitialValuesAndDoesNotAcceptServerFields"
     [Fact]
     public async Task CreateAsync_UsesInitialValuesAndDoesNotAcceptServerFields()
     {
@@ -33,6 +60,12 @@ public class ServiceRequestServiceTests
         Assert.NotEqual(Guid.Empty, response.ServiceRequestId);
     }
 
+    // Purpose: Checks that valid category hints (e.g. "Plumbing", "Electrical", "Vehicle Repair", "Appliance Repair", or blank/null) are persisted while keeping Category as "Unclassified".
+    // Why: Customer category hints provide context to the AI agent but do not override the official classification until analysis completes.
+    // Scenario: Creation with null, whitespace, or valid category taxonomy strings.
+    // Pass condition: Persisted CategoryHint matches expected string, while Category remains "Unclassified". Note: This parameterized test runs all 7 InlineData cases.
+    // Run from repository root: dotnet test backend/AssistLK.sln --filter "FullyQualifiedName~AssistLK.IntegrationTests.ServiceRequestServiceTests.CreateAsync_WithValidCategoryHints_PersistsHint_AndLeavesCategoryUnclassified"
+    //This EP
     [Theory]
     [InlineData(null, null)]
     [InlineData("", null)]
@@ -64,6 +97,12 @@ public class ServiceRequestServiceTests
         Assert.Equal("Unclassified", response.Category);
     }
 
+    // Purpose: Checks that non-standard category hints (e.g. "Cleaning", "Carpentry", "random text") are rejected with ArgumentException.
+    // Why: Prevents invalid or out-of-scope categories from entering the system taxonomy.
+    // Scenario: Customer submits unsupported category hint on creation.
+    // Pass condition: Throws ArgumentException with message containing "invalid". Note: This parameterized test runs all 9 InlineData cases.
+    // Run from repository root: dotnet test backend/AssistLK.sln --filter "FullyQualifiedName~AssistLK.IntegrationTests.ServiceRequestServiceTests.CreateAsync_WithInvalidCategoryHints_ThrowsArgumentException"
+    //This EP
     [Theory]
     [InlineData("Vehicle Assistance")]
     [InlineData("Cleaning")]
@@ -91,6 +130,11 @@ public class ServiceRequestServiceTests
         Assert.Contains("invalid", ex.Message, StringComparison.OrdinalIgnoreCase);
     }
 
+    // Purpose: Checks that customer can update category hint in editable statuses (Created, AwaitingInformation) without altering the AI-assigned Category.
+    // Why: Allows customers to clarify their hint while keeping the verified analysis category distinct.
+    // Scenario: Request updated in Created status to "Electrical", moved to AwaitingInformation, then updated to "Appliance Repair".
+    // Pass condition: CategoryHint reflects new updates while Category remains untouched.
+    // Run from repository root: dotnet test backend/AssistLK.sln --filter "FullyQualifiedName=AssistLK.IntegrationTests.ServiceRequestServiceTests.UpdateAsync_CanUpdateCategoryHint_InEditableStatuses_WithoutChangingCategory"
     [Fact]
     public async Task UpdateAsync_CanUpdateCategoryHint_InEditableStatuses_WithoutChangingCategory()
     {
@@ -142,6 +186,11 @@ public class ServiceRequestServiceTests
         Assert.Equal("Electrical", updatedInAwaiting.Category); // Category untouched by hint edit
     }
 
+    // Purpose: Checks that updating an existing request with an invalid category hint is rejected with ArgumentException.
+    // Why: Ensures update validation is as strict as creation validation for category taxonomy.
+    // Scenario: Customer attempts to update CategoryHint to unsupported strings.
+    // Pass condition: Throws ArgumentException. Note: This parameterized test runs all 3 InlineData cases.
+    // Run from repository root: dotnet test backend/AssistLK.sln --filter "FullyQualifiedName~AssistLK.IntegrationTests.ServiceRequestServiceTests.UpdateAsync_WithInvalidCategoryHint_ThrowsArgumentException"
     [Theory]
     [InlineData("Vehicle Assistance")]
     [InlineData("Cleaning")]
@@ -170,6 +219,12 @@ public class ServiceRequestServiceTests
                 }));
     }
 
+    // Purpose: Checks that empty description or partial/out-of-range coordinates are rejected with ArgumentException.
+    // Why: Enforces data validation rules (description required, latitude and longitude must both be provided within valid ranges).
+    // Scenario: Creation with empty description or latitude=91 (out of range [-90, 90]).
+    // Pass condition: Throws ArgumentException for each invalid input.
+    // Run from repository root: dotnet test backend/AssistLK.sln --filter "FullyQualifiedName=AssistLK.IntegrationTests.ServiceRequestServiceTests.CreateAsync_RejectsInvalidFieldsAndPartialCoordinates"
+    //This is BVB
     [Fact]
     public async Task CreateAsync_RejectsInvalidFieldsAndPartialCoordinates()
     {
@@ -197,6 +252,12 @@ public class ServiceRequestServiceTests
                 }));
     }
 
+    // Purpose: Checks that customer queries return only requests belonging to that customer and updates by other customers throw KeyNotFoundException.
+    // Why: Enforces strict multi-tenant customer data isolation and authorization.
+    // Scenario: Customer A requests their list (sees only owned request), and Customer B attempts to update Customer A's request.
+    // Pass condition: Customer A receives only their 1 request; Customer B's update throws KeyNotFoundException.
+    // Run from repository root: dotnet test backend/AssistLK.sln --filter "FullyQualifiedName=AssistLK.IntegrationTests.ServiceRequestServiceTests.CustomerQueriesFilterByCustomerAndOwnershipIsRequiredForUpdates"
+    //Owner ship
     [Fact]
     public async Task CustomerQueriesFilterByCustomerAndOwnershipIsRequiredForUpdates()
     {
@@ -217,6 +278,11 @@ public class ServiceRequestServiceTests
                 ValidUpdate()));
     }
 
+    // Purpose: Checks that updating is allowed in Created and AwaitingInformation statuses, but blocked with ConflictException when status is Analyzing.
+    // Why: Protects concurrent agent analysis by preventing customer edits while the AI agent is actively processing the request.
+    // Scenario: Update in Created succeeds; update during Analyzing throws ConflictException; update in AwaitingInformation succeeds.
+    // Pass condition: ConflictException is thrown during Analyzing, and successful updates return updated fields.
+    // Run from repository root: dotnet test backend/AssistLK.sln --filter "FullyQualifiedName=AssistLK.IntegrationTests.ServiceRequestServiceTests.UpdateAsync_AllowsOnlyEditableStatuses"
     [Fact]
     public async Task UpdateAsync_AllowsOnlyEditableStatuses()
     {
@@ -250,6 +316,11 @@ public class ServiceRequestServiceTests
         Assert.Equal(ServiceRequestStatus.AwaitingInformation, awaitingUpdate.Status);
     }
 
+    // Purpose: Checks that a request can be cancelled in initial statuses, but not once it reaches ReadyForMatching, and that cancellation preserves the DB record.
+    // Why: Prevents cancelling a request after provider matching has commenced and ensures audit history is preserved.
+    // Scenario: Cancel in Created status succeeds; cancel in ReadyForMatching status throws ConflictException.
+    // Pass condition: Status becomes Cancelled, record remains in repository, and cancelling from ReadyForMatching throws ConflictException.
+    // Run from repository root: dotnet test backend/AssistLK.sln --filter "FullyQualifiedName=AssistLK.IntegrationTests.ServiceRequestServiceTests.CancelAsync_AllowsOnlySpecifiedStatusesAndPreservesRecord"
     [Fact]
     public async Task CancelAsync_AllowsOnlySpecifiedStatusesAndPreservesRecord()
     {
@@ -271,6 +342,12 @@ public class ServiceRequestServiceTests
             repositories.Service.CancelAsync(customerId, ready.ServiceRequestId));
     }
 
+    // Purpose: Checks that applying a successful AI problem analysis saves the analysis record and transitions the request to Analyzed with updated category and urgency.
+    // Why: Core workflow step where the AI agent's findings are committed to the service request.
+    // Scenario: Agent submits detected problem "Possible battery failure", category "Vehicle Repair", urgency High, confidence 0.85.
+    // Pass condition: Analysis is added to repository, request category is "Vehicle Repair", urgency is High, and status is Analyzed.
+    // Run from repository root: dotnet test backend/AssistLK.sln --filter "FullyQualifiedName=AssistLK.IntegrationTests.ServiceRequestServiceTests.ApplyProblemAnalysisResult_PersistsResultAndUpdatesCategoryUrgencyAndStatus"
+    //This is BVB
     [Fact]
     public async Task ApplyProblemAnalysisResult_PersistsResultAndUpdatesCategoryUrgencyAndStatus()
     {
@@ -296,6 +373,11 @@ public class ServiceRequestServiceTests
         Assert.Equal(ServiceRequestStatus.Analyzed, request.Status);
     }
 
+    // Purpose: Checks that confidence > 1.0 is rejected, and when NeedsMoreInformation = true, status transitions to AwaitingInformation.
+    // Why: Validates AI confidence bounds and verifies the clarification loop transition.
+    // Scenario: Confidence 1.1 throws ArgumentException; result with NeedsMoreInformation = true sets status to AwaitingInformation.
+    // Pass condition: ArgumentException thrown for confidence > 1; status transitions to AwaitingInformation.
+    // Run from repository root: dotnet test backend/AssistLK.sln --filter "FullyQualifiedName=AssistLK.IntegrationTests.ServiceRequestServiceTests.ApplyProblemAnalysisResult_RejectsInvalidConfidenceAndSupportsAwaitingInformation"
     [Fact]
     public async Task ApplyProblemAnalysisResult_RejectsInvalidConfidenceAndSupportsAwaitingInformation()
     {
@@ -330,6 +412,11 @@ public class ServiceRequestServiceTests
             repositories.Requests.Single().Status);
     }
 
+    // Purpose: Checks that GetReadyForMatchingAsync returns null unless status is ReadyForMatching, and redacts customer ID from the matching DTO.
+    // Why: Protects customer privacy and ensures the matching engine only receives vetted, fully analyzed requests.
+    // Scenario: Called when status is Analyzed (returns null), then called when status is ReadyForMatching (returns matching DTO).
+    // Pass condition: Returns null initially; once ReadyForMatching, returns populated DTO without customer ID property.
+    // Run from repository root: dotnet test backend/AssistLK.sln --filter "FullyQualifiedName=AssistLK.IntegrationTests.ServiceRequestServiceTests.GetReadyForMatchingAsync_ReturnsContractOnlyWhenReady"
     [Fact]
     public async Task GetReadyForMatchingAsync_ReturnsContractOnlyWhenReady()
     {
@@ -367,6 +454,11 @@ public class ServiceRequestServiceTests
         Assert.DoesNotContain("CustomerId", matching.GetType().GetProperties().Select(x => x.Name));
     }
 
+    // Purpose: Checks that admin requests query returns all service requests across all customers.
+    // Why: Admins need global visibility across the entire system.
+    // Scenario: Two requests created under two different customer IDs; admin lists all.
+    // Pass condition: Returns 2 requests.
+    // Run from repository root: dotnet test backend/AssistLK.sln --filter "FullyQualifiedName=AssistLK.IntegrationTests.ServiceRequestServiceTests.GetAllForAdminAsync_ReturnsAllRequestsAcrossCustomers"
     [Fact]
     public async Task GetAllForAdminAsync_ReturnsAllRequestsAcrossCustomers()
     {
@@ -382,6 +474,11 @@ public class ServiceRequestServiceTests
         Assert.Equal(2, results.Count);
     }
 
+    // Purpose: Checks that admin list query correctly filters by status, category, urgency, and combinations thereof.
+    // Why: Enables admins to efficiently filter and triage service requests by operational criteria.
+    // Scenario: 2 requests with different category, urgency, and status; filtered individually and combined.
+    // Pass condition: Filter by plumbing returns 1; filter by analyzed returns 1; filter by high urgency returns 1; combined returns 1; non-matching returns 0.
+    // Run from repository root: dotnet test backend/AssistLK.sln --filter "FullyQualifiedName=AssistLK.IntegrationTests.ServiceRequestServiceTests.GetAllForAdminAsync_FiltersCorrectly"
     [Fact]
     public async Task GetAllForAdminAsync_FiltersCorrectly()
     {
@@ -417,6 +514,11 @@ public class ServiceRequestServiceTests
         Assert.Empty(nonMatching);
     }
 
+    // Purpose: Checks that invalid filter values (unknown status, category, or urgency strings) throw ArgumentException.
+    // Why: Prevents malformed queries from executing or failing silently.
+    // Scenario: Admin passes invalid status, invalid category, or invalid urgency.
+    // Pass condition: Throws ArgumentException. Note: This parameterized test runs all 3 InlineData cases.
+    // Run from repository root: dotnet test backend/AssistLK.sln --filter "FullyQualifiedName~AssistLK.IntegrationTests.ServiceRequestServiceTests.GetAllForAdminAsync_InvalidFilters_ThrowArgumentException"
     [Theory]
     [InlineData("InvalidStatus", null, null)]
     [InlineData(null, "InvalidCategory", null)]
@@ -429,6 +531,11 @@ public class ServiceRequestServiceTests
             repositories.Service.GetAllForAdminAsync(status, category, urgency));
     }
 
+    // Purpose: Checks that an admin can retrieve detailed service request information regardless of which customer owns it.
+    // Why: Admin support and problem investigation require customer-agnostic retrieval.
+    // Scenario: Request created under customer A; admin fetches by request ID.
+    // Pass condition: Returns full request detail with matching request ID and customer ID.
+    // Run from repository root: dotnet test backend/AssistLK.sln --filter "FullyQualifiedName=AssistLK.IntegrationTests.ServiceRequestServiceTests.GetByIdForAdminAsync_ReturnsDetail_RegardlessOfCustomer"
     [Fact]
     public async Task GetByIdForAdminAsync_ReturnsDetail_RegardlessOfCustomer()
     {
@@ -443,6 +550,11 @@ public class ServiceRequestServiceTests
         Assert.Equal(customerId, result.CustomerId);
     }
 
+    // Purpose: Checks that requesting a non-existent request ID as admin throws KeyNotFoundException.
+    // Why: Signals clearly that the requested entity does not exist.
+    // Scenario: Admin queries random non-existent GUID.
+    // Pass condition: Throws KeyNotFoundException.
+    // Run from repository root: dotnet test backend/AssistLK.sln --filter "FullyQualifiedName=AssistLK.IntegrationTests.ServiceRequestServiceTests.GetByIdForAdminAsync_NotFound_ThrowsKeyNotFoundException"
     [Fact]
     public async Task GetByIdForAdminAsync_NotFound_ThrowsKeyNotFoundException()
     {

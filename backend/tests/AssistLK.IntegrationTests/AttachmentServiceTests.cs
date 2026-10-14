@@ -12,6 +12,27 @@ using Microsoft.Extensions.Logging.Abstractions;
 
 namespace AssistLK.IntegrationTests;
 
+// ==============================================================================
+// TEST SUITE: AttachmentServiceTests
+// What this class tests:
+//   - ServiceRequestAttachmentService handling of photo uploads, deletes, and slot allocation.
+//   - Dual-write fault compensation (deleting binary on DB failure; preserving binary on uncertain commit).
+//   - Storage failure handling and background orphan cleanup via AttachmentReconciliationService.
+//   - ServiceRequestService evidence revision tracking when details, photos, or clarification answers change.
+//   - Concurrency guards preventing stale AI analysis from being applied or marked ready for matching.
+// Why these tests are needed:
+//   - Protects multi-step storage-and-database consistency so files are never permanently orphaned or broken.
+//   - Ensures AI agent problem analysis strictly synchronizes with customer evidence via EvidenceRevision.
+// What is real and what is mocked/faked:
+//   - Real: ServiceRequestAttachmentService, ServiceRequestService, ServiceRequestAttachmentRepository,
+//           ServiceRequestRepository, ProblemAnalysisRepository, AttachmentReconciliationService.
+//   - In-Memory/Faked: EF Core InMemory database (AssistLKDbContext), FakeAttachmentStorage (in-memory dict),
+//                     Normalizer (fake IAttachmentImageNormalizer), Repository decorator for fault injection.
+// Prerequisites:
+//   - None (runs purely in-memory).
+// Run from repository root:
+//   dotnet test backend/AssistLK.sln --filter "FullyQualifiedName~AssistLK.IntegrationTests.AttachmentServiceTests"
+// ==============================================================================
 public class AttachmentServiceTests
 {
     private sealed class Normalizer : IAttachmentImageNormalizer
@@ -48,6 +69,11 @@ public class AttachmentServiceTests
         public void Dispose() => Db.Dispose();
     }
 
+    // Purpose: Checks that uploading and deleting photos increments EvidenceRevision and reuses free slot numbers (1..3) without altering existing clarification questions.
+    // Why: Verifies that photo updates maintain evidence revisions cleanly while slot assignment recycles without side effects on active clarifications.
+    // Scenario: Upload photo -> delete photo -> upload another photo on a request awaiting clarification.
+    // Pass condition: EvidenceRevision advances from 1 -> 2 -> 3, storage key matches sanitized format, storage is cleaned upon delete, existing clarification question is untouched, and next upload gets slot 1.
+    // Run from repository root: dotnet test backend/AssistLK.sln --filter "FullyQualifiedName=AssistLK.IntegrationTests.AttachmentServiceTests.AddsRemovesAndReusesSlotsWithoutChangingClarification"
     [Fact]
     public async Task AddsRemovesAndReusesSlotsWithoutChangingClarification()
     {
@@ -69,6 +95,11 @@ public class AttachmentServiceTests
         Assert.Equal(1, (await f.Upload()).Slot);
     }
 
+    // Purpose: Checks that if database saving fails during attachment upload, the uploaded binary file in storage is compensated (deleted).
+    // Why: Prevents orphaned binary files when a database commit fails during a multi-step storage-and-database operation.
+    // Scenario: Upload attempted with repository configured to throw IOException on SaveAsync.
+    // Pass condition: IOException is thrown, binary file is deleted from storage, and attachment table is empty.
+    // Run from repository root: dotnet test backend/AssistLK.sln --filter "FullyQualifiedName=AssistLK.IntegrationTests.AttachmentServiceTests.DatabaseFailureCompensatesBinary"
     [Fact]
     public async Task DatabaseFailureCompensatesBinary()
     {
@@ -78,6 +109,11 @@ public class AttachmentServiceTests
         Assert.Empty(await f.Db.ServiceRequestAttachments.AsNoTracking().ToListAsync());
     }
 
+    // Purpose: Checks that if database commit fails and checking whether the attachment was saved also fails, the binary is not deleted.
+    // Why: Prevents deleting an uploaded binary if the database transaction may actually have succeeded despite a timeout/network blip.
+    // Scenario: Repository fails both save and reference check.
+    // Pass condition: IOException is thrown, and storage retains the binary file instead of deleting it blindly.
+    // Run from repository root: dotnet test backend/AssistLK.sln --filter "FullyQualifiedName=AssistLK.IntegrationTests.AttachmentServiceTests.UncertainCommitDoesNotBlindlyDeleteBinary"
     [Fact]
     public async Task UncertainCommitDoesNotBlindlyDeleteBinary()
     {
@@ -86,6 +122,11 @@ public class AttachmentServiceTests
         Assert.Single(f.Storage.Files);
     }
 
+    // Purpose: Checks that if binary storage writing fails, no database record is created and EvidenceRevision remains unchanged.
+    // Why: Protects database integrity against half-finished uploads when storage is unavailable.
+    // Scenario: Storage configured with FailWrite = true during upload.
+    // Pass condition: IOException is thrown, attachment table is empty, and EvidenceRevision remains 1.
+    // Run from repository root: dotnet test backend/AssistLK.sln --filter "FullyQualifiedName=AssistLK.IntegrationTests.AttachmentServiceTests.StorageFailureLeavesNoMetadataOrPersistedRevisionChange"
     [Fact]
     public async Task StorageFailureLeavesNoMetadataOrPersistedRevisionChange()
     {
@@ -95,6 +136,11 @@ public class AttachmentServiceTests
         Assert.Equal(1, f.Request.EvidenceRevision);
     }
 
+    // Purpose: Checks that if storage deletion fails during attachment removal, the attachment metadata is deleted from the DB, and background reconciliation successfully cleans up the orphan later.
+    // Why: Prevents deleted photos from remaining accessible while ensuring orphaned storage files are reconciled eventually.
+    // Scenario: Attachment deleted with storage delete failing, followed by running AttachmentReconciliationService.ReconcileAsync() once storage recovers.
+    // Pass condition: Attachment is not listed or openable via service, reconciliation removes 1 orphaned file, and subsequent reconciliation finds 0 orphans.
+    // Run from repository root: dotnet test backend/AssistLK.sln --filter "FullyQualifiedName=AssistLK.IntegrationTests.AttachmentServiceTests.FailedDeleteRemainsInvisibleAndReconciliationRetries"
     [Fact]
     public async Task FailedDeleteRemainsInvisibleAndReconciliationRetries()
     {
@@ -113,6 +159,11 @@ public class AttachmentServiceTests
         Assert.Single(f.Storage.Files);
     }
 
+    // Purpose: Checks that modifying key service request fields (description, category hint, location text, coordinates) increments EvidenceRevision, while idempotent repeat saves do not.
+    // Why: Any change in customer-provided problem details represents new evidence that invalidates prior AI conclusions.
+    // Scenario: Modifying description, category, location, latitude, or longitude on an existing request.
+    // Pass condition: EvidenceRevision increments from 1 to 2 on first update, and stays at 2 on duplicate update with no further changes. Note: This parameterized test runs all 5 InlineData cases.
+    // Run from repository root: dotnet test backend/AssistLK.sln --filter "FullyQualifiedName~AssistLK.IntegrationTests.AttachmentServiceTests.RelevantEditsIncrementRevision"
     [Theory]
     [InlineData("description")][InlineData("category")][InlineData("location")][InlineData("latitude")][InlineData("longitude")]
     public async Task RelevantEditsIncrementRevision(string field)
@@ -135,6 +186,11 @@ public class AttachmentServiceTests
         Assert.Equal(2, f.Request.EvidenceRevision);
     }
 
+    // Purpose: Checks that a service request cannot be marked ReadyForMatching if its EvidenceRevision does not match the latest ProblemAnalysis revision.
+    // Why: Prevents transitioning a request to matching based on out-of-date AI analysis when new photos or details were added afterwards.
+    // Scenario: Request at revision 3 but analysis recorded at revision 2 attempts to transition to ReadyForMatching.
+    // Pass condition: Throws ConflictException while status remains Analyzed; once analysis revision matches request revision (3), MarkReadyForMatchingAsync succeeds and status becomes ReadyForMatching.
+    // Run from repository root: dotnet test backend/AssistLK.sln --filter "FullyQualifiedName=AssistLK.IntegrationTests.AttachmentServiceTests.CurrentAnalysisRevisionAndStaleReadinessGuard"
     [Fact]
     public async Task CurrentAnalysisRevisionAndStaleReadinessGuard()
     {
@@ -153,6 +209,11 @@ public class AttachmentServiceTests
         Assert.Equal(ServiceRequestStatus.ReadyForMatching, f.Request.Status);
     }
 
+    // Purpose: Checks that submitting clarification answers increments EvidenceRevision while keeping the current clarification round and questions intact.
+    // Why: Clarification answers provide new factual evidence for the AI agent to re-analyze without artificially inflating round counts.
+    // Scenario: Customer submits answer "Under the sink" for round 2 question.
+    // Pass condition: EvidenceRevision increments to 2, question answer is saved, round stays at 2, and status remains AwaitingInformation.
+    // Run from repository root: dotnet test backend/AssistLK.sln --filter "FullyQualifiedName=AssistLK.IntegrationTests.AttachmentServiceTests.ClarificationAnswersIncrementRevisionWithoutAddingRounds"
     [Fact]
     public async Task ClarificationAnswersIncrementRevisionWithoutAddingRounds()
     {
@@ -169,6 +230,11 @@ public class AttachmentServiceTests
         Assert.Equal(ServiceRequestStatus.AwaitingInformation, f.Request.Status);
     }
 
+    // Purpose: Checks that applying an analysis result whose EvidenceRevision is older than the service request's current revision is rejected.
+    // Why: Prevents race conditions where a slow/delayed agent response overwrites fresh evidence added while the agent was running.
+    // Scenario: Request uploaded photo (moving revision to 2), but agent attempts to submit analysis with EvidenceRevision = 1.
+    // Pass condition: Throws ConflictException and no problem analysis record is saved in the database.
+    // Run from repository root: dotnet test backend/AssistLK.sln --filter "FullyQualifiedName=AssistLK.IntegrationTests.AttachmentServiceTests.StaleAnalysisResultCannotBeApplied"
     [Fact]
     public async Task StaleAnalysisResultCannotBeApplied()
     {

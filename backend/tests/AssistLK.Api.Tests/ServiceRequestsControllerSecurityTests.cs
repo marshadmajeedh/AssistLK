@@ -11,6 +11,24 @@ using Xunit;
 
 namespace AssistLK.Api.Tests;
 
+/// <summary>
+/// ServiceRequestsControllerSecurityTests verifies authorization, security, lifecycle transitions,
+/// and API contracts for the Customer Service Requests controller endpoints (/api/service-requests).
+///
+/// Viva Preparation Notes:
+/// - What this class tests: Security policies (anonymous rejection, RBAC customer-vs-provider separation,
+///   JWT-based customer ownership), lifecycle state machine rules (Created -> Analyzing -> Analyzed / AwaitingInformation
+///   -> ReadyForMatching), cancellation rules, and clean architecture controller boundaries.
+/// - Why these tests are needed: Service requests contain sensitive personal location and home maintenance issues.
+///   The system must guarantee that unauthorized users cannot inspect, tamper with, or advance another customer's request.
+/// - What is real vs mocked:
+///   * Real: ASP.NET Core WebApplicationFactory pipeline, controller routing, JWT authentication handler,
+///     authorization filters, model validation, and EF Core InMemory database.
+///   * Mocked/Faked: External Python AI agent (faked by FakeProblemUnderstandingClient) and SMS gateway (TestSmsService).
+/// - Prerequisites: None (runs completely in-memory with .NET 8 SDK).
+/// - PowerShell command to run class from repository root:
+///   dotnet test backend/AssistLK.sln --filter "FullyQualifiedName~AssistLK.Api.Tests.ServiceRequestsControllerSecurityTests"
+/// </summary>
 [Collection("EnvironmentTests")]
 public class ServiceRequestsControllerSecurityTests : IClassFixture<AssistLKApiTestFactory>
 {
@@ -26,6 +44,14 @@ public class ServiceRequestsControllerSecurityTests : IClassFixture<AssistLKApiT
         _factory = factory;
     }
 
+    /// <summary>
+    /// Purpose: Checks that unauthenticated calls to all service request endpoints return 401 Unauthorized.
+    /// Why: Protects customer data and operations from anonymous public access.
+    /// Scenario: Anonymous requests sent with various HTTP methods (GET, POST, PUT) across 7 endpoints.
+    /// Pass condition: Every endpoint returns HTTP 401 Unauthorized.
+    /// Note: Parameterized test (Theory). The command below executes all 7 InlineData cases.
+    /// Run from repository root: dotnet test backend/AssistLK.sln --filter "FullyQualifiedName~AssistLK.Api.Tests.ServiceRequestsControllerSecurityTests.Requirement01_UnauthenticatedCalls_AreRejectedWith401"
+    /// </summary>
     [Theory]
     [InlineData("POST", "/api/service-requests")]
     [InlineData("GET", "/api/service-requests/my")]
@@ -49,6 +75,13 @@ public class ServiceRequestsControllerSecurityTests : IClassFixture<AssistLKApiT
         Assert.Equal(HttpStatusCode.Unauthorized, response.StatusCode);
     }
 
+    /// <summary>
+    /// Purpose: Checks that an authenticated Customer can create a new service request and receives HTTP 201 Created.
+    /// Why: Tests the primary creation entry point, default status (Created), and initial unclassified taxonomy.
+    /// Scenario: Customer submits a valid problem description and GPS coordinates.
+    /// Pass condition: Status is 201 Created with Location header, CustomerId matches authenticated user, Status is Created, Category is "Unclassified".
+    /// Run from repository root: dotnet test backend/AssistLK.sln --filter "FullyQualifiedName=AssistLK.Api.Tests.ServiceRequestsControllerSecurityTests.Requirement02_CustomerCanCreateRequest_Returns201CreatedWithLocationHeader"
+    /// </summary>
     [Fact]
     public async Task Requirement02_CustomerCanCreateRequest_Returns201CreatedWithLocationHeader()
     {
@@ -78,6 +111,13 @@ public class ServiceRequestsControllerSecurityTests : IClassFixture<AssistLKApiT
         Assert.Equal(ServiceRequestUrgency.Unknown, body.Urgency);
     }
 
+    /// <summary>
+    /// Purpose: Checks that submitting a valid CategoryHint ("Plumbing") persists the hint while leaving Category "Unclassified".
+    /// Why: User hints assist the agent pipeline but must not bypass automated taxonomy classification.
+    /// Scenario: Customer posts request with CategoryHint = "Plumbing" and fetches it back via GET.
+    /// Pass condition: Status is 201 Created, CategoryHint is persisted as "Plumbing", Category remains "Unclassified".
+    /// Run from repository root: dotnet test backend/AssistLK.sln --filter "FullyQualifiedName=AssistLK.Api.Tests.ServiceRequestsControllerSecurityTests.Requirement02B_CustomerCanCreateRequest_WithValidCategoryHint_PersistsHint_AndLeavesCategoryUnclassified"
+    /// </summary>
     [Fact]
     public async Task Requirement02B_CustomerCanCreateRequest_WithValidCategoryHint_PersistsHint_AndLeavesCategoryUnclassified()
     {
@@ -109,6 +149,14 @@ public class ServiceRequestsControllerSecurityTests : IClassFixture<AssistLKApiT
         Assert.Equal("Unclassified", getBody.Category);
     }
 
+    /// <summary>
+    /// Purpose: Checks that invalid or unrecognized category hints are rejected with 400 Bad Request.
+    /// Why: Prevents arbitrary, misspelled, or non-whitelisted domain hints from entering the system.
+    /// Scenario: Customer sends hints: "Vehicle Assistance", "Cleaning", "random text".
+    /// Pass condition: The API returns HTTP 400 Bad Request for each case.
+    /// Note: Parameterized test (Theory). The command below executes all 3 InlineData cases.
+    /// Run from repository root: dotnet test backend/AssistLK.sln --filter "FullyQualifiedName~AssistLK.Api.Tests.ServiceRequestsControllerSecurityTests.Requirement02C_CustomerCreateRequest_WithInvalidCategoryHint_Returns400BadRequest"
+    /// </summary>
     [Theory]
     [InlineData("Vehicle Assistance")]
     [InlineData("Cleaning")]
@@ -130,6 +178,13 @@ public class ServiceRequestsControllerSecurityTests : IClassFixture<AssistLKApiT
         Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
     }
 
+    /// <summary>
+    /// Purpose: Checks that users with Provider role cannot call Customer-only service request endpoints.
+    /// Why: Enforces Role-Based Access Control (RBAC) preventing service providers from masquerading as consumers.
+    /// Scenario: An authenticated Provider posts a new service request to /api/service-requests.
+    /// Pass condition: The API responds with HTTP 403 Forbidden.
+    /// Run from repository root: dotnet test backend/AssistLK.sln --filter "FullyQualifiedName=AssistLK.Api.Tests.ServiceRequestsControllerSecurityTests.Requirement03_ServiceProviderCannotAccessCustomerEndpoints_Returns403Forbidden"
+    /// </summary>
     [Fact]
     public async Task Requirement03_ServiceProviderCannotAccessCustomerEndpoints_Returns403Forbidden()
     {
@@ -148,6 +203,13 @@ public class ServiceRequestsControllerSecurityTests : IClassFixture<AssistLKApiT
         Assert.Equal(HttpStatusCode.Forbidden, response.StatusCode);
     }
 
+    /// <summary>
+    /// Purpose: Checks that CustomerId is extracted exclusively from the JWT claims, ignoring any spoofed ID in JSON.
+    /// Why: Critical security guarantee against ID injection and privilege escalation.
+    /// Scenario: Authenticated customer submits a request payload containing a different spoofed customerId Guid.
+    /// Pass condition: Status is 201 Created and the created record's CustomerId matches the JWT, not the spoofed body ID.
+    /// Run from repository root: dotnet test backend/AssistLK.sln --filter "FullyQualifiedName=AssistLK.Api.Tests.ServiceRequestsControllerSecurityTests.Requirement04_And_05_CustomerIdIsDerivedFromJwt_AndCannotBeOverriddenViaJson"
+    /// </summary>
     [Fact]
     public async Task Requirement04_And_05_CustomerIdIsDerivedFromJwt_AndCannotBeOverriddenViaJson()
     {
@@ -173,6 +235,13 @@ public class ServiceRequestsControllerSecurityTests : IClassFixture<AssistLKApiT
         Assert.NotEqual(spoofedCustomerId, body.CustomerId);
     }
 
+    /// <summary>
+    /// Purpose: Checks that a customer can retrieve their own existing service request by ID.
+    /// Why: Customers must be able to inspect details and track progress of their own requests.
+    /// Scenario: Customer A requests /api/service-requests/{requestId} for a record they own.
+    /// Pass condition: HTTP 200 OK and returned record matches the seeded entity.
+    /// Run from repository root: dotnet test backend/AssistLK.sln --filter "FullyQualifiedName=AssistLK.Api.Tests.ServiceRequestsControllerSecurityTests.Requirement06_CustomerCanRetrieveOwnRequest_Returns200Ok"
+    /// </summary>
     [Fact]
     public async Task Requirement06_CustomerCanRetrieveOwnRequest_Returns200Ok()
     {
@@ -203,6 +272,13 @@ public class ServiceRequestsControllerSecurityTests : IClassFixture<AssistLKApiT
         Assert.Equal("AC stopped cooling", body.Description);
     }
 
+    /// <summary>
+    /// Purpose: Checks that Customer B receives 404 Not Found when attempting to access Customer A's service request.
+    /// Why: Prevents data leaks between customers and hides existence of other customers' requests.
+    /// Scenario: Customer B requests /api/service-requests/{requestId} for a record owned by Customer A.
+    /// Pass condition: API responds with HTTP 404 Not Found.
+    /// Run from repository root: dotnet test backend/AssistLK.sln --filter "FullyQualifiedName=AssistLK.Api.Tests.ServiceRequestsControllerSecurityTests.Requirement07_CustomerCannotRetrieveAnotherCustomersRequest_Returns404NotFound"
+    /// </summary>
     [Fact]
     public async Task Requirement07_CustomerCannotRetrieveAnotherCustomersRequest_Returns404NotFound()
     {
@@ -228,6 +304,13 @@ public class ServiceRequestsControllerSecurityTests : IClassFixture<AssistLKApiT
         Assert.Equal(HttpStatusCode.NotFound, response.StatusCode);
     }
 
+    /// <summary>
+    /// Purpose: Checks that GET /api/service-requests/my returns exclusively the authenticated customer's requests.
+    /// Why: Guarantees multi-tenant isolation on personal request listing endpoints.
+    /// Scenario: Requests seeded for Customer A and Customer B; Customer A calls /my.
+    /// Pass condition: HTTP 200 OK; result list contains only Customer A's items and none of Customer B's items.
+    /// Run from repository root: dotnet test backend/AssistLK.sln --filter "FullyQualifiedName=AssistLK.Api.Tests.ServiceRequestsControllerSecurityTests.Requirement08_GetMyRequests_ReturnsOnlyCurrentCustomersRequests"
+    /// </summary>
     [Fact]
     public async Task Requirement08_GetMyRequests_ReturnsOnlyCurrentCustomersRequests()
     {
@@ -276,6 +359,13 @@ public class ServiceRequestsControllerSecurityTests : IClassFixture<AssistLKApiT
         Assert.DoesNotContain(requests, r => r.Description == "Customer B request");
     }
 
+    /// <summary>
+    /// Purpose: Checks that a customer can edit description and location on a request in Created state.
+    /// Why: Users should be allowed to refine information before analysis begins.
+    /// Scenario: Customer issues PUT request with revised description and location coordinates.
+    /// Pass condition: HTTP 200 OK with response containing the updated description and locationText.
+    /// Run from repository root: dotnet test backend/AssistLK.sln --filter "FullyQualifiedName=AssistLK.Api.Tests.ServiceRequestsControllerSecurityTests.Requirement09_CustomerCanUpdatePermittedRequest_Returns200Ok"
+    /// </summary>
     [Fact]
     public async Task Requirement09_CustomerCanUpdatePermittedRequest_Returns200Ok()
     {
@@ -312,6 +402,13 @@ public class ServiceRequestsControllerSecurityTests : IClassFixture<AssistLKApiT
         Assert.Equal("Colombo 07", updated.LocationText);
     }
 
+    /// <summary>
+    /// Purpose: Checks that updating CategoryHint preserves Category as "Unclassified" during edit.
+    /// Why: Ensures manual category hints cannot unilaterally overwrite system classification.
+    /// Scenario: Customer issues PUT request changing CategoryHint to "Electrical" on a Created request.
+    /// Pass condition: HTTP 200 OK with CategoryHint updated to "Electrical" and Category remaining "Unclassified".
+    /// Run from repository root: dotnet test backend/AssistLK.sln --filter "FullyQualifiedName=AssistLK.Api.Tests.ServiceRequestsControllerSecurityTests.Requirement09B_CustomerCanUpdateCategoryHint_Returns200Ok_AndLeavesCategoryUntouched"
+    /// </summary>
     [Fact]
     public async Task Requirement09B_CustomerCanUpdateCategoryHint_Returns200Ok_AndLeavesCategoryUntouched()
     {
@@ -349,6 +446,14 @@ public class ServiceRequestsControllerSecurityTests : IClassFixture<AssistLKApiT
         Assert.Equal("Unclassified", updated.Category);
     }
 
+    /// <summary>
+    /// Purpose: Checks that service requests in protected states (Analyzing, Analyzed, ReadyForMatching) cannot be updated.
+    /// Why: Prevents data corruption and race conditions during active agent analysis or provider dispatch.
+    /// Scenario: A customer attempts to send a PUT update on a request that has advanced beyond Created.
+    /// Pass condition: The API returns HTTP 409 Conflict.
+    /// Note: Parameterized test (Theory). The command below executes all 3 InlineData cases.
+    /// Run from repository root: dotnet test backend/AssistLK.sln --filter "FullyQualifiedName~AssistLK.Api.Tests.ServiceRequestsControllerSecurityTests.Requirement10_CustomerCannotUpdateProtectedLifecycleState_Returns409Conflict"
+    /// </summary>
     [Theory]
     [InlineData(ServiceRequestStatus.Analyzing)]
     [InlineData(ServiceRequestStatus.Analyzed)]
@@ -382,6 +487,14 @@ public class ServiceRequestsControllerSecurityTests : IClassFixture<AssistLKApiT
         Assert.Equal(HttpStatusCode.Conflict, response.StatusCode);
     }
 
+    /// <summary>
+    /// Purpose: Checks that a customer can cancel requests in early stages (Created, Analyzing, AwaitingInformation, Analyzed).
+    /// Why: Allows customers to safely withdraw their problem before matching occurs.
+    /// Scenario: Customer issues POST /cancel on requests in each permitted status.
+    /// Pass condition: HTTP 200 OK and response status is updated to Cancelled.
+    /// Note: Parameterized test (Theory). The command below executes all 4 InlineData cases.
+    /// Run from repository root: dotnet test backend/AssistLK.sln --filter "FullyQualifiedName~AssistLK.Api.Tests.ServiceRequestsControllerSecurityTests.Requirement11_CustomerCanCancelAllowedRequest_Returns200Ok"
+    /// </summary>
     [Theory]
     [InlineData(ServiceRequestStatus.Created)]
     [InlineData(ServiceRequestStatus.Analyzing)]
@@ -413,6 +526,13 @@ public class ServiceRequestsControllerSecurityTests : IClassFixture<AssistLKApiT
         Assert.Equal(ServiceRequestStatus.Cancelled, cancelled.Status);
     }
 
+    /// <summary>
+    /// Purpose: Checks that requests in ReadyForMatching status cannot be cancelled via customer endpoint.
+    /// Why: Once matching begins, cancellation requires dedicated provider release and coordination logic.
+    /// Scenario: Customer calls POST /cancel on a request already transitioned to ReadyForMatching.
+    /// Pass condition: The API responds with HTTP 409 Conflict.
+    /// Run from repository root: dotnet test backend/AssistLK.sln --filter "FullyQualifiedName=AssistLK.Api.Tests.ServiceRequestsControllerSecurityTests.Requirement12_CustomerCannotCancelAfterReadyForMatching_Returns409Conflict"
+    /// </summary>
     [Fact]
     public async Task Requirement12_CustomerCannotCancelAfterReadyForMatching_Returns409Conflict()
     {
@@ -437,6 +557,13 @@ public class ServiceRequestsControllerSecurityTests : IClassFixture<AssistLKApiT
         Assert.Equal(HttpStatusCode.Conflict, response.StatusCode);
     }
 
+    /// <summary>
+    /// Purpose: Checks that triggering /analyze executes problem understanding and returns structured analysis.
+    /// Why: Verifies that customer requests are properly analyzed into categorized problem records.
+    /// Scenario: Customer calls POST /analyze for a vehicle breakdown issue.
+    /// Pass condition: HTTP 200 OK, Status is Analyzed, Category is "Vehicle Repair", ProblemSummary is populated, confidence > 0.
+    /// Run from repository root: dotnet test backend/AssistLK.sln --filter "FullyQualifiedName=AssistLK.Api.Tests.ServiceRequestsControllerSecurityTests.Requirement13_CustomerCanAnalyzeTheirRequest_Returns200WithStructuredResponse"
+    /// </summary>
     [Fact]
     public async Task Requirement13_CustomerCanAnalyzeTheirRequest_Returns200WithStructuredResponse()
     {
@@ -469,6 +596,13 @@ public class ServiceRequestsControllerSecurityTests : IClassFixture<AssistLKApiT
         Assert.False(result.NeedsMoreInformation);
     }
 
+    /// <summary>
+    /// Purpose: Checks that Customer B cannot trigger AI analysis on Customer A's request.
+    /// Why: Prevents unauthorized execution of agent workflows and unauthorized status transitions.
+    /// Scenario: Customer B calls POST /analyze on Customer A's serviceRequestId.
+    /// Pass condition: The API responds with HTTP 404 Not Found.
+    /// Run from repository root: dotnet test backend/AssistLK.sln --filter "FullyQualifiedName=AssistLK.Api.Tests.ServiceRequestsControllerSecurityTests.Requirement14_CustomerCannotAnalyzeAnotherCustomersRequest_Returns404NotFound"
+    /// </summary>
     [Fact]
     public async Task Requirement14_CustomerCannotAnalyzeAnotherCustomersRequest_Returns404NotFound()
     {
@@ -494,6 +628,13 @@ public class ServiceRequestsControllerSecurityTests : IClassFixture<AssistLKApiT
         Assert.Equal(HttpStatusCode.NotFound, response.StatusCode);
     }
 
+    /// <summary>
+    /// Purpose: Checks that ambiguous descriptions yield AwaitingInformation status with follow-up clarification questions.
+    /// Why: When customer input lacks necessary detail, the system must prompt for clarification instead of guessing incorrectly.
+    /// Scenario: Customer analyzes a vague request ("Machine broken").
+    /// Pass condition: Status is AwaitingInformation, NeedsMoreInformation is True, and FollowUpQuestions contains questions.
+    /// Run from repository root: dotnet test backend/AssistLK.sln --filter "FullyQualifiedName=AssistLK.Api.Tests.ServiceRequestsControllerSecurityTests.Requirement16_AwaitingInformationResponse_ContainsSafeFollowUpQuestions"
+    /// </summary>
     [Fact]
     public async Task Requirement16_AwaitingInformationResponse_ContainsSafeFollowUpQuestions()
     {
@@ -523,6 +664,13 @@ public class ServiceRequestsControllerSecurityTests : IClassFixture<AssistLKApiT
         Assert.NotEmpty(result.FollowUpQuestions);
     }
 
+    /// <summary>
+    /// Purpose: Checks that a detailed, unambiguous problem description yields high-confidence structured output.
+    /// Why: Clear problems must be classified with urgency and high confidence ready for immediate matching.
+    /// Scenario: Customer analyzes a specific plumbing emergency ("Water pipe has burst in the main bathroom").
+    /// Pass condition: Status is Analyzed, Category is "Plumbing", Urgency is High, Confidence >= 0.7.
+    /// Run from repository root: dotnet test backend/AssistLK.sln --filter "FullyQualifiedName=AssistLK.Api.Tests.ServiceRequestsControllerSecurityTests.Requirement17_SufficientAnalysisResponse_ContainsStructuredSafeOutput"
+    /// </summary>
     [Fact]
     public async Task Requirement17_SufficientAnalysisResponse_ContainsStructuredSafeOutput()
     {
@@ -553,6 +701,13 @@ public class ServiceRequestsControllerSecurityTests : IClassFixture<AssistLKApiT
         Assert.True(result.Confidence >= 0.7m);
     }
 
+    /// <summary>
+    /// Purpose: Checks that internal AI reasoning traces, prompts, and memory keys are never exposed in API responses.
+    /// Why: Protects system IP, prevents prompt leakage, and presents a clean customer-facing interface.
+    /// Scenario: Customer analyzes a request and the raw JSON response text is verified for absence of sensitive keys.
+    /// Pass condition: Strings like "chain_of_thought", "reasoning", "system_prompt", "ToolExecutor", "AgentMemory" are absent.
+    /// Run from repository root: dotnet test backend/AssistLK.sln --filter "FullyQualifiedName=AssistLK.Api.Tests.ServiceRequestsControllerSecurityTests.Requirement18_ApiNeverExposesChainOfThoughtOrInternalMemory"
+    /// </summary>
     [Fact]
     public async Task Requirement18_ApiNeverExposesChainOfThoughtOrInternalMemory()
     {
@@ -588,6 +743,13 @@ public class ServiceRequestsControllerSecurityTests : IClassFixture<AssistLKApiT
         Assert.DoesNotContain("problem.summary", json, StringComparison.OrdinalIgnoreCase);
     }
 
+    /// <summary>
+    /// Purpose: Checks the validation gate on /ready-for-matching, requiring requests to be fully analyzed.
+    /// Why: Prevents unanalyzed or ambiguous requests from being dispatched to service providers.
+    /// Scenario: Subcase A (AwaitingInformation -> 409 Conflict), Subcase B (Created -> 409 Conflict), Subcase C (Analyzed -> 200 OK & ReadyForMatching).
+    /// Pass condition: Non-analyzed states return 409; fully analyzed state transitions to ReadyForMatching with 200 OK.
+    /// Run from repository root: dotnet test backend/AssistLK.sln --filter "FullyQualifiedName=AssistLK.Api.Tests.ServiceRequestsControllerSecurityTests.Requirement19_ReadyForMatchingEndpoint_EnforcesApplicationValidationGate"
+    /// </summary>
     [Fact]
     public async Task Requirement19_ReadyForMatchingEndpoint_EnforcesApplicationValidationGate()
     {
@@ -664,6 +826,13 @@ public class ServiceRequestsControllerSecurityTests : IClassFixture<AssistLKApiT
         Assert.Equal(ServiceRequestStatus.ReadyForMatching, matchingReady.Status);
     }
 
+    /// <summary>
+    /// Purpose: Architectural test verifying that ServiceRequestsController depends on application interfaces, not direct DbContext or Agent types.
+    /// Why: Enforces clean architecture / hexagonal boundaries preventing architectural leakage.
+    /// Scenario: Reflection inspects the constructor parameter types of ServiceRequestsController.
+    /// Pass condition: Controller constructor takes IServiceRequestService and ProblemUnderstandingWorkflowService; no DbContext or ProblemUnderstandingAgent.
+    /// Run from repository root: dotnet test backend/AssistLK.sln --filter "FullyQualifiedName=AssistLK.Api.Tests.ServiceRequestsControllerSecurityTests.Requirement15_Controller_DoesNotDirectlyReferenceDbContextOrAgent_AndUsesWorkflowService"
+    /// </summary>
     [Fact]
     public void Requirement15_Controller_DoesNotDirectlyReferenceDbContextOrAgent_AndUsesWorkflowService()
     {
@@ -679,6 +848,13 @@ public class ServiceRequestsControllerSecurityTests : IClassFixture<AssistLKApiT
         Assert.DoesNotContain(paramTypes, t => t.Name.Contains("ProblemUnderstandingAgent"));
     }
 
+    /// <summary>
+    /// Purpose: Tests end-to-end happy-path lifecycle: Created -> Analyzing -> Analyzed -> ReadyForMatching, and subsequent mutation locking.
+    /// Why: Proves the complete multi-step customer workflow operates correctly as an integrated whole.
+    /// Scenario: Customer creates detailed request, triggers analysis, verifies Analyzed, transitions to ReadyForMatching, and tests that update/cancel are locked.
+    /// Pass condition: All lifecycle states transition as expected; after ReadyForMatching, both PUT update and POST cancel return 409 Conflict.
+    /// Run from repository root: dotnet test backend/AssistLK.sln --filter "FullyQualifiedName=AssistLK.Api.Tests.ServiceRequestsControllerSecurityTests.ScenarioA_DetailedRequest_FullLifecycle_Created_Analyzing_Analyzed_ReadyForMatching"
+    /// </summary>
     [Fact]
     public async Task ScenarioA_DetailedRequest_FullLifecycle_Created_Analyzing_Analyzed_ReadyForMatching()
     {
@@ -744,6 +920,13 @@ public class ServiceRequestsControllerSecurityTests : IClassFixture<AssistLKApiT
         Assert.Equal(HttpStatusCode.Conflict, cancelAttempt.StatusCode);
     }
 
+    /// <summary>
+    /// Purpose: Tests ambiguous request lifecycle: Created -> Analyzing -> AwaitingInformation, and verifies ReadyForMatching is blocked.
+    /// Why: Guarantees that requests requiring customer clarification cannot bypass the clarification gate into provider matching.
+    /// Scenario: Customer creates vague request, triggers analysis, verifies AwaitingInformation, attempts ReadyForMatching.
+    /// Pass condition: Analysis sets AwaitingInformation with questions, ReadyForMatching returns 409 Conflict, and status remains AwaitingInformation.
+    /// Run from repository root: dotnet test backend/AssistLK.sln --filter "FullyQualifiedName=AssistLK.Api.Tests.ServiceRequestsControllerSecurityTests.ScenarioB_AmbiguousRequest_FullLifecycle_Created_Analyzing_AwaitingInformation_ReadyForMatchingFails"
+    /// </summary>
     [Fact]
     public async Task ScenarioB_AmbiguousRequest_FullLifecycle_Created_Analyzing_AwaitingInformation_ReadyForMatchingFails()
     {
@@ -792,3 +975,4 @@ public class ServiceRequestsControllerSecurityTests : IClassFixture<AssistLKApiT
         Assert.Equal(ServiceRequestStatus.AwaitingInformation, verifyFetched.Status);
     }
 }
+

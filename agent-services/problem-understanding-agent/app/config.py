@@ -22,8 +22,8 @@ class Settings(BaseSettings):
     PORT: int = Field(default=8001, description="Internal service listening port.")
     ENVIRONMENT: str = Field(default="development", description="Runtime environment.")
 
-    # Provider Selection: "gemini" | "openai" | "offline"
-    LLM_PROVIDER: Literal["gemini", "openai", "offline"] = Field(
+    # Provider Selection: "gemini" | "openai" | "azure_openai" | "offline"
+    LLM_PROVIDER: Literal["gemini", "openai", "azure_openai", "offline"] = Field(
         default="gemini",
         description="Selected LLM provider backend.",
     )
@@ -47,6 +47,24 @@ class Settings(BaseSettings):
     OPENAI_MODEL: str = Field(
         default="gpt-4o-mini",
         description="OpenAI model identifier.",
+    )
+
+    # Azure OpenAI Configuration
+    AZURE_OPENAI_API_KEY: str | None = Field(
+        default=None,
+        description="Azure OpenAI API Key.",
+    )
+    AZURE_OPENAI_ENDPOINT: str | None = Field(
+        default=None,
+        description="Azure OpenAI Endpoint URL (e.g. https://<resource>.openai.azure.com/).",
+    )
+    AZURE_OPENAI_DEPLOYMENT_NAME: str = Field(
+        default="gpt-4.1-mini",
+        description="Azure OpenAI deployment name.",
+    )
+    AZURE_OPENAI_API_VERSION: str = Field(
+        default="2025-01-01-preview",
+        description="Azure OpenAI REST API version.",
     )
 
     # Resilience & Timeouts (Python owns LLM retry behavior)

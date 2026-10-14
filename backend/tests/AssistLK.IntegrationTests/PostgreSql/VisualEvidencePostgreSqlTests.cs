@@ -8,8 +8,30 @@ using Microsoft.EntityFrameworkCore.Migrations;
 
 namespace AssistLK.IntegrationTests.PostgreSql;
 
+// =========================================================================================
+// Class: VisualEvidencePostgreSqlTests
+// What this class tests:
+//   PostgreSQL persistence of jsonb VisualEvidence on ProblemAnalysis and EF Core migration safety.
+// Why these tests are needed:
+//   Validates that multimodal vision analysis results (vision status, observations, limitations)
+//   properly serialize to PostgreSQL jsonb columns, allow in-place updates, and that EF Core
+//   migrations safely upgrade legacy pre-multimodal records with sensible defaults.
+// What is real vs mocked/faked:
+//   - REAL: Live PostgreSQL instance, EF Core jsonb column mapping, and IMigrator executing actual DDL.
+//   - MOCKED: None.
+// Prerequisites:
+//   Running PostgreSQL instance configured via ASSISTLK_TEST_POSTGRESQL_CONNECTION,
+//   ConnectionStrings__TestConnection, or local User Secrets.
+// Run from repository root:
+//   dotnet test backend/AssistLK.sln --filter "FullyQualifiedName~AssistLK.IntegrationTests.PostgreSql.VisualEvidencePostgreSqlTests"
+// =========================================================================================
 public class VisualEvidencePostgreSqlTests(PostgreSqlTestFixture fixture) : PostgreSqlIntegrationTestBase(fixture)
 {
+    // Purpose: Verifies that VisualEvidence complex objects round-trip through PostgreSQL jsonb columns and support updates.
+    // Why: Vision observations and limitations must persist in JSON without data loss or serialization mismatch.
+    // Scenario: Saves problem analysis with visual evidence, verifies persisted JSON, updates limitations, and re-saves.
+    // Pass condition: Loaded VisualEvidence retains vision status, attachment IDs, observation text, and updated limitations.
+    // Run from repository root: dotnet test backend/AssistLK.sln --filter "FullyQualifiedName=AssistLK.IntegrationTests.PostgreSql.VisualEvidencePostgreSqlTests.JsonbRoundTripRetainsBoundedValueAndTracksReplacements"
     [Fact]
     public async Task JsonbRoundTripRetainsBoundedValueAndTracksReplacements()
     {
@@ -50,6 +72,11 @@ public class VisualEvidencePostgreSqlTests(PostgreSqlTestFixture fixture) : Post
             Assert.Equal("The joint is partially obscured.", (await db.ProblemAnalyses.SingleAsync(a => a.ServiceRequestId == id)).VisualEvidence.Limitations[0]);
     }
 
+    // Purpose: Tests migration safety by rolling back to before AddProblemAnalysisVisualEvidence, inserting a legacy row without visual evidence, migrating forward, and verifying default fallback values.
+    // Why: Ensures backward compatibility when upgrading existing databases containing pre-multimodal analysis rows.
+    // Scenario: Spins up a temporary test database, rolls back migration, inserts raw SQL legacy row, migrates up, verifies defaults (VisionStatus = "not_requested"), rolls back, and migrates up again.
+    // Pass condition: Legacy row has VisionStatus = "not_requested", empty arrays, and survives rollback/re-migration with DetectedProblem intact.
+    // Run from repository root: dotnet test backend/AssistLK.sln --filter "FullyQualifiedName=AssistLK.IntegrationTests.PostgreSql.VisualEvidencePostgreSqlTests.MigrationUpDefaultsLegacyRowsAndDownPreservesAnalysis"
     [Fact]
     public async Task MigrationUpDefaultsLegacyRowsAndDownPreservesAnalysis()
     {

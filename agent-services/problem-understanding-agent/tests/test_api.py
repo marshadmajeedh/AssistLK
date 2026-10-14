@@ -1,4 +1,19 @@
-"""Integration tests for FastAPI REST endpoints and internal authentication."""
+"""Integration tests for FastAPI REST endpoints and internal authentication.
+
+Suite overview:
+- What this suite tests: The FastAPI HTTP layer for the Problem Understanding Agent,
+  including health probes, agent analysis execution, endpoint routing aliases,
+  Pydantic request validation, and internal API key security headers.
+- Why these tests are needed: Ensures the HTTP API exposed to the C# backend is robust,
+  rejects malformed payloads before processing, enforces internal authentication tokens,
+  and provides health status for container orchestrators.
+- What is real vs mocked: The FastAPI application, ASGI routing, HTTP request/response
+  handling, and schema validation are real. The AI provider is faked/mocked using the
+  in-memory mock provider so no live LLM or external network is called.
+- Prerequisites: Python virtual environment with dependencies installed.
+- PowerShell command to run suite from repository root:
+  & agent-services/problem-understanding-agent/.venv/Scripts/python.exe -m pytest agent-services/problem-understanding-agent/tests/test_api.py
+"""
 from typing import Any
 import pytest
 from httpx import ASGITransport, AsyncClient
@@ -6,6 +21,11 @@ from app.config import Settings, get_settings
 from app.main import app
 
 
+# Purpose: Checks that GET /health returns HTTP 200 with service and provider metadata.
+# Why: Health check endpoints are used by Docker and container orchestrators to monitor service availability.
+# Scenario: An HTTP GET request is sent to /health without any credentials.
+# Pass condition: HTTP status is 200 and JSON contains "healthy", "service", "provider", and "model" keys.
+# Run from repository root: & agent-services/problem-understanding-agent/.venv/Scripts/python.exe -m pytest agent-services/problem-understanding-agent/tests/test_api.py -k "test_health_endpoint"
 @pytest.mark.asyncio
 async def test_health_endpoint(async_client: AsyncClient):
     """Verifies Requirement 23: GET /health returns 200 and healthy status."""
@@ -18,6 +38,11 @@ async def test_health_endpoint(async_client: AsyncClient):
     assert "model" in data
 
 
+# Purpose: Checks that POST /agent/execute successfully analyzes a valid service request.
+# Why: This is the primary endpoint called by the C# backend to run AI problem understanding.
+# Scenario: A valid plumbing problem JSON payload is posted to /agent/execute.
+# Pass condition: HTTP 200, success flag is True, category is Plumbing, urgency is classified, and 3 tool runs are recorded.
+# Run from repository root: & agent-services/problem-understanding-agent/.venv/Scripts/python.exe -m pytest agent-services/problem-understanding-agent/tests/test_api.py -k "test_agent_execute_endpoint_success"
 @pytest.mark.asyncio
 async def test_agent_execute_endpoint_success(
     async_client: AsyncClient,
@@ -43,6 +68,11 @@ async def test_agent_execute_endpoint_success(
     assert len(metadata["toolExecutions"]) == 3
 
 
+# Purpose: Checks that the internal alias path /internal/v1/problem-understanding/analyze functions identically to /agent/execute.
+# Why: Guarantees backward compatibility with legacy backend service client routes.
+# Scenario: A valid plumbing request payload is posted to the alternative alias route.
+# Pass condition: HTTP 200, success is True, and category is Plumbing.
+# Run from repository root: & agent-services/problem-understanding-agent/.venv/Scripts/python.exe -m pytest agent-services/problem-understanding-agent/tests/test_api.py -k "test_agent_execute_alias_endpoint"
 @pytest.mark.asyncio
 async def test_agent_execute_alias_endpoint(
     async_client: AsyncClient,
@@ -59,6 +89,11 @@ async def test_agent_execute_alias_endpoint(
     assert data["result"]["category"] == "Plumbing"
 
 
+# Purpose: Checks that malformed request payloads fail fast with HTTP 422 Unprocessable Entity.
+# Why: Prevents empty or invalid input data from entering and failing the downstream agent pipeline.
+# Scenario: POST /agent/execute is called with an invalid payload having an empty description string.
+# Pass condition: HTTP status code is 422.
+# Run from repository root: & agent-services/problem-understanding-agent/.venv/Scripts/python.exe -m pytest agent-services/problem-understanding-agent/tests/test_api.py -k "test_agent_execute_schema_validation_failure"
 @pytest.mark.asyncio
 async def test_agent_execute_schema_validation_failure(async_client: AsyncClient):
     """Verifies that invalid payloads (missing required fields) return HTTP 422."""
@@ -72,6 +107,11 @@ async def test_agent_execute_schema_validation_failure(async_client: AsyncClient
     assert response.status_code == 422
 
 
+# Purpose: Checks that internal API key authentication blocks unauthorized calls and accepts valid keys.
+# Why: Secures internal microservice endpoints against unauthenticated access when an API key is configured.
+# Scenario: Calls without a key, with an invalid key, with X-Internal-Api-Key, and with X-Api-Key.
+# Pass condition: Missing or wrong key returns HTTP 401; valid key in either supported header returns HTTP 200.
+# Run from repository root: & agent-services/problem-understanding-agent/.venv/Scripts/python.exe -m pytest agent-services/problem-understanding-agent/tests/test_api.py -k "test_internal_authentication_enforcement"
 @pytest.mark.asyncio
 async def test_internal_authentication_enforcement(
     secured_settings: Settings,
@@ -117,6 +157,11 @@ async def test_internal_authentication_enforcement(
     app.dependency_overrides.clear()
 
 
+# Purpose: Checks that image-enhanced multimodal execution requests strictly enforce API key security.
+# Why: Multimodal endpoints consume vision processing resources and must be equally authenticated.
+# Scenario: A payload containing visualEvidence is sent with missing key, wrong key, valid key, and whitespace/quote-padded key.
+# Pass condition: Missing/wrong key returns HTTP 401; valid key returns HTTP 200 with success True.
+# Run from repository root: & agent-services/problem-understanding-agent/.venv/Scripts/python.exe -m pytest agent-services/problem-understanding-agent/tests/test_api.py -k "test_internal_authentication_multimodal_request_enforcement"
 @pytest.mark.asyncio
 async def test_internal_authentication_multimodal_request_enforcement(
     secured_settings,
@@ -175,6 +220,11 @@ async def test_internal_authentication_multimodal_request_enforcement(
     app.dependency_overrides.clear()
 
 
+# Purpose: Checks that /health remains accessible without authentication even when API key security is configured.
+# Why: Health check monitors and load balancer probes do not carry authentication headers and must not be blocked.
+# Scenario: GET /health is requested while secured_settings (INTERNAL_API_KEY enabled) is active.
+# Pass condition: HTTP 200 and response body indicates "healthy" status.
+# Run from repository root: & agent-services/problem-understanding-agent/.venv/Scripts/python.exe -m pytest agent-services/problem-understanding-agent/tests/test_api.py -k "test_health_endpoint_remains_unauthenticated_under_secured_settings"
 @pytest.mark.asyncio
 async def test_health_endpoint_remains_unauthenticated_under_secured_settings(
     secured_settings,
@@ -192,3 +242,4 @@ async def test_health_endpoint_remains_unauthenticated_under_secured_settings(
         assert res.json()["status"] == "healthy"
 
     app.dependency_overrides.clear()
+

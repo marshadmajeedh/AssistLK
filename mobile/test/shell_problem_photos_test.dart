@@ -21,6 +21,25 @@ import 'mocks/fake_problem_photos.dart';
 import 'mocks/mock_location_geocoding_service.dart';
 import 'session_foundation_test.dart' show AuthStub;
 
+/**
+ * TEST SUITE: Shell Problem Photos and Multi-Step Wizard Lifecycle Tests
+ *
+ * 1. What this test suite tests:
+ *    - Verifies draft photo persistence through back-and-forth wizard navigation in `CreateServiceRequestScreen`.
+ *    - Verifies uploaded photo attachment display in `ServiceRequestDetailScreen` (`RequestProblemPhotos`).
+ *    - Verifies safety under late photo uploads: if the user logs out and switches accounts (to another Customer or a Provider),
+ *      late asynchronous photo upload responses cannot restore old routes, inject data into the new session, or leak images across accounts.
+ * 2. Why these tests are needed:
+ *    - Service request creation is a multi-step guided wizard with asynchronous photo uploads.
+ *      Draft photos must survive navigation steps (Back, Forward), and race conditions during late network resolution
+ *      on logout/login must be securely sanitized to protect customer data.
+ * 3. What is real and what is mocked:
+ *    - Real `AssistLKApp` widget tree, `CustomerAppShell`, `CreateServiceRequestScreen`, `ServiceRequestDetailScreen`.
+ *    - Mocked: `AuthStub` for login/logout user switching, `PhotoApi` for mock photo upload endpoints, `FakePhotoPicker` for file picking, `MockLocationGeocodingService`.
+ * 4. Prerequisites: None.
+ * 5. PowerShell command to run this suite from repository root:
+ *    Push-Location mobile; flutter test test/shell_problem_photos_test.dart; Pop-Location
+ */
 void main() {
   late AuthProvider auth;
   late AuthStub authService;
@@ -94,6 +113,22 @@ void main() {
     );
   }
 
+  /**
+   * Purpose: What this specific test checks
+   * - Verifies that navigating backward ('Back', 'Back') to Step 1 preserves selected draft photos, and proceeding to submit completes creation, photo upload, and opens the detail screen with `RequestProblemPhotos`.
+   *
+   * Why: Why this scenario matters
+   * - Prevents frustrating data loss if a customer goes back to revise their description or change category.
+   *
+   * Scenario: Input or condition being tested
+   * - Add photo, proceed to review, tap Back twice, verify photo remains, proceed and Submit.
+   *
+   * Pass condition: What result or assertion makes it pass
+   * - `PrivatePhotoImage` remains rendered, detail screen opens with `RequestProblemPhotos`, API records create and upload events.
+   *
+   * Run from repository root:
+   * Push-Location mobile; flutter test test/shell_problem_photos_test.dart --plain-name "shell wizard retains draft photos through Back and opens uploaded detail"; Pop-Location
+   */
   testWidgets(
     'shell wizard retains draft photos through Back and opens uploaded detail',
     (tester) async {
@@ -114,6 +149,26 @@ void main() {
     },
   );
 
+  /**
+   * Parameterized Account Switching Safety Tests
+   * Note: Parameterized across user roles ['Customer', 'Provider']. The test runner executes both cases.
+   *
+   * Purpose: What this specific test checks
+   * - Verifies that late completing photo uploads after account switching cannot pop up old detail screens or leak data to the new user.
+   *
+   * Why: Why this scenario matters
+   * - Prevents cross-account session pollution and security breaches where User B sees User A's uploaded pictures.
+   *
+   * Scenario: Input or condition being tested
+   * - Submit request with pending photo upload, log out mid-upload, log in as User B (as Customer or Provider), complete photo upload afterwards.
+   *
+   * Pass condition: What result or assertion makes it pass
+   * - Detail screen and draft screen do not appear, old requests list is cleared, controller is deactivated (`photos.active == false`), new shell mounts cleanly.
+   *   (Note: Provider role switch test exhibits pumpAndSettle timeout on ProviderHomeScreen animation in test harness).
+   *
+   * Run from repository root:
+   * Push-Location mobile; flutter test test/shell_problem_photos_test.dart --plain-name "late photo upload cannot restore old routes or state after switching to Customer"; Pop-Location
+   */
   for (final role in ['Customer', 'Provider']) {
     testWidgets(
       'late photo upload cannot restore old routes or state after switching to $role',

@@ -10,10 +10,17 @@ using Microsoft.Extensions.Logging;
 namespace AssistLK.IntegrationTests;
 
 /// <summary>
-/// Verifies DI lifetimes and agent registration for Component 1's production architecture:
-/// ASP.NET Core -> ExternalProblemUnderstandingAgentAdapter -> ProblemUnderstandingHttpClient -> Python FastAPI.
-/// Confirms that AgentRegistry, AgentOrchestrator, and ExternalProblemUnderstandingAgentAdapter share matching Scoped lifetimes
-/// and that no singleton captures a scoped dependency.
+/// What this class tests:
+///   Dependency Injection (DI) service registrations, scope validation, captive dependency detection, and AgentServicesOptions configuration validation for Component 1.
+/// Why these tests are needed:
+///   Prevents runtime lifetime mismatches (e.g. singletons capturing scoped dependencies), verifies that ExternalProblemUnderstandingAgentAdapter is registered under "ProblemUnderstandingAgent", and guarantees fail-fast validation on misconfigured agent URLs or timeouts.
+/// What is real and what is mocked/faked:
+///   - Real: Microsoft.Extensions.DependencyInjection container, ServiceCollection, ServiceProvider, and AgentServicesOptions.
+///   - Mocked/Faked: None. No live network calls are made.
+/// Prerequisites:
+///   None. Runs in-memory.
+/// Run from repository root:
+///   dotnet test backend/AssistLK.sln --filter "FullyQualifiedName~AssistLK.IntegrationTests.ProblemUnderstandingRegistrationTests"
 /// </summary>
 public class ProblemUnderstandingRegistrationTests
 {
@@ -85,6 +92,13 @@ public class ProblemUnderstandingRegistrationTests
         });
     }
 
+    /// <summary>
+    /// Purpose: Checks that DI container builds with ValidateScopes = true and resolves AgentRegistry, AgentOrchestrator, and agent without captive dependencies.
+    /// Why: Catches subtle multi-threading bugs and concurrency memory leaks where a singleton service accidentally holds onto a scoped service.
+    /// Scenario: Builds ServiceProvider with ValidateScopes = true and resolves core agent services inside a scope.
+    /// Pass condition: Container builds cleanly and all three services resolve to non-null instances.
+    /// Run from repository root: dotnet test backend/AssistLK.sln --filter "FullyQualifiedName=AssistLK.IntegrationTests.ProblemUnderstandingRegistrationTests.DILifetimes_ValidateScopes_SucceedsWithoutSingletonCapturingScoped"
+    /// </summary>
     [Fact]
     public void DILifetimes_ValidateScopes_SucceedsWithoutSingletonCapturingScoped()
     {
@@ -101,6 +115,13 @@ public class ProblemUnderstandingRegistrationTests
         Assert.NotNull(agent);
     }
 
+    /// <summary>
+    /// Purpose: Checks that AgentRegistry.Get("ProblemUnderstandingAgent") resolves the concrete ExternalProblemUnderstandingAgentAdapter.
+    /// Why: Ensures the orchestrator finds the HTTP adapter for Python FastAPI when dispatching problem understanding tasks.
+    /// Scenario: Requests "ProblemUnderstandingAgent" from the scoped AgentRegistry.
+    /// Pass condition: Resolved agent is non-null, is an instance of ExternalProblemUnderstandingAgentAdapter, and its Name equals "ProblemUnderstandingAgent".
+    /// Run from repository root: dotnet test backend/AssistLK.sln --filter "FullyQualifiedName=AssistLK.IntegrationTests.ProblemUnderstandingRegistrationTests.AgentRegistry_ResolvesExternalProblemUnderstandingAgentAdapter_AsProblemUnderstandingAgent"
+    /// </summary>
     [Fact]
     public void AgentRegistry_ResolvesExternalProblemUnderstandingAgentAdapter_AsProblemUnderstandingAgent()
     {
@@ -115,6 +136,13 @@ public class ProblemUnderstandingRegistrationTests
         Assert.Equal("ProblemUnderstandingAgent", agent.Name);
     }
 
+    /// <summary>
+    /// Purpose: Checks that ExternalProblemUnderstandingAgentAdapter implements the IAgent interface and exposes the canonical name "ProblemUnderstandingAgent".
+    /// Why: Verifies compliance with the agent abstractions required by AgentOrchestrator.
+    /// Scenario: Inspects the resolved agent as an IAgent.
+    /// Pass condition: Agent implements IAgent and Name equals "ProblemUnderstandingAgent".
+    /// Run from repository root: dotnet test backend/AssistLK.sln --filter "FullyQualifiedName=AssistLK.IntegrationTests.ProblemUnderstandingRegistrationTests.ExternalProblemUnderstandingAgentAdapter_ImplementsIAgent_AndExposesLogicalName"
+    /// </summary>
     [Fact]
     public void ExternalProblemUnderstandingAgentAdapter_ImplementsIAgent_AndExposesLogicalName()
     {
@@ -129,6 +157,14 @@ public class ProblemUnderstandingRegistrationTests
         Assert.Equal("ProblemUnderstandingAgent", iAgent.Name);
     }
 
+    /// <summary>
+    /// Purpose: Checks that invalid, empty, or non-HTTP/HTTPS URLs throw InvalidOperationException during options validation.
+    /// Why: Fails fast on application startup if the Python FastAPI agent service URL is misconfigured.
+    /// Scenario: Validates AgentServicesOptions with empty, whitespace, malformed, or FTP URLs.
+    /// Pass condition: Throws InvalidOperationException mentioning "ProblemUnderstandingUrl".
+    /// Note: Parameterized test (Theory). The command below executes all 4 InlineData cases.
+    /// Run from repository root: dotnet test backend/AssistLK.sln --filter "FullyQualifiedName~AssistLK.IntegrationTests.ProblemUnderstandingRegistrationTests.AgentServicesOptions_Validate_ThrowsOnInvalidUrl"
+    /// </summary>
     [Theory]
     [InlineData("")]
     [InlineData("   ")]
@@ -145,6 +181,14 @@ public class ProblemUnderstandingRegistrationTests
         Assert.Contains("ProblemUnderstandingUrl", ex.Message);
     }
 
+    /// <summary>
+    /// Purpose: Checks that timeout values less than or equal to zero throw InvalidOperationException.
+    /// Why: Prevents infinite hangs or immediate timeouts due to zero or negative timeout settings.
+    /// Scenario: Validates AgentServicesOptions with timeout values of 0, -1, and -45 seconds.
+    /// Pass condition: Throws InvalidOperationException mentioning "TimeoutSeconds".
+    /// Note: Parameterized test (Theory). The command below executes all 3 InlineData cases.
+    /// Run from repository root: dotnet test backend/AssistLK.sln --filter "FullyQualifiedName~AssistLK.IntegrationTests.ProblemUnderstandingRegistrationTests.AgentServicesOptions_Validate_ThrowsOnNonPositiveTimeout"
+    /// </summary>
     [Theory]
     [InlineData(0)]
     [InlineData(-1)]

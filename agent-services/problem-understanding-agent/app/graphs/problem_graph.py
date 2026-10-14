@@ -243,24 +243,12 @@ def create_problem_understanding_graph(
             }
         except (ProviderError, Exception) as ex:
             logger.warning("LLM reasoning failed (%s).", type(ex).__name__)
-            if state.get("visual_evidence"):
-                # One atomic multimodal call uses the existing retry budget. No fresh-budget fallback.
-                raise PermanentProviderError("Image-enhanced reasoning failed; no visual result was applied.") from None
-            return {
-                "prompt": prompt,
-                "llm_raw_category": "Unclassified",
-                "llm_raw_summary": "Possible service issue. Category could not be established.",
-                "llm_raw_urgency": "Unknown",
-                "llm_raw_confidence": 0.2,
-                "llm_raw_needs_more": True,
-                "llm_raw_questions": [
-                    "Could you describe the problem you are experiencing?",
-                    "What specific symptoms or equipment are involved?",
-                ],
-                "additional_info": {"Degraded": "True"},
-                "degraded": True,
-                "llm_error": type(ex).__name__,
-            }
+            # Provider failures (TransientProviderError, PermanentProviderError) must propagate
+            # directly so external provider availability/quota errors are never masked as fake
+            # "needsMoreInformation" and transient errors are not converted into permanent failures.
+            if isinstance(ex, ProviderError):
+                raise
+            raise PermanentProviderError(f"Reasoning failed due to unrecoverable error: {type(ex).__name__}") from ex
 
     def evaluate_ambiguity_and_alignment_node(state: ProblemUnderstandingState) -> dict[str, Any]:
         description = state.get("description", "")

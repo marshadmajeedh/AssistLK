@@ -16,6 +16,31 @@ namespace AssistLK.IntegrationTests;
 /// Section 16 Integration Verification: Real communication between ASP.NET Core
 /// ProblemUnderstandingWorkflowService and the live Python service running on localhost:8001.
 /// </summary>
+// =========================================================================================
+// Class: LocalhostPythonSmokeIntegrationTests
+// What this class tests:
+//   Live integration smoke test verifying real HTTP communication between the C#
+//   ProblemUnderstandingWorkflowService and the live Python FastAPI agent microservice
+//   running on localhost:8001.
+// Why these tests are needed:
+//   Validates real cross-process network communication, live LangGraph agent execution,
+//   real JSON serialization/deserialization, entity lifecycle status transitions, and
+//   database persistence in an integrated local environment.
+// What is real vs mocked/faked:
+//   - REAL: C# workflow services, HttpClient making actual network calls to http://127.0.0.1:8001,
+//     and live Python agent execution (when opt-in enabled and service running).
+//   - FAKED/IN-MEMORY: EF Core in-memory database and in-memory repository doubles.
+//   - SAFETY GUARD: Test automatically self-skips unless RUN_PYTHON_AGENT_SMOKE_TESTS=true
+//     AND http://127.0.0.1:8001/health returns HTTP 200 OK.
+// Prerequisites:
+//   1. Python service running on port 8001 (e.g., uvicorn api:app --port 8001).
+//   2. Environment variable: $env:RUN_PYTHON_AGENT_SMOKE_TESTS = "true"
+// Run from repository root:
+//   - Normal run (safely self-skips if environment variable not set):
+//     dotnet test backend/AssistLK.sln --filter "FullyQualifiedName~AssistLK.IntegrationTests.LocalhostPythonSmokeIntegrationTests"
+//   - Live execution (with running Python agent):
+//     $env:RUN_PYTHON_AGENT_SMOKE_TESTS="true"; dotnet test backend/AssistLK.sln --filter "FullyQualifiedName~AssistLK.IntegrationTests.LocalhostPythonSmokeIntegrationTests"; Remove-Item Env:\RUN_PYTHON_AGENT_SMOKE_TESTS
+// =========================================================================================
 public class LocalhostPythonSmokeIntegrationTests
 {
     private static async Task<bool> IsPythonServiceRunningAsync()
@@ -32,6 +57,12 @@ public class LocalhostPythonSmokeIntegrationTests
         }
     }
 
+    // Purpose: Checks end-to-end integration with the real running Python LangGraph agent, ensuring real JSON communication produces a valid ProblemAnalysis and transitions the request to Analyzed.
+    // Why: Proves that the C# backend and Python agent service work together across real network sockets without serialization or schema mismatch errors.
+    // Scenario: Real request for kitchen pipe burst flooding sent to live Python microservice at http://127.0.0.1:8001.
+    // Pass condition: When enabled and running, result.Success is true, outcome is "Analyzed", category is "Plumbing", confidence >= 0.70, request.Status is Analyzed, and ProblemAnalysis entity is persisted.
+    // Run from repository root: dotnet test backend/AssistLK.sln --filter "FullyQualifiedName=AssistLK.IntegrationTests.LocalhostPythonSmokeIntegrationTests.RealPythonIntegration_AnalyzeAsync_ExecutesLangGraphAndPersistsAnalysis"
+    // Note: Self-skips unless $env:RUN_PYTHON_AGENT_SMOKE_TESTS="true" and a live Python agent is reachable at http://127.0.0.1:8001/health.
     [Fact]
     [Trait("Category", "Smoke")]
     public async Task RealPythonIntegration_AnalyzeAsync_ExecutesLangGraphAndPersistsAnalysis()

@@ -9,6 +9,24 @@ using Xunit;
 
 namespace AssistLK.Api.Tests;
 
+/// <summary>
+/// AdminServiceRequestsControllerFunctionalTests verifies functional behavior, query filtering,
+/// detail projection, and ordering for the Admin Service Requests API (/api/admin/service-requests).
+///
+/// Viva Preparation Notes:
+/// - What this class tests: Administrative cross-customer request listing, detailed retrieval
+///   including AI analysis and clarification history, query filtering by status, category, urgency,
+///   combined multi-attribute filtering, validation of filter parameters, and newest-first ordering.
+/// - Why these tests are needed: Administrators need a comprehensive, authoritative control plane
+///   to monitor, triage, and audit all customer service requests across the platform.
+/// - What is real vs mocked:
+///   * Real: ASP.NET Core test server, routing, Admin role authorization, EF Core InMemory database,
+///     LINQ query execution, and JSON serialization.
+///   * Mocked/Faked: None needed directly in these tests (data is seeded via EF Core).
+/// - Prerequisites: None (runs completely in-memory with .NET 8 SDK).
+/// - PowerShell command to run class from repository root:
+///   dotnet test backend/AssistLK.sln --filter "FullyQualifiedName~AssistLK.Api.Tests.AdminServiceRequestsControllerFunctionalTests"
+/// </summary>
 [Collection("EnvironmentTests")]
 public class AdminServiceRequestsControllerFunctionalTests : IClassFixture<AssistLKApiTestFactory>
 {
@@ -24,6 +42,13 @@ public class AdminServiceRequestsControllerFunctionalTests : IClassFixture<Assis
         _factory = factory;
     }
 
+    /// <summary>
+    /// Purpose: Checks that querying the admin list endpoint on an empty database returns 200 OK with an empty array.
+    /// Why: Guarantees graceful response formatting when no service requests have been submitted.
+    /// Scenario: An Admin requests GET /api/admin/service-requests against an empty database.
+    /// Pass condition: HTTP 200 OK and response list is empty.
+    /// Run from repository root: dotnet test backend/AssistLK.sln --filter "FullyQualifiedName=AssistLK.Api.Tests.AdminServiceRequestsControllerFunctionalTests.Admin_EmptyDatabase_ReturnsEmptyList"
+    /// </summary>
     [Fact]
     public async Task Admin_EmptyDatabase_ReturnsEmptyList()
     {
@@ -38,6 +63,13 @@ public class AdminServiceRequestsControllerFunctionalTests : IClassFixture<Assis
         Assert.Empty(requests);
     }
 
+    /// <summary>
+    /// Purpose: Checks that an Admin can see requests belonging to different customers in a single global list.
+    /// Why: Unlike customers who only see their own requests, admins must have cross-customer system visibility.
+    /// Scenario: Requests created for Customer 1 and Customer 2; Admin lists all requests.
+    /// Pass condition: HTTP 200 OK; the returned list contains both Customer 1 and Customer 2 requests.
+    /// Run from repository root: dotnet test backend/AssistLK.sln --filter "FullyQualifiedName=AssistLK.Api.Tests.AdminServiceRequestsControllerFunctionalTests.Admin_CanListAllServiceRequestsAcrossCustomers"
+    /// </summary>
     [Fact]
     public async Task Admin_CanListAllServiceRequestsAcrossCustomers()
     {
@@ -87,6 +119,13 @@ public class AdminServiceRequestsControllerFunctionalTests : IClassFixture<Assis
         Assert.Contains(requests, r => r.ServiceRequestId == req2 && r.CustomerId == customer2);
     }
 
+    /// <summary>
+    /// Purpose: Checks that the admin detail endpoint returns all authoritative fields including AI analysis and clarifications.
+    /// Why: Administrators require complete diagnostic and history information to review AI problem classifications.
+    /// Scenario: Admin requests detail for a request with ProblemAnalysis and 2 answered clarification questions.
+    /// Pass condition: Status 200 OK; core fields match; LatestAnalysis contains confidence & agentName; Clarifications contains 2 ordered items.
+    /// Run from repository root: dotnet test backend/AssistLK.sln --filter "FullyQualifiedName=AssistLK.Api.Tests.AdminServiceRequestsControllerFunctionalTests.Admin_CanRetrieveDetail_WithAllAuthoritativeFields"
+    /// </summary>
     [Fact]
     public async Task Admin_CanRetrieveDetail_WithAllAuthoritativeFields()
     {
@@ -192,6 +231,13 @@ public class AdminServiceRequestsControllerFunctionalTests : IClassFixture<Assis
         Assert.Equal("Cold water pipe", detail.Clarifications[1].Answer);
     }
 
+    /// <summary>
+    /// Purpose: Checks that requesting a non-existent request ID returns HTTP 404 Not Found.
+    /// Why: Standard REST error handling for missing resources.
+    /// Scenario: Admin requests a randomly generated Guid that does not exist in the database.
+    /// Pass condition: The API responds with HTTP 404 Not Found.
+    /// Run from repository root: dotnet test backend/AssistLK.sln --filter "FullyQualifiedName=AssistLK.Api.Tests.AdminServiceRequestsControllerFunctionalTests.Admin_MissingRequest_Returns404NotFound"
+    /// </summary>
     [Fact]
     public async Task Admin_MissingRequest_Returns404NotFound()
     {
@@ -202,6 +248,13 @@ public class AdminServiceRequestsControllerFunctionalTests : IClassFixture<Assis
         Assert.Equal(HttpStatusCode.NotFound, response.StatusCode);
     }
 
+    /// <summary>
+    /// Purpose: Checks that the status query parameter returns exclusively matching service requests.
+    /// Why: Admins need to filter requests by lifecycle state to monitor queues.
+    /// Scenario: Database has Analyzed and Cancelled requests; Admin requests ?status=Analyzed.
+    /// Pass condition: HTTP 200 OK; result list contains only Analyzed requests.
+    /// Run from repository root: dotnet test backend/AssistLK.sln --filter "FullyQualifiedName=AssistLK.Api.Tests.AdminServiceRequestsControllerFunctionalTests.Admin_FilterByStatus_ReturnsOnlyMatchingRequests"
+    /// </summary>
     [Fact]
     public async Task Admin_FilterByStatus_ReturnsOnlyMatchingRequests()
     {
@@ -246,6 +299,13 @@ public class AdminServiceRequestsControllerFunctionalTests : IClassFixture<Assis
         Assert.All(requests, r => Assert.Equal(ServiceRequestStatus.Analyzed, r.Status));
     }
 
+    /// <summary>
+    /// Purpose: Checks that the category query parameter filters results to only matching service categories.
+    /// Why: Enables domain-specific triage (Vehicle Repair, Appliance Repair, Plumbing, etc.).
+    /// Scenario: Database has Vehicle Repair and Appliance Repair requests; Admin queries ?category=Vehicle Repair.
+    /// Pass condition: HTTP 200 OK; result list contains only Vehicle Repair requests.
+    /// Run from repository root: dotnet test backend/AssistLK.sln --filter "FullyQualifiedName=AssistLK.Api.Tests.AdminServiceRequestsControllerFunctionalTests.Admin_FilterByCategory_ReturnsOnlyMatchingRequests"
+    /// </summary>
     [Fact]
     public async Task Admin_FilterByCategory_ReturnsOnlyMatchingRequests()
     {
@@ -290,6 +350,13 @@ public class AdminServiceRequestsControllerFunctionalTests : IClassFixture<Assis
         Assert.All(requests, r => Assert.Equal("Vehicle Repair", r.Category));
     }
 
+    /// <summary>
+    /// Purpose: Checks that the urgency query parameter filters results to only matching urgency levels.
+    /// Why: Allows administrators to quickly locate critical emergencies requiring immediate attention.
+    /// Scenario: Database contains Critical and Low urgency requests; Admin requests ?urgency=Critical.
+    /// Pass condition: HTTP 200 OK; result list contains only Critical requests.
+    /// Run from repository root: dotnet test backend/AssistLK.sln --filter "FullyQualifiedName=AssistLK.Api.Tests.AdminServiceRequestsControllerFunctionalTests.Admin_FilterByUrgency_ReturnsOnlyMatchingRequests"
+    /// </summary>
     [Fact]
     public async Task Admin_FilterByUrgency_ReturnsOnlyMatchingRequests()
     {
@@ -334,6 +401,13 @@ public class AdminServiceRequestsControllerFunctionalTests : IClassFixture<Assis
         Assert.All(requests, r => Assert.Equal(ServiceRequestUrgency.Critical, r.Urgency));
     }
 
+    /// <summary>
+    /// Purpose: Checks that combining status, category, and urgency filters enforces AND intersection logic.
+    /// Why: Admins need multi-dimensional filtering to pinpoint specific requests.
+    /// Scenario: Three requests with differing fields; Admin queries with ?status=Analyzed&category=Electrical&urgency=High.
+    /// Pass condition: HTTP 200 OK; only the single record matching all 3 criteria is returned.
+    /// Run from repository root: dotnet test backend/AssistLK.sln --filter "FullyQualifiedName=AssistLK.Api.Tests.AdminServiceRequestsControllerFunctionalTests.Admin_CombinedFilters_ReturnOnlyIntersection"
+    /// </summary>
     [Fact]
     public async Task Admin_CombinedFilters_ReturnOnlyIntersection()
     {
@@ -389,6 +463,14 @@ public class AdminServiceRequestsControllerFunctionalTests : IClassFixture<Assis
         Assert.DoesNotContain(requests, r => r.ServiceRequestId == partialMatchId2);
     }
 
+    /// <summary>
+    /// Purpose: Checks that invalid status filter values are rejected with HTTP 400 Bad Request.
+    /// Why: Prevents silent failure or undefined behavior when invalid status strings are queried.
+    /// Scenario: Admin passes invalid statuses: "Pending", "InProgress", "Done", "123".
+    /// Pass condition: HTTP 400 Bad Request with response body mentioning "Status filter".
+    /// Note: Parameterized test (Theory). The command below executes all 4 InlineData cases.
+    /// Run from repository root: dotnet test backend/AssistLK.sln --filter "FullyQualifiedName~AssistLK.Api.Tests.AdminServiceRequestsControllerFunctionalTests.Admin_InvalidStatus_Returns400BadRequest"
+    /// </summary>
     [Theory]
     [InlineData("Pending")]
     [InlineData("InProgress")]
@@ -405,6 +487,14 @@ public class AdminServiceRequestsControllerFunctionalTests : IClassFixture<Assis
         Assert.Contains("Status filter", body, StringComparison.OrdinalIgnoreCase);
     }
 
+    /// <summary>
+    /// Purpose: Checks that invalid category filter values are rejected with HTTP 400 Bad Request.
+    /// Why: Enforces strict adherence to the supported service category taxonomy.
+    /// Scenario: Admin passes invalid categories: "Carpentry", "Cleaning", "Gardening", "RandomCategory".
+    /// Pass condition: HTTP 400 Bad Request with response body mentioning "Category filter".
+    /// Note: Parameterized test (Theory). The command below executes all 4 InlineData cases.
+    /// Run from repository root: dotnet test backend/AssistLK.sln --filter "FullyQualifiedName~AssistLK.Api.Tests.AdminServiceRequestsControllerFunctionalTests.Admin_InvalidCategory_Returns400BadRequest"
+    /// </summary>
     [Theory]
     [InlineData("Carpentry")]
     [InlineData("Cleaning")]
@@ -421,6 +511,14 @@ public class AdminServiceRequestsControllerFunctionalTests : IClassFixture<Assis
         Assert.Contains("Category filter", body, StringComparison.OrdinalIgnoreCase);
     }
 
+    /// <summary>
+    /// Purpose: Checks that invalid urgency filter values are rejected with HTTP 400 Bad Request.
+    /// Why: Enforces validation of allowed urgency enumeration strings.
+    /// Scenario: Admin passes invalid urgency values: "Immediate", "Urgent", "Severe", "999".
+    /// Pass condition: HTTP 400 Bad Request with response body mentioning "Urgency filter".
+    /// Note: Parameterized test (Theory). The command below executes all 4 InlineData cases.
+    /// Run from repository root: dotnet test backend/AssistLK.sln --filter "FullyQualifiedName~AssistLK.Api.Tests.AdminServiceRequestsControllerFunctionalTests.Admin_InvalidUrgency_Returns400BadRequest"
+    /// </summary>
     [Theory]
     [InlineData("Immediate")]
     [InlineData("Urgent")]
@@ -437,6 +535,13 @@ public class AdminServiceRequestsControllerFunctionalTests : IClassFixture<Assis
         Assert.Contains("Urgency filter", body, StringComparison.OrdinalIgnoreCase);
     }
 
+    /// <summary>
+    /// Purpose: Checks that admin search results are returned in descending order of CreatedAt (newest first).
+    /// Why: Ensures administrators see the latest incoming service requests at the top of the list.
+    /// Scenario: Records created 3 hours ago, 1 hour ago, and 5 minutes ago are retrieved via GET.
+    /// Pass condition: HTTP 200 OK and each item's CreatedAt is greater than or equal to the next item's CreatedAt.
+    /// Run from repository root: dotnet test backend/AssistLK.sln --filter "FullyQualifiedName=AssistLK.Api.Tests.AdminServiceRequestsControllerFunctionalTests.Admin_ResultsAreOrderedNewestFirst"
+    /// </summary>
     [Fact]
     public async Task Admin_ResultsAreOrderedNewestFirst()
     {
@@ -492,3 +597,4 @@ public class AdminServiceRequestsControllerFunctionalTests : IClassFixture<Assis
         }
     }
 }
+

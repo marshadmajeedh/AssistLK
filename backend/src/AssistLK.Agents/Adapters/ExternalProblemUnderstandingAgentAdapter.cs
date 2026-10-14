@@ -111,15 +111,20 @@ public sealed class ExternalProblemUnderstandingAgentAdapter : IAgent
             // 3. Handle explicit transport/service failure
             if (!response.Success)
             {
+                var errorMsg = !string.IsNullOrWhiteSpace(response.ErrorMessage)
+                    && (context.VisualEvidence.Count == 0 || VisualResultValidation.SafeText(response.ErrorMessage, context.VisualEvidence, 500))
+                    ? response.ErrorMessage
+                    : (context.VisualEvidence.Count > 0 ? "Image-enhanced execution failed." : "Python agent execution failed.");
+
                 _logger.LogWarning(
                     "Python agent service returned failure for request {RequestId}: {ErrorMessage}",
                     requestDto.RequestId,
-                    context.VisualEvidence.Count > 0 ? "Image-enhanced execution failed." : response.ErrorMessage);
+                    errorMsg);
 
                 return new AgentResult
                 {
                     Success = false,
-                    Message = context.VisualEvidence.Count > 0 ? "Image-enhanced execution failed." : response.ErrorMessage ?? "Python agent execution failed."
+                    Message = errorMsg
                 };
             }
 
@@ -140,7 +145,7 @@ public sealed class ExternalProblemUnderstandingAgentAdapter : IAgent
             var rawResult = response.Result;
             var visualResult = VisualResultValidation.Validate(rawResult, context.VisualEvidence);
             if (context.VisualEvidence.Count > 0 && response.Metadata?.Provider is { } providerName
-                && providerName is not ("gemini" or "openai" or "offline"))
+                && providerName is not ("gemini" or "openai" or "azure_openai" or "offline"))
                 throw new InvalidOperationException("Invalid image-enhanced provider metadata.");
 
             // 5. Authoritative validation
@@ -280,24 +285,23 @@ public sealed class ExternalProblemUnderstandingAgentAdapter : IAgent
         }
         catch (Exception ex)
         {
-            if (context.VisualEvidence.Count > 0)
-            {
-                _logger.LogWarning("Image-enhanced agent execution failed ({ErrorType}) for workflow {WorkflowId}.",
-                    ex.GetType().Name, context.WorkflowId);
-                return new AgentResult { Success = false, Message = "Image-enhanced agent execution failed." };
-            }
             _logger.LogError(
                 ex,
                 "Unexpected failure during external agent adapter execution for workflow {WorkflowId}: {Message}",
                 context.WorkflowId,
                 ex.Message);
 
+            var errorMsg = !string.IsNullOrWhiteSpace(ex.Message)
+                && (context.VisualEvidence.Count == 0 || VisualResultValidation.SafeText(ex.Message, context.VisualEvidence, 500))
+                ? ex.Message
+                : (context.VisualEvidence.Count > 0 ? "Image-enhanced agent execution failed." : "External agent execution failed.");
+
             // Strict rule: Never attempt automatic fallback to C# agent on Python failure.
             // Return safe AgentResult failure and allow workflow recovery to restore state.
             return new AgentResult
             {
                 Success = false,
-                Message = $"External agent execution failed: {ex.Message}"
+                Message = errorMsg
             };
         }
     }

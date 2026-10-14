@@ -146,7 +146,7 @@ async def execute_agent(
 
     except Exception as ex:
         elapsed_ms = max(1, int((time.perf_counter() - t0) * 1000))
-        logger.error("Agent execution unrecoverable failure (%s)", type(ex).__name__)
+        logger.error("Agent execution failure (%s)", type(ex).__name__)
 
         metadata = ExecutionMetadataDto(
             agentName=request.agent_name,
@@ -156,11 +156,18 @@ async def execute_agent(
             toolExecutions=[],
         )
 
+        from app.providers.base import TransientProviderError
+        if isinstance(ex, TransientProviderError):
+            status = getattr(ex, "status_code", None)
+            err_msg = f"Transient provider error ({type(ex).__name__}): HTTP {status}" if status else f"Transient provider error: {type(ex).__name__}"
+        else:
+            err_msg = f"Agent execution encountered an unrecoverable error: {type(ex).__name__}"
+
         return AgentExecutionResponse(
             requestId=request.request_id,
             success=False,
             result=None,
-            errorMessage=f"Agent execution encountered an unrecoverable error: {type(ex).__name__}",
+            errorMessage=err_msg,
             metadata=metadata,
         )
 

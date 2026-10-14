@@ -23,6 +23,27 @@ namespace AssistLK.IntegrationTests;
 /// Uses mocked HTTP infrastructure to guarantee deterministic execution without requiring
 /// a running Python process during standard test runs.
 /// </summary>
+// =========================================================================================
+// Class: ExternalProblemUnderstandingWorkflowIntegrationTests
+// What this class tests:
+//   End-to-end workflow orchestration tests for ProblemUnderstandingWorkflowService operating
+//   with the ExternalProblemUnderstandingAgentAdapter.
+// Why these tests are needed:
+//   Verifies that when external agent HTTP responses arrive, the full application workflow
+//   executes cleanly: transitioning ServiceRequest status (e.g. to Analyzed or AwaitingInformation),
+//   persisting ProblemAnalysis records, recording tool execution metrics, and safely rolling back
+//   to the pre-analysis state if an HTTP 500 error occurs.
+// What is real vs mocked/faked:
+//   - REAL: ProblemUnderstandingWorkflowService, AgentWorkflowService, AgentContextService,
+//     AgentMemoryService, AgentMonitoringService, AgentSafetyService, AgentOrchestrator,
+//     ServiceRequestService, EF Core in-memory database, and in-memory repositories.
+//   - MOCKED: HTTP transport via TestHttpMessageHandler simulating external agent responses
+//     (success, degraded, or HTTP 500). Zero live Python processes or LLM calls.
+// Prerequisites:
+//   None. Runs entirely in-memory with mocked HTTP handlers.
+// Run from repository root:
+//   dotnet test backend/AssistLK.sln --filter "FullyQualifiedName~AssistLK.IntegrationTests.ExternalProblemUnderstandingWorkflowIntegrationTests"
+// =========================================================================================
 public class ExternalProblemUnderstandingWorkflowIntegrationTests
 {
     private sealed class WorkflowTestFixture
@@ -117,6 +138,11 @@ public class ExternalProblemUnderstandingWorkflowIntegrationTests
         };
     }
 
+    // Purpose: Verifies full workflow execution for a high-confidence Plumbing problem, ensuring status transitions to Analyzed and domain entities are saved.
+    // Why: This is the happy path for initial problem analysis; request status, category, urgency, problem analysis record, tool execution metrics, and workflow state must all be finalized.
+    // Scenario: Customer submits a burst pipe request in "Created" status. Mocked Python agent returns Plumbing category, 0.94 confidence, high urgency, and 2 tool executions.
+    // Pass condition: result.Success is true, outcome is "Analyzed", request.Status transitions to Analyzed, ProblemAnalysis record is saved, AgentExecutionMetrics.ToolCalls equals 2, and workflow state is "Completed".
+    // Run from repository root: dotnet test backend/AssistLK.sln --filter "FullyQualifiedName=AssistLK.IntegrationTests.ExternalProblemUnderstandingWorkflowIntegrationTests.ExternalAdapterWorkflow_ConfidentPlumbing_CompletesAndTransitionsToAnalyzed"
     [Fact]
     public async Task ExternalAdapterWorkflow_ConfidentPlumbing_CompletesAndTransitionsToAnalyzed()
     {
@@ -198,6 +224,11 @@ public class ExternalProblemUnderstandingWorkflowIntegrationTests
         Assert.Equal("Completed", wf.Status);
     }
 
+    // Purpose: Verifies that when the external agent produces a degraded response needing more details, the workflow transitions ServiceRequest to AwaitingInformation.
+    // Why: When descriptions are vague or the model is degraded, the system must pause and ask clarifying questions instead of proceeding to matching.
+    // Scenario: Customer submits vague description "Something stopped working". Mocked Python agent returns Degraded = true, low confidence (0.20), and a follow-up question.
+    // Pass condition: result.Success is true, outcome is "AwaitingInformation", and request.Status transitions to AwaitingInformation.
+    // Run from repository root: dotnet test backend/AssistLK.sln --filter "FullyQualifiedName=AssistLK.IntegrationTests.ExternalProblemUnderstandingWorkflowIntegrationTests.ExternalAdapterWorkflow_DegradedOutput_TransitionsToAwaitingInformation"
     [Fact]
     public async Task ExternalAdapterWorkflow_DegradedOutput_TransitionsToAwaitingInformation()
     {
@@ -248,6 +279,11 @@ public class ExternalProblemUnderstandingWorkflowIntegrationTests
         Assert.Equal(ServiceRequestStatus.AwaitingInformation, request.Status);
     }
 
+    // Purpose: Verifies that if the external agent fails with HTTP 500, the workflow safely rolls back the request to its pre-analysis status (Created) and saves no analysis record.
+    // Why: Prevents service requests from being orphaned in an inconsistent or stuck state when microservice infrastructure fails.
+    // Scenario: Request in Created status undergoes analysis, but external HTTP call returns HTTP 500 Internal Server Error.
+    // Pass condition: result.Success is false, outcome is "Failed", request.Status remains Created (restored pre-analysis state), and fixture.Analyses is empty.
+    // Run from repository root: dotnet test backend/AssistLK.sln --filter "FullyQualifiedName=AssistLK.IntegrationTests.ExternalProblemUnderstandingWorkflowIntegrationTests.ExternalAdapterWorkflow_Http500Failure_RecoversPreAnalysisStatus"
     [Fact]
     public async Task ExternalAdapterWorkflow_Http500Failure_RecoversPreAnalysisStatus()
     {

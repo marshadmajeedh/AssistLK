@@ -6,6 +6,23 @@ using Npgsql;
 
 namespace AssistLK.IntegrationTests.PostgreSql;
 
+// =========================================================================================
+// Class: ServiceRequestPersistencePostgreSqlTests
+// What this class tests:
+//   PostgreSQL persistence and repository queries for the ServiceRequest domain entity.
+// Why these tests are needed:
+//   Verifies that ServiceRequest entities round-trip cleanly in a real PostgreSQL database,
+//   enums (Urgency, Status) persist as varchar strings rather than integer ordinals,
+//   and ServiceRequestRepository filtering operates correctly.
+// What is real vs mocked/faked:
+//   - REAL: Live PostgreSQL database, Npgsql connection, EF Core migrations, and ServiceRequestRepository.
+//   - MOCKED: None.
+// Prerequisites:
+//   A running PostgreSQL instance with connection string configured in
+//   ASSISTLK_TEST_POSTGRESQL_CONNECTION, ConnectionStrings__TestConnection, or local User Secrets.
+// Run from repository root:
+//   dotnet test backend/AssistLK.sln --filter "FullyQualifiedName~AssistLK.IntegrationTests.PostgreSql.ServiceRequestPersistencePostgreSqlTests"
+// =========================================================================================
 public class ServiceRequestPersistencePostgreSqlTests : PostgreSqlIntegrationTestBase
 {
     public ServiceRequestPersistencePostgreSqlTests(PostgreSqlTestFixture fixture)
@@ -13,6 +30,11 @@ public class ServiceRequestPersistencePostgreSqlTests : PostgreSqlIntegrationTes
     {
     }
 
+    // Purpose: Verifies that creating and saving a ServiceRequest in PostgreSQL preserves all properties and timestamps accurately.
+    // Why: Ensures database column types (UUIDs, decimals, text, timestamps) match domain entity properties without data loss or truncation.
+    // Scenario: Inserts a plumbing request with full GPS and high urgency, then loads it in a fresh DbContext.
+    // Pass condition: Loaded entity matches all inserted properties and auto-generates CreatedAt and UpdatedAt timestamps.
+    // Run from repository root: dotnet test backend/AssistLK.sln --filter "FullyQualifiedName=AssistLK.IntegrationTests.PostgreSql.ServiceRequestPersistencePostgreSqlTests.ServiceRequest_FullRoundtrip_SavesAndLoadsAllPropertiesAccurately"
     [Fact]
     public async Task ServiceRequest_FullRoundtrip_SavesAndLoadsAllPropertiesAccurately()
     {
@@ -64,6 +86,11 @@ public class ServiceRequestPersistencePostgreSqlTests : PostgreSqlIntegrationTes
         }
     }
 
+    // Purpose: Verifies via raw SQL that enum values (Urgency and Status) are stored in PostgreSQL columns as human-readable varchar strings.
+    // Why: Storing enums as strings prevents data corruption when enum values are reordered or added in future releases.
+    // Scenario: Inserts a request with Urgency = Unknown and Status = ReadyForMatching, then reads the columns using a raw NpgsqlCommand.
+    // Pass condition: Raw SQL reader returns "Unknown" and "ReadyForMatching" strings.
+    // Run from repository root: dotnet test backend/AssistLK.sln --filter "FullyQualifiedName=AssistLK.IntegrationTests.PostgreSql.ServiceRequestPersistencePostgreSqlTests.ServiceRequest_StoresEnumsAsVarcharStrings_InPostgreSqlColumns"
     [Fact]
     public async Task ServiceRequest_StoresEnumsAsVarcharStrings_InPostgreSqlColumns()
     {
@@ -108,6 +135,11 @@ public class ServiceRequestPersistencePostgreSqlTests : PostgreSqlIntegrationTes
         }
     }
 
+    // Purpose: Verifies that ServiceRequestRepository.GetByCustomerIdAsync and GetByStatusAsync return accurately filtered collections from PostgreSQL.
+    // Why: Service request listings and matching queries rely heavily on customer ID and status filters.
+    // Scenario: Inserts 3 requests across two customers and different statuses, then queries using the repository.
+    // Pass condition: Customer 1 query returns 2 requests; status queries return exactly 2 Created requests and 1 Analyzed request.
+    // Run from repository root: dotnet test backend/AssistLK.sln --filter "FullyQualifiedName=AssistLK.IntegrationTests.PostgreSql.ServiceRequestPersistencePostgreSqlTests.ServiceRequestRepository_GetByCustomerIdAndStatus_ReturnsFilteredResults"
     [Fact]
     public async Task ServiceRequestRepository_GetByCustomerIdAndStatus_ReturnsFilteredResults()
     {

@@ -8,8 +8,36 @@ using Microsoft.Extensions.Logging.Abstractions;
 
 namespace AssistLK.IntegrationTests;
 
+// ==============================================================================
+// TEST SUITE: StaleAnalysisRecoveryServiceTests
+// What this class tests:
+//   - StaleAnalysisRecoveryService background recovery of service requests stuck in Analyzing status.
+//   - Timeout evaluation against StaleAnalysisMinutes (recovering old requests while leaving fresh ones alone).
+//   - Intelligent status restoration:
+//     - Recovers to AwaitingInformation if active, non-superseded, unanswered clarification questions exist.
+//     - Recovers to Created if no clarifications exist, or all questions are answered, or questions are superseded.
+//     - Promotes to Analyzed if a valid analysis for the current EvidenceRevision already exists.
+//   - Non-Analyzing status immunity (Created, AwaitingInformation, Analyzed, ReadyForMatching, Cancelled are untouched).
+//   - Invariant preservation (EvidenceRevision and ProblemAnalysis history are strictly preserved).
+//   - Concurrency protection against race conditions with completing agent executions.
+// Why these tests are needed:
+//   - If the AI agent worker process crashes, times out, or restarts while Analyzing a request,
+//     the request must not remain stranded indefinitely. This service self-heals stuck workflows.
+// What is real and what is mocked/faked:
+//   - Real: StaleAnalysisRecoveryService, C1RecoveryOptions.
+//   - In-Memory/Faked: TestRecoveryEnvironment, TestRecoveryRepo (in-memory C# list with concurrency exception injection).
+// Prerequisites:
+//   - None (runs purely in-memory).
+// Run from repository root:
+//   dotnet test backend/AssistLK.sln --filter "FullyQualifiedName~AssistLK.IntegrationTests.StaleAnalysisRecoveryServiceTests"
+// ==============================================================================
 public class StaleAnalysisRecoveryServiceTests
 {
+    // Purpose: Checks that a request in Analyzing status updated 10 minutes ago (> 5 min threshold) is recovered to Created.
+    // Why: Unlocks stranded requests after an agent timeout or crash.
+    // Scenario: Analyzing request with no clarifications, updated 10 minutes ago.
+    // Pass condition: Recovered count is 1, status becomes Created.
+    // Run from repository root: dotnet test backend/AssistLK.sln --filter "FullyQualifiedName=AssistLK.IntegrationTests.StaleAnalysisRecoveryServiceTests.Test1_Stale_Analyzing_Request_Is_Recovered"
     [Fact]
     public async Task Test1_Stale_Analyzing_Request_Is_Recovered()
     {
@@ -38,6 +66,11 @@ public class StaleAnalysisRecoveryServiceTests
         Assert.Equal(ServiceRequestStatus.Created, updated.Status);
     }
 
+    // Purpose: Checks that an Analyzing request updated 2 minutes ago (< 5 min threshold) is NOT recovered.
+    // Why: Prevents interrupting an agent that is still actively processing within the normal execution window.
+    // Scenario: Analyzing request updated 2 minutes ago.
+    // Pass condition: Recovered count is 0, status remains Analyzing.
+    // Run from repository root: dotnet test backend/AssistLK.sln --filter "FullyQualifiedName=AssistLK.IntegrationTests.StaleAnalysisRecoveryServiceTests.Test2_Fresh_Analyzing_Request_Is_NOT_Recovered"
     [Fact]
     public async Task Test2_Fresh_Analyzing_Request_Is_NOT_Recovered()
     {
@@ -66,6 +99,11 @@ public class StaleAnalysisRecoveryServiceTests
         Assert.Equal(ServiceRequestStatus.Analyzing, updated.Status);
     }
 
+    // Purpose: Checks that requests in Created status are ignored by recovery, even if old.
+    // Why: Created is an idle state awaiting dispatch, not a stuck in-flight operation.
+    // Scenario: Request in Created status updated 2 hours ago.
+    // Pass condition: 0 recovered, status remains Created.
+    // Run from repository root: dotnet test backend/AssistLK.sln --filter "FullyQualifiedName=AssistLK.IntegrationTests.StaleAnalysisRecoveryServiceTests.Test3_Created_Request_Unchanged"
     [Fact]
     public async Task Test3_Created_Request_Unchanged()
     {
@@ -94,6 +132,11 @@ public class StaleAnalysisRecoveryServiceTests
         Assert.Equal(ServiceRequestStatus.Created, updated.Status);
     }
 
+    // Purpose: Checks that requests in AwaitingInformation status are ignored by the stale analysis recovery service.
+    // Why: AwaitingInformation is waiting on customer input, which is handled by lifecycle expiration, not analysis recovery.
+    // Scenario: Request in AwaitingInformation status updated 2 hours ago.
+    // Pass condition: 0 recovered, status remains AwaitingInformation.
+    // Run from repository root: dotnet test backend/AssistLK.sln --filter "FullyQualifiedName=AssistLK.IntegrationTests.StaleAnalysisRecoveryServiceTests.Test4_AwaitingInformation_Request_Unchanged"
     [Fact]
     public async Task Test4_AwaitingInformation_Request_Unchanged()
     {
@@ -122,6 +165,11 @@ public class StaleAnalysisRecoveryServiceTests
         Assert.Equal(ServiceRequestStatus.AwaitingInformation, updated.Status);
     }
 
+    // Purpose: Checks that requests in Analyzed status are ignored by recovery.
+    // Why: Analysis successfully completed; the request must not be rolled back.
+    // Scenario: Request in Analyzed status updated 2 hours ago.
+    // Pass condition: 0 recovered, status remains Analyzed.
+    // Run from repository root: dotnet test backend/AssistLK.sln --filter "FullyQualifiedName=AssistLK.IntegrationTests.StaleAnalysisRecoveryServiceTests.Test5_Analyzed_Request_Unchanged"
     [Fact]
     public async Task Test5_Analyzed_Request_Unchanged()
     {
@@ -150,6 +198,11 @@ public class StaleAnalysisRecoveryServiceTests
         Assert.Equal(ServiceRequestStatus.Analyzed, updated.Status);
     }
 
+    // Purpose: Checks that requests in ReadyForMatching status are untouched by recovery.
+    // Why: The request has finished C1 and must not be downgraded.
+    // Scenario: Request in ReadyForMatching status updated 2 hours ago.
+    // Pass condition: 0 recovered, status remains ReadyForMatching.
+    // Run from repository root: dotnet test backend/AssistLK.sln --filter "FullyQualifiedName=AssistLK.IntegrationTests.StaleAnalysisRecoveryServiceTests.Test6_ReadyForMatching_Unchanged"
     [Fact]
     public async Task Test6_ReadyForMatching_Unchanged()
     {
@@ -178,6 +231,11 @@ public class StaleAnalysisRecoveryServiceTests
         Assert.Equal(ServiceRequestStatus.ReadyForMatching, updated.Status);
     }
 
+    // Purpose: Checks that requests in Cancelled status are untouched by recovery.
+    // Why: Terminal state must remain immutable.
+    // Scenario: Request in Cancelled status updated 2 hours ago.
+    // Pass condition: 0 recovered, status remains Cancelled.
+    // Run from repository root: dotnet test backend/AssistLK.sln --filter "FullyQualifiedName=AssistLK.IntegrationTests.StaleAnalysisRecoveryServiceTests.Test7_Cancelled_Unchanged"
     [Fact]
     public async Task Test7_Cancelled_Unchanged()
     {
@@ -206,6 +264,11 @@ public class StaleAnalysisRecoveryServiceTests
         Assert.Equal(ServiceRequestStatus.Cancelled, updated.Status);
     }
 
+    // Purpose: Checks that recovering a stale request does not increment or alter its EvidenceRevision.
+    // Why: Evidence has not changed; only the processing state was reset.
+    // Scenario: Stale Analyzing request with EvidenceRevision = 4 is recovered.
+    // Pass condition: Status is Created and EvidenceRevision remains strictly 4.
+    // Run from repository root: dotnet test backend/AssistLK.sln --filter "FullyQualifiedName=AssistLK.IntegrationTests.StaleAnalysisRecoveryServiceTests.Test8_Recovery_Does_Not_Modify_EvidenceRevision"
     [Fact]
     public async Task Test8_Recovery_Does_Not_Modify_EvidenceRevision()
     {
@@ -236,6 +299,11 @@ public class StaleAnalysisRecoveryServiceTests
         Assert.Equal(initialEvidenceRevision, updated.EvidenceRevision);
     }
 
+    // Purpose: Checks that prior problem analysis records in history are preserved during recovery.
+    // Why: Diagnostic history and audit trails must never be deleted on crash recovery.
+    // Scenario: Stale Analyzing request with an earlier ProblemAnalysis from round 1.
+    // Pass condition: Analysis record remains in the list after recovery.
+    // Run from repository root: dotnet test backend/AssistLK.sln --filter "FullyQualifiedName=AssistLK.IntegrationTests.StaleAnalysisRecoveryServiceTests.Test9_Recovery_Does_Not_Remove_ProblemAnalysis_And_Preserves_History"
     [Fact]
     public async Task Test9_Recovery_Does_Not_Remove_ProblemAnalysis_And_Preserves_History()
     {
@@ -279,6 +347,11 @@ public class StaleAnalysisRecoveryServiceTests
         Assert.Equal("Compressor faulty", updated.ProblemAnalyses.First().DetectedProblem);
     }
 
+    // Purpose: Checks that if a valid ProblemAnalysis matching the current EvidenceRevision exists, the request is promoted to Analyzed rather than downgraded to Created.
+    // Why: Prevents rolling back a request if the analysis completed right as the recovery job scanned it.
+    // Scenario: Stale Analyzing request that already has a ProblemAnalysis matching EvidenceRevision 1.
+    // Pass condition: Status becomes Analyzed instead of Created.
+    // Run from repository root: dotnet test backend/AssistLK.sln --filter "FullyQualifiedName=AssistLK.IntegrationTests.StaleAnalysisRecoveryServiceTests.Test9b_Valid_Analysis_For_Current_Revision_Prevents_Downgrade"
     [Fact]
     public async Task Test9b_Valid_Analysis_For_Current_Revision_Prevents_Downgrade()
     {
@@ -320,6 +393,11 @@ public class StaleAnalysisRecoveryServiceTests
         Assert.Equal(ServiceRequestStatus.Analyzing, updated.Status);
     }
 
+    // Purpose: Checks that if a concurrency exception occurs during save (e.g. agent submitted result concurrently), the recovery worker catches it and skips overwriting.
+    // Why: Prevents race conditions from clobbering successful concurrent agent completion.
+    // Scenario: Repository configured to throw DbUpdateConcurrencyException on save.
+    // Pass condition: Recovery returns false, and request status remains Analyzing.
+    // Run from repository root: dotnet test backend/AssistLK.sln --filter "FullyQualifiedName=AssistLK.IntegrationTests.StaleAnalysisRecoveryServiceTests.Test10_Concurrent_Advancement_Prevents_Stale_Worker_Overwrite"
     [Fact]
     public async Task Test10_Concurrent_Advancement_Prevents_Stale_Worker_Overwrite()
     {
@@ -345,6 +423,11 @@ public class StaleAnalysisRecoveryServiceTests
         Assert.False(recovered); // Concurrency exception safely handled and prevented downgrade
     }
 
+    // Purpose: Checks that running recovery repeatedly back-to-back is idempotent.
+    // Why: Ensures recovery job cycles don't cause duplicate state transitions or corrupt data.
+    // Scenario: Recovery run once (recovers 1), then immediately run twice more.
+    // Pass condition: First run returns 1, subsequent runs return 0, request remains Created.
+    // Run from repository root: dotnet test backend/AssistLK.sln --filter "FullyQualifiedName=AssistLK.IntegrationTests.StaleAnalysisRecoveryServiceTests.Test11_Repeated_Recovery_Invocation_Is_Idempotent"
     [Fact]
     public async Task Test11_Repeated_Recovery_Invocation_Is_Idempotent()
     {
@@ -380,6 +463,11 @@ public class StaleAnalysisRecoveryServiceTests
         Assert.Equal(ServiceRequestStatus.Created, testBed.GetRequest(requestId)!.Status);
     }
 
+    // Purpose: Checks that multiple requests across different states (stale without clarification, stale with clarification, fresh, already analyzed) are processed independently and accurately.
+    // Why: Validates batch scan and routing logic under realistic multi-request workloads.
+    // Scenario: 5 requests seeded; 3 stale (two with no clarification -> Created; one with clarification -> AwaitingInformation), 1 fresh, 1 analyzed.
+    // Pass condition: Exactly 3 recovered, each assigned to the correct target status.
+    // Run from repository root: dotnet test backend/AssistLK.sln --filter "FullyQualifiedName=AssistLK.IntegrationTests.StaleAnalysisRecoveryServiceTests.Test12_Multiple_Eligible_Stale_Requests_Recover_Independently"
     [Fact]
     public async Task Test12_Multiple_Eligible_Stale_Requests_Recover_Independently()
     {
@@ -479,6 +567,11 @@ public class StaleAnalysisRecoveryServiceTests
         Assert.Equal(ServiceRequestStatus.Analyzed, testBed.GetRequest(id5)!.Status);
     }
 
+    // Purpose: Checks that a stale Analyzing request with no clarification questions recovers to Created.
+    // Why: No pending customer action exists, so the request must re-enter the initial queue.
+    // Scenario: Stale Analyzing request with empty Clarifications list.
+    // Pass condition: RecoverStaleRequestAsync returns true and status is Created.
+    // Run from repository root: dotnet test backend/AssistLK.sln --filter "FullyQualifiedName=AssistLK.IntegrationTests.StaleAnalysisRecoveryServiceTests.Lifecycle_Case1_No_Clarification_Recovers_To_Created"
     [Fact]
     public async Task Lifecycle_Case1_No_Clarification_Recovers_To_Created()
     {
@@ -503,6 +596,11 @@ public class StaleAnalysisRecoveryServiceTests
         Assert.Equal(ServiceRequestStatus.Created, updated.Status);
     }
 
+    // Purpose: Checks that a stale Analyzing request with an active unanswered clarification question recovers to AwaitingInformation.
+    // Why: The customer still needs to answer the question before re-analysis can succeed.
+    // Scenario: Stale Analyzing request with an active, unanswered question.
+    // Pass condition: RecoverStaleRequestAsync returns true and status is AwaitingInformation.
+    // Run from repository root: dotnet test backend/AssistLK.sln --filter "FullyQualifiedName=AssistLK.IntegrationTests.StaleAnalysisRecoveryServiceTests.Lifecycle_Case2_Current_Unanswered_Clarification_Recovers_To_AwaitingInformation"
     [Fact]
     public async Task Lifecycle_Case2_Current_Unanswered_Clarification_Recovers_To_AwaitingInformation()
     {
@@ -536,6 +634,11 @@ public class StaleAnalysisRecoveryServiceTests
         Assert.Equal(ServiceRequestStatus.AwaitingInformation, updated.Status);
     }
 
+    // Purpose: Checks that a stale Analyzing request whose clarifications have already been answered recovers to Created.
+    // Why: The customer already answered; the request is ready for full analysis from the beginning.
+    // Scenario: Stale Analyzing request with answered question (Answer = "Samsung RT28").
+    // Pass condition: Status is Created.
+    // Run from repository root: dotnet test backend/AssistLK.sln --filter "FullyQualifiedName=AssistLK.IntegrationTests.StaleAnalysisRecoveryServiceTests.Lifecycle_Case3_Answered_Clarification_Only_Recovers_To_Created"
     [Fact]
     public async Task Lifecycle_Case3_Answered_Clarification_Only_Recovers_To_Created()
     {
@@ -571,6 +674,11 @@ public class StaleAnalysisRecoveryServiceTests
         Assert.Equal(ServiceRequestStatus.Created, updated.Status);
     }
 
+    // Purpose: Checks that a stale Analyzing request whose unanswered question was superseded by an edit recovers to Created.
+    // Why: Superseded questions are inactive; customer owes no answers on obsolete rounds.
+    // Scenario: Stale Analyzing request with a question having non-null SupersededAt.
+    // Pass condition: Status is Created.
+    // Run from repository root: dotnet test backend/AssistLK.sln --filter "FullyQualifiedName=AssistLK.IntegrationTests.StaleAnalysisRecoveryServiceTests.Lifecycle_Case4_Superseded_Clarification_Only_Recovers_To_Created"
     [Fact]
     public async Task Lifecycle_Case4_Superseded_Clarification_Only_Recovers_To_Created()
     {
@@ -605,6 +713,11 @@ public class StaleAnalysisRecoveryServiceTests
         Assert.Equal(ServiceRequestStatus.Created, updated.Status);
     }
 
+    // Purpose: Checks that a request with round 1 answered and round 2 unanswered recovers to AwaitingInformation.
+    // Why: Identifies that an active, unanswered round exists despite historical answered rounds.
+    // Scenario: Stale Analyzing request with round 1 answered and round 2 unanswered.
+    // Pass condition: Status is AwaitingInformation.
+    // Run from repository root: dotnet test backend/AssistLK.sln --filter "FullyQualifiedName=AssistLK.IntegrationTests.StaleAnalysisRecoveryServiceTests.Lifecycle_Case5_Historical_Answered_Plus_Current_Unanswered_Recovers_To_AwaitingInformation"
     [Fact]
     public async Task Lifecycle_Case5_Historical_Answered_Plus_Current_Unanswered_Recovers_To_AwaitingInformation()
     {

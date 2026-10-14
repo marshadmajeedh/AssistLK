@@ -14,6 +14,28 @@ using Xunit;
 
 namespace AssistLK.IntegrationTests;
 
+// ==============================================================================
+// TEST SUITE: ServiceRequestLifecycleExpirationTests
+// What this class tests:
+//   - Service request lifecycle expiration, matching windows, and background expiration services.
+//   - ReadyForMatchingAtUtc and MatchingExpiresAtUtc timestamp calculation from configurable MatchingWindowHours.
+//   - Matching eligibility logic (IsMatchingEligible is true only for active ReadyForMatching requests within their window).
+//   - Expiration of abandoned AwaitingInformation requests that have unanswered clarifications past timeout (cancelling them).
+//   - Preservation of recent, answered, or superseded clarification requests.
+//   - Background worker resilience, cancellation handling, and architectural invariants (single write site for ReadyForMatching).
+// Why these tests are needed:
+//   - Prevents abandoned customer requests from idling indefinitely in the pipeline.
+//   - Protects service providers from being matched against stale or expired service requests.
+// What is real and what is mocked/faked:
+//   - Real: ServiceRequestService, ServiceRequestLifecycleExpirationService,
+//           ServiceRequestLifecycleExpirationBackgroundService, ServiceRequestLifecycleOptions.
+//   - In-Memory/Faked: InMemoryServiceRequestRepository, InMemoryProblemAnalysisRepository,
+//                     TestTimeProvider (.NET 8 TimeProvider subclass), MockLifecycleExpirationService.
+// Prerequisites:
+//   - None (runs purely in-memory with virtual clock).
+// Run from repository root:
+//   dotnet test backend/AssistLK.sln --filter "FullyQualifiedName~AssistLK.IntegrationTests.ServiceRequestLifecycleExpirationTests"
+// ==============================================================================
 public class ServiceRequestLifecycleExpirationTests
 {
     private sealed class TestTimeProvider : TimeProvider
@@ -175,6 +197,11 @@ public class ServiceRequestLifecycleExpirationTests
     // =========================================================================
     // CASE 1: ReadyForMatching transition sets ReadyForMatchingAtUtc
     // =========================================================================
+    // Purpose: Checks that transitioning to ReadyForMatching sets ReadyForMatchingAtUtc to current UTC time.
+    // Why: Records the exact timestamp when the request became eligible for provider matching.
+    // Scenario: Analyzed request with matching analysis transitions to ReadyForMatching at fixed time.
+    // Pass condition: ReadyForMatchingAtUtc matches the test clock's UTC timestamp.
+    // Run from repository root: dotnet test backend/AssistLK.sln --filter "FullyQualifiedName=AssistLK.IntegrationTests.ServiceRequestLifecycleExpirationTests.Case01_ReadyForMatchingTransition_SetsReadyForMatchingAtUtc"
     [Fact]
     public async Task Case01_ReadyForMatchingTransition_SetsReadyForMatchingAtUtc()
     {
@@ -215,6 +242,11 @@ public class ServiceRequestLifecycleExpirationTests
     // =========================================================================
     // CASE 2: Same transition sets MatchingExpiresAtUtc using configured MatchingWindowHours
     // =========================================================================
+    // Purpose: Checks that MatchingExpiresAtUtc is set to ReadyForMatchingAtUtc + MatchingWindowHours.
+    // Why: Enforces the operational window for matching so old requests expire after the configured duration (e.g. 48h).
+    // Scenario: MatchingWindowHours set to 48 hours; request transitioned to ReadyForMatching.
+    // Pass condition: MatchingExpiresAtUtc equals fixed time + 48 hours.
+    // Run from repository root: dotnet test backend/AssistLK.sln --filter "FullyQualifiedName=AssistLK.IntegrationTests.ServiceRequestLifecycleExpirationTests.Case02_ReadyForMatchingTransition_SetsMatchingExpiresAtUtcUsingConfiguredWindow"
     [Fact]
     public async Task Case02_ReadyForMatchingTransition_SetsMatchingExpiresAtUtcUsingConfiguredWindow()
     {
@@ -254,6 +286,11 @@ public class ServiceRequestLifecycleExpirationTests
     // =========================================================================
     // CASE 3: Expiry is calculated from ReadyForMatchingAtUtc, NOT CreatedAt
     // =========================================================================
+    // Purpose: Checks that matching expiry is calculated from the transition timestamp (ReadyForMatchingAtUtc), NOT from the request creation time (CreatedAt).
+    // Why: A request may take days in clarification before becoming ready; the matching clock must only start once ready.
+    // Scenario: Request created 12 days ago is transitioned to ReadyForMatching today with a 24-hour window.
+    // Pass condition: Expiry is today + 24h, not 12 days ago + 24h.
+    // Run from repository root: dotnet test backend/AssistLK.sln --filter "FullyQualifiedName=AssistLK.IntegrationTests.ServiceRequestLifecycleExpirationTests.Case03_ExpiryIsCalculatedFromReadyForMatchingAtUtc_NotCreatedAt"
     [Fact]
     public async Task Case03_ExpiryIsCalculatedFromReadyForMatchingAtUtc_NotCreatedAt()
     {
@@ -294,6 +331,11 @@ public class ServiceRequestLifecycleExpirationTests
     // =========================================================================
     // CASE 4: Active ReadyForMatching request: IsMatchingEligible == true
     // =========================================================================
+    // Purpose: Checks that IsMatchingEligible is true for a ReadyForMatching request whose expiry is in the future.
+    // Why: Informs provider matching services and customer UI that the request is currently active for matching.
+    // Scenario: ReadyForMatching request with expiry 22 hours in the future.
+    // Pass condition: Both customer DTO and matching DTO report IsMatchingEligible == true.
+    // Run from repository root: dotnet test backend/AssistLK.sln --filter "FullyQualifiedName=AssistLK.IntegrationTests.ServiceRequestLifecycleExpirationTests.Case04_ActiveReadyForMatchingRequest_IsMatchingEligible_IsTrue"
     [Fact]
     public async Task Case04_ActiveReadyForMatchingRequest_IsMatchingEligible_IsTrue()
     {
@@ -331,6 +373,11 @@ public class ServiceRequestLifecycleExpirationTests
     // =========================================================================
     // CASE 5: Expired ReadyForMatching request: IsMatchingEligible == false
     // =========================================================================
+    // Purpose: Checks that IsMatchingEligible is false for a ReadyForMatching request whose expiry has passed.
+    // Why: Prevents providers from receiving or bidding on requests whose matching deadline has elapsed.
+    // Scenario: ReadyForMatching request expired 2 days ago.
+    // Pass condition: Status is still ReadyForMatching, but IsMatchingEligible == false on both customer and matching DTOs.
+    // Run from repository root: dotnet test backend/AssistLK.sln --filter "FullyQualifiedName=AssistLK.IntegrationTests.ServiceRequestLifecycleExpirationTests.Case05_ExpiredReadyForMatchingRequest_IsMatchingEligible_IsFalse"
     [Fact]
     public async Task Case05_ExpiredReadyForMatchingRequest_IsMatchingEligible_IsFalse()
     {
@@ -369,6 +416,11 @@ public class ServiceRequestLifecycleExpirationTests
     // =========================================================================
     // CASE 6: ReadyForMatching with null MatchingExpiresAtUtc: IsMatchingEligible == false
     // =========================================================================
+    // Purpose: Checks that legacy ReadyForMatching rows with null MatchingExpiresAtUtc are treated as not matching eligible.
+    // Why: Defends against legacy records created before matching windows were introduced.
+    // Scenario: ReadyForMatching request with null expiry.
+    // Pass condition: IsMatchingEligible == false.
+    // Run from repository root: dotnet test backend/AssistLK.sln --filter "FullyQualifiedName=AssistLK.IntegrationTests.ServiceRequestLifecycleExpirationTests.Case06_ReadyForMatchingWithNullExpiry_IsMatchingEligible_IsFalse"
     [Fact]
     public async Task Case06_ReadyForMatchingWithNullExpiry_IsMatchingEligible_IsFalse()
     {
@@ -406,6 +458,11 @@ public class ServiceRequestLifecycleExpirationTests
     // =========================================================================
     // CASE 7: Created request is never matching eligible
     // =========================================================================
+    // Purpose: Checks that a request in Created status is never matching eligible, even if an expiry timestamp exists.
+    // Why: Only fully analyzed and customer-approved requests can be matched.
+    // Scenario: Request with status Created queried for customer and matching eligibility.
+    // Pass condition: IsMatchingEligible == false and GetReadyForMatchingAsync returns null.
+    // Run from repository root: dotnet test backend/AssistLK.sln --filter "FullyQualifiedName=AssistLK.IntegrationTests.ServiceRequestLifecycleExpirationTests.Case07_CreatedRequest_IsNeverMatchingEligible"
     [Fact]
     public async Task Case07_CreatedRequest_IsNeverMatchingEligible()
     {
@@ -431,6 +488,11 @@ public class ServiceRequestLifecycleExpirationTests
     // =========================================================================
     // CASE 8: AwaitingInformation request is never matching eligible
     // =========================================================================
+    // Purpose: Checks that an AwaitingInformation request is never matching eligible.
+    // Why: Requests lacking critical customer details cannot be matched to service providers.
+    // Scenario: Request in AwaitingInformation status checked for matching eligibility.
+    // Pass condition: IsMatchingEligible == false and GetReadyForMatchingAsync returns null.
+    // Run from repository root: dotnet test backend/AssistLK.sln --filter "FullyQualifiedName=AssistLK.IntegrationTests.ServiceRequestLifecycleExpirationTests.Case08_AwaitingInformationRequest_IsNeverMatchingEligible"
     [Fact]
     public async Task Case08_AwaitingInformationRequest_IsNeverMatchingEligible()
     {
@@ -456,6 +518,11 @@ public class ServiceRequestLifecycleExpirationTests
     // =========================================================================
     // CASE 9: Cancelled request is never matching eligible
     // =========================================================================
+    // Purpose: Checks that a Cancelled request is never matching eligible.
+    // Why: Cancelled requests must never be matched or dispatched.
+    // Scenario: Request in Cancelled status checked for matching eligibility.
+    // Pass condition: IsMatchingEligible == false and GetReadyForMatchingAsync returns null.
+    // Run from repository root: dotnet test backend/AssistLK.sln --filter "FullyQualifiedName=AssistLK.IntegrationTests.ServiceRequestLifecycleExpirationTests.Case09_CancelledRequest_IsNeverMatchingEligible"
     [Fact]
     public async Task Case09_CancelledRequest_IsNeverMatchingEligible()
     {
@@ -481,6 +548,11 @@ public class ServiceRequestLifecycleExpirationTests
     // =========================================================================
     // CASE 10: AwaitingInformation older than configured timeout with an actionable unanswered clarification is cancelled
     // =========================================================================
+    // Purpose: Checks that an AwaitingInformation request older than the timeout with an active unanswered clarification is automatically cancelled.
+    // Why: Reclaims stale pipeline requests when the customer abandons the clarification questionnaire.
+    // Scenario: Request updated 25 hours ago with unanswered clarification question; timeout set to 24h.
+    // Pass condition: Expired count is 1, and request status changes to Cancelled.
+    // Run from repository root: dotnet test backend/AssistLK.sln --filter "FullyQualifiedName=AssistLK.IntegrationTests.ServiceRequestLifecycleExpirationTests.Case10_StaleAwaitingInformationWithUnansweredClarification_IsCancelled"
     [Fact]
     public async Task Case10_StaleAwaitingInformationWithUnansweredClarification_IsCancelled()
     {
@@ -531,6 +603,11 @@ public class ServiceRequestLifecycleExpirationTests
     // =========================================================================
     // CASE 11: Recent AwaitingInformation request is preserved
     // =========================================================================
+    // Purpose: Checks that an AwaitingInformation request within the timeout window is preserved.
+    // Why: Allows customers adequate time (e.g. 24h) to answer clarification questions before expiring.
+    // Scenario: Request updated 5 hours ago (< 24h timeout) with unanswered question.
+    // Pass condition: Expired count is 0, and status remains AwaitingInformation.
+    // Run from repository root: dotnet test backend/AssistLK.sln --filter "FullyQualifiedName=AssistLK.IntegrationTests.ServiceRequestLifecycleExpirationTests.Case11_RecentAwaitingInformationRequest_IsPreserved"
     [Fact]
     public async Task Case11_RecentAwaitingInformationRequest_IsPreserved()
     {
@@ -576,6 +653,11 @@ public class ServiceRequestLifecycleExpirationTests
     // =========================================================================
     // CASE 12: Answered clarification is preserved
     // =========================================================================
+    // Purpose: Checks that a request whose clarification question has been answered is preserved, even if older than the timeout.
+    // Why: Once answered, the request is waiting for AI agent re-analysis and must not be expired as abandoned.
+    // Scenario: Request updated 30 hours ago, but clarification question has Answer = "PVC pipe".
+    // Pass condition: Expired count is 0, and status remains AwaitingInformation.
+    // Run from repository root: dotnet test backend/AssistLK.sln --filter "FullyQualifiedName=AssistLK.IntegrationTests.ServiceRequestLifecycleExpirationTests.Case12_AnsweredClarification_IsPreserved"
     [Fact]
     public async Task Case12_AnsweredClarification_IsPreserved()
     {
@@ -622,6 +704,11 @@ public class ServiceRequestLifecycleExpirationTests
     // =========================================================================
     // CASE 13: Superseded unanswered clarification does not cause cancellation
     // =========================================================================
+    // Purpose: Checks that an unanswered clarification question that has been superseded by a newer round does not trigger cancellation.
+    // Why: Superseded questions are obsolete; only active current-round questions govern expiration.
+    // Scenario: Unanswered question marked with SupersededAt timestamp.
+    // Pass condition: Expired count is 0, and status remains AwaitingInformation.
+    // Run from repository root: dotnet test backend/AssistLK.sln --filter "FullyQualifiedName=AssistLK.IntegrationTests.ServiceRequestLifecycleExpirationTests.Case13_SupersededUnansweredClarification_DoesNotCauseCancellation"
     [Fact]
     public async Task Case13_SupersededUnansweredClarification_DoesNotCauseCancellation()
     {
@@ -667,6 +754,11 @@ public class ServiceRequestLifecycleExpirationTests
     // =========================================================================
     // CASE 14: Request that changes state before worker execution is preserved
     // =========================================================================
+    // Purpose: Checks that if a request transitions out of AwaitingInformation (e.g. to Analyzing) before the background worker runs, it is not cancelled.
+    // Why: Concurrency guard against cancelling requests that resumed active processing while queued for expiration.
+    // Scenario: Request status changed to Analyzing before ExpireStaleAwaitingInformationRequestAsync is invoked.
+    // Pass condition: Returns false, and status remains Analyzing.
+    // Run from repository root: dotnet test backend/AssistLK.sln --filter "FullyQualifiedName=AssistLK.IntegrationTests.ServiceRequestLifecycleExpirationTests.Case14_RequestThatChangesStateBeforeWorker_IsPreserved"
     [Fact]
     public async Task Case14_RequestThatChangesStateBeforeWorker_IsPreserved()
     {
@@ -710,6 +802,11 @@ public class ServiceRequestLifecycleExpirationTests
     // =========================================================================
     // CASE 15: Background worker continues operating after a per-iteration error
     // =========================================================================
+    // Purpose: Checks that the lifecycle background service survives transient exceptions during an iteration and continues polling.
+    // Why: Ensures background daemon resilience so an error on one request doesn't kill the hosted service.
+    // Scenario: Expiration service throws InvalidOperationException on iteration 1; worker continues running.
+    // Pass condition: Call count reaches >= 1, and background worker does not crash.
+    // Run from repository root: dotnet test backend/AssistLK.sln --filter "FullyQualifiedName=AssistLK.IntegrationTests.ServiceRequestLifecycleExpirationTests.Case15_BackgroundWorker_ContinuesOperatingAfterPerIterationError"
     [Fact]
     public async Task Case15_BackgroundWorker_ContinuesOperatingAfterPerIterationError()
     {
@@ -771,6 +868,11 @@ public class ServiceRequestLifecycleExpirationTests
     // =========================================================================
     // CASE 16: CancellationToken stops the worker cleanly
     // =========================================================================
+    // Purpose: Checks that cancelling the CancellationToken stops the background worker cleanly.
+    // Why: Verifies proper host shutdown behavior.
+    // Scenario: Worker started and cancellation requested via CancellationTokenSource.
+    // Pass condition: Background execute task completes cleanly.
+    // Run from repository root: dotnet test backend/AssistLK.sln --filter "FullyQualifiedName=AssistLK.IntegrationTests.ServiceRequestLifecycleExpirationTests.Case16_CancellationToken_StopsWorkerCleanly"
     [Fact]
     public async Task Case16_CancellationToken_StopsWorkerCleanly()
     {
@@ -803,6 +905,11 @@ public class ServiceRequestLifecycleExpirationTests
     // =========================================================================
     // CASE 17: ReadyForMatching requests are NEVER modified by the expiry worker
     // =========================================================================
+    // Purpose: Checks that the expiration service specifically ignores ReadyForMatching requests, even if their matching window has elapsed.
+    // Why: ReadyForMatching expiration is handled via dynamic eligibility checks and downstream matching queries, not by mutating status to Cancelled.
+    // Scenario: ReadyForMatching request with expired matching window subjected to direct and batch expiration scans.
+    // Pass condition: Both scans return 0, and request status remains ReadyForMatching.
+    // Run from repository root: dotnet test backend/AssistLK.sln --filter "FullyQualifiedName=AssistLK.IntegrationTests.ServiceRequestLifecycleExpirationTests.Case17_ReadyForMatchingRequests_AreNeverModifiedByExpiryWorker"
     [Fact]
     public async Task Case17_ReadyForMatchingRequests_AreNeverModifiedByExpiryWorker()
     {
@@ -847,6 +954,11 @@ public class ServiceRequestLifecycleExpirationTests
     // =========================================================================
     // CASE 18: Existing readiness guard behavior remains unchanged
     // =========================================================================
+    // Purpose: Checks that all readiness prerequisites (missing analysis, unclassified category, unknown urgency, invalid coordinates, unanswered clarification) reject transition to ReadyForMatching with ConflictException.
+    // Why: Regression test ensuring matching window features did not weaken existing safety gates.
+    // Scenario: 5 invalid readiness states tested sequentially against MarkReadyForMatchingAsync.
+    // Pass condition: Throws ConflictException for each invalid state.
+    // Run from repository root: dotnet test backend/AssistLK.sln --filter "FullyQualifiedName=AssistLK.IntegrationTests.ServiceRequestLifecycleExpirationTests.Case18_ExistingReadinessGuards_RemainUnchanged"
     [Fact]
     public async Task Case18_ExistingReadinessGuards_RemainUnchanged()
     {
@@ -902,6 +1014,11 @@ public class ServiceRequestLifecycleExpirationTests
     // =========================================================================
     // CASE 19: Existing EvidenceRevision protections remain unchanged
     // =========================================================================
+    // Purpose: Checks that marking ready for matching requires analysis EvidenceRevision to match request EvidenceRevision.
+    // Why: Prevents stale AI analysis from qualifying a request for matching after new evidence was added.
+    // Scenario: Request at revision 2 has analysis at revision 1.
+    // Pass condition: Throws ConflictException containing "outdated".
+    // Run from repository root: dotnet test backend/AssistLK.sln --filter "FullyQualifiedName=AssistLK.IntegrationTests.ServiceRequestLifecycleExpirationTests.Case19_ExistingEvidenceRevisionProtections_RemainUnchanged"
     [Fact]
     public async Task Case19_ExistingEvidenceRevisionProtections_RemainUnchanged()
     {
@@ -933,6 +1050,11 @@ public class ServiceRequestLifecycleExpirationTests
     // =========================================================================
     // CASE 20: Existing C1 boundary still has only one ReadyForMatching write path
     // =========================================================================
+    // Purpose: Architectural static analysis checking that Status = ReadyForMatching is written in exactly one place in AssistLK.Application.
+    // Why: Enforces the Single Source of Truth architecture pattern for state transitions into the ready-for-matching state.
+    // Scenario: Scans all C# source files in AssistLK.Application for assignments to ReadyForMatching.
+    // Pass condition: Exactly one write site is found, located in ServiceRequestService.cs.
+    // Run from repository root: dotnet test backend/AssistLK.sln --filter "FullyQualifiedName=AssistLK.IntegrationTests.ServiceRequestLifecycleExpirationTests.Case20_OnlyOneReadyForMatchingWriteSiteExists"
     [Fact]
     public void Case20_OnlyOneReadyForMatchingWriteSiteExists()
     {

@@ -4,6 +4,22 @@ using AssistLK.Infrastructure.Repositories;
 
 namespace AssistLK.IntegrationTests.PostgreSql;
 
+// =========================================================================================
+// Class: OwnershipPostgreSqlTests
+// What this class tests:
+//   Multi-tenant customer data isolation at the PostgreSQL repository layer.
+// Why these tests are needed:
+//   Prevents horizontal privilege escalation and data leakage by ensuring queries scoped
+//   to Customer B can never return service requests belonging to Customer A.
+// What is real vs mocked/faked:
+//   - REAL: Live PostgreSQL database, EF Core LINQ queries, and ServiceRequestRepository.
+//   - MOCKED: None.
+// Prerequisites:
+//   A running PostgreSQL database instance configured via ASSISTLK_TEST_POSTGRESQL_CONNECTION,
+//   ConnectionStrings__TestConnection, or local User Secrets.
+// Run from repository root:
+//   dotnet test backend/AssistLK.sln --filter "FullyQualifiedName~AssistLK.IntegrationTests.PostgreSql.OwnershipPostgreSqlTests"
+// =========================================================================================
 public class OwnershipPostgreSqlTests : PostgreSqlIntegrationTestBase
 {
     public OwnershipPostgreSqlTests(PostgreSqlTestFixture fixture)
@@ -11,6 +27,11 @@ public class OwnershipPostgreSqlTests : PostgreSqlIntegrationTestBase
     {
     }
 
+    // Purpose: Checks that another customer cannot read or list a service request owned by a different customer.
+    // Why: Protects sensitive customer location and service problem data from horizontal data breaches.
+    // Scenario: Customer A creates a service request; Customer B attempts to retrieve it by ID and queries their own request list.
+    // Pass condition: GetByIdAndCustomerIdAsync returns the record for Customer A, returns null for Customer B, and Customer B's request list is empty.
+    // Run from repository root: dotnet test backend/AssistLK.sln --filter "FullyQualifiedName=AssistLK.IntegrationTests.PostgreSql.OwnershipPostgreSqlTests.CustomerIsolation_CustomerBCannotRetrieveCustomerARequest"
     [Fact]
     public async Task CustomerIsolation_CustomerBCannotRetrieveCustomerARequest()
     {

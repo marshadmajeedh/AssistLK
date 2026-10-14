@@ -3,6 +3,24 @@ using Microsoft.EntityFrameworkCore;
 
 namespace AssistLK.IntegrationTests.PostgreSql;
 
+// =========================================================================================
+// Class: WorkflowAndMonitoringPostgreSqlTests
+// What this class tests:
+//   PostgreSQL persistence and foreign key cascade deletion for AgentWorkflow and its child
+//   telemetry entities (AgentExecution, AgentExecutionMetric, AgentApproval, AgentAuditLog, AgentAction).
+// Why these tests are needed:
+//   Ensures that agent orchestration and audit telemetry records are properly persisted in PostgreSQL,
+//   and that deleting an AgentWorkflow automatically cascades to clean up all related child rows
+//   without leaving orphaned audit records or triggering foreign key constraint violations.
+// What is real vs mocked/faked:
+//   - REAL: Live PostgreSQL instance, foreign key cascade constraints, and EF Core entity mappings.
+//   - MOCKED: None.
+// Prerequisites:
+//   A running PostgreSQL database instance configured via ASSISTLK_TEST_POSTGRESQL_CONNECTION,
+//   ConnectionStrings__TestConnection, or local User Secrets.
+// Run from repository root:
+//   dotnet test backend/AssistLK.sln --filter "FullyQualifiedName~AssistLK.IntegrationTests.PostgreSql.WorkflowAndMonitoringPostgreSqlTests"
+// =========================================================================================
 public class WorkflowAndMonitoringPostgreSqlTests : PostgreSqlIntegrationTestBase
 {
     public WorkflowAndMonitoringPostgreSqlTests(PostgreSqlTestFixture fixture)
@@ -10,6 +28,11 @@ public class WorkflowAndMonitoringPostgreSqlTests : PostgreSqlIntegrationTestBas
     {
     }
 
+    // Purpose: Verifies that an AgentWorkflow and all 5 child telemetry entities persist in PostgreSQL and that deleting the parent cascades to delete all child rows.
+    // Why: Verifies schema integrity for agent observability tables; deleting obsolete workflows must clean up child tables without orphaned rows.
+    // Scenario: Creates a workflow and one of each child entity (AgentExecution, AgentExecutionMetric, AgentApproval, AgentAuditLog, AgentAction), asserts persistence, deletes workflow, and asserts all child tables are empty for that workflow.
+    // Pass condition: Initial insert succeeds and queries return 1 of each entity; post-delete queries for all 5 child tables return empty collections.
+    // Run from repository root: dotnet test backend/AssistLK.sln --filter "FullyQualifiedName=AssistLK.IntegrationTests.PostgreSql.WorkflowAndMonitoringPostgreSqlTests.AgentWorkflow_AndChildEntities_PersistAndCascadeDelete_InPostgreSql"
     [Fact]
     public async Task AgentWorkflow_AndChildEntities_PersistAndCascadeDelete_InPostgreSql()
     {

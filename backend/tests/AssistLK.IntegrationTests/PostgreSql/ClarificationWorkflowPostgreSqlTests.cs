@@ -14,6 +14,22 @@ using Microsoft.Extensions.Logging.Abstractions;
 
 namespace AssistLK.IntegrationTests.PostgreSql;
 
+// What this class tests:
+//   Multi-round clarification workflow rules for Component 1 against a real PostgreSQL database,
+//   including question generation, answer persistence, capping at round 2, description updates
+//   superseding questions, answer submission locks, and database unique constraints.
+// Why these tests are needed:
+//   Clarifications allow the AI problem understanding agent to collect missing details before
+//   matching providers. These tests verify that the system enforces the 2-round limit, preserves audit
+//   history, prevents duplicate sequence numbers, and stops race conditions when analyzing.
+// What is real and what is mocked/faked:
+//   - Real: PostgreSQL database (schema, tables, constraints, foreign keys, EF Core repositories).
+//   - Real: ServiceRequestService, ProblemUnderstandingWorkflowService, AgentOrchestrator.
+//   - Mocked/Faked: ExternalProblemUnderstandingAgentAdapter uses FakeProblemUnderstandingClient to return controlled AI payloads without live LLM calls.
+// Prerequisites:
+//   A running PostgreSQL instance accessible via connection string configured in appsettings / environment variables.
+// Run from repository root:
+//   dotnet test backend/AssistLK.sln --filter "FullyQualifiedName~AssistLK.IntegrationTests.PostgreSql.ClarificationWorkflowPostgreSqlTests"
 public class ClarificationWorkflowPostgreSqlTests : PostgreSqlIntegrationTestBase
 {
     public ClarificationWorkflowPostgreSqlTests(PostgreSqlTestFixture fixture)
@@ -57,6 +73,13 @@ public class ClarificationWorkflowPostgreSqlTests : PostgreSqlIntegrationTestBas
                 new AssistLK.Tests.Shared.FakeAttachmentStorage()));
     }
 
+    // Purpose: Checks that round 2 final analysis incorporates customer answers from round 1 and round 2 without creating an invalid round 3.
+    // Why: AssistLK strictly limits clarifications to 2 rounds to prevent endless conversational loops before provider matching.
+    // Scenario: Analyzing across round 1, answering round 1, analyzing round 2, answering round 2 (or attempting re-analysis without answering), and verifying round 3 questions are never persisted.
+    // Pass condition: Clarification history passes through rounds 1 and 2, unanswered round 2 re-analysis throws ConflictException, and final analysis produces at most 2 clarification rounds in PostgreSQL.
+    // Note: Parameterized xUnit Theory. Running this command executes all 3 InlineData variations.
+    // Run from repository root:
+    //   dotnet test backend/AssistLK.sln --filter "FullyQualifiedName~AssistLK.IntegrationTests.PostgreSql.ClarificationWorkflowPostgreSqlTests.Round2_FinalAnalysisProcessesAnswers_WithoutCreatingRound3"
     [Theory]
     [InlineData(false, true)]
     [InlineData(true, true)]
@@ -153,6 +176,12 @@ public class ClarificationWorkflowPostgreSqlTests : PostgreSqlIntegrationTestBas
         }
     }
 
+    // Purpose: Checks that submitting answers to round 1 questions preserves answers in PostgreSQL and reloading confirms the round is fully answered with no pending questions.
+    // Why: Ensures customer answers are committed reliably to PostgreSQL and the application correctly detects round completion.
+    // Scenario: Customer answers all round 1 questions; request is reloaded via ServiceRequestService.
+    // Pass condition: Answers are persisted, currentRound is 1, fullyAnswered is true, and pending questions list is empty.
+    // Run from repository root:
+    //   dotnet test backend/AssistLK.sln --filter "FullyQualifiedName=AssistLK.IntegrationTests.PostgreSql.ClarificationWorkflowPostgreSqlTests.ScenarioA_B_Round1FullyAnswered_ReloadPreservesAnswers_AndCurrentRoundIsRound1"
     [Fact]
     public async Task ScenarioA_B_Round1FullyAnswered_ReloadPreservesAnswers_AndCurrentRoundIsRound1()
     {
@@ -247,6 +276,12 @@ public class ClarificationWorkflowPostgreSqlTests : PostgreSqlIntegrationTestBas
         }
     }
 
+    // Purpose: Checks that triggering AI re-analysis while active clarification questions remain unanswered is rejected with ConflictException.
+    // Why: Prevents re-analyzing before the customer responds to the questions the model requested.
+    // Scenario: Service request is in AwaitingInformation with an unanswered round 1 question; AnalyzeAsync is called.
+    // Pass condition: Throws ConflictException with message "Active clarification questions must be answered".
+    // Run from repository root:
+    //   dotnet test backend/AssistLK.sln --filter "FullyQualifiedName=AssistLK.IntegrationTests.PostgreSql.ClarificationWorkflowPostgreSqlTests.ScenarioC_AnalyzeInAwaitingInformation_WithUnansweredActiveQuestions_IsRejected"
     [Fact]
     public async Task ScenarioC_AnalyzeInAwaitingInformation_WithUnansweredActiveQuestions_IsRejected()
     {
@@ -288,6 +323,12 @@ public class ClarificationWorkflowPostgreSqlTests : PostgreSqlIntegrationTestBas
         }
     }
 
+    // Purpose: Checks that legacy or inconsistent requests in AwaitingInformation with zero clarification rows can safely be re-analyzed to generate fresh round 1 questions.
+    // Why: Provides backward compatibility and self-healing if a prior run set status to AwaitingInformation without creating question records.
+    // Scenario: Request exists in AwaitingInformation with zero clarification rows; workflow AnalyzeAsync is executed.
+    // Pass condition: Analysis succeeds, status remains AwaitingInformation, and Round 1 clarification rows are generated in PostgreSQL.
+    // Run from repository root:
+    //   dotnet test backend/AssistLK.sln --filter "FullyQualifiedName=AssistLK.IntegrationTests.PostgreSql.ClarificationWorkflowPostgreSqlTests.ScenarioD_LegacyAwaitingInformation_WithZeroClarifications_HasSafeReanalyzePath"
     [Fact]
     public async Task ScenarioD_LegacyAwaitingInformation_WithZeroClarifications_HasSafeReanalyzePath()
     {
@@ -334,6 +375,12 @@ public class ClarificationWorkflowPostgreSqlTests : PostgreSqlIntegrationTestBas
         }
     }
 
+    // Purpose: Checks that customer description revisions supersede active questions with a timestamp without deleting them, allowing re-analysis and progression to ReadyForMatching.
+    // Why: If a customer clarifies their description directly, older questions become obsolete; marking them with SupersededAt preserves audit logs while unblocking workflow progression.
+    // Scenario: Customer updates description on an AwaitingInformation request with unanswered questions; verifies question audit, executes re-analysis, and marks ready for matching.
+    // Pass condition: Question has null Answer and non-null SupersededAt, re-analysis succeeds without answering the old question, and MarkReadyForMatchingAsync succeeds.
+    // Run from repository root:
+    //   dotnet test backend/AssistLK.sln --filter "FullyQualifiedName=AssistLK.IntegrationTests.PostgreSql.ClarificationWorkflowPostgreSqlTests.ScenarioE_F_G_H_DescriptionChange_SupersedesQuestions_PreservesAudit_AllowsReanalyze_DoesNotBlockReadyForMatching"
     [Fact]
     public async Task ScenarioE_F_G_H_DescriptionChange_SupersedesQuestions_PreservesAudit_AllowsReanalyze_DoesNotBlockReadyForMatching()
     {
@@ -417,6 +464,12 @@ public class ClarificationWorkflowPostgreSqlTests : PostgreSqlIntegrationTestBas
         }
     }
 
+    // Purpose: Checks that submitting clarification answers is idempotent on retry and is strictly locked once the request transitions to Analyzing status.
+    // Why: Network issues may cause duplicate submission attempts; duplicate answers must not corrupt the DB. Furthermore, once AI analysis begins, modifying answers must be rejected to prevent race conditions.
+    // Scenario: Customer submits answers, resubmits identical payload, and subsequently attempts submission after BeginAnalysisAsync moves status to Analyzing.
+    // Pass condition: First and retry submissions succeed without creating duplicate clarification records, and submission during Analyzing throws ConflictException.
+    // Run from repository root:
+    //   dotnet test backend/AssistLK.sln --filter "FullyQualifiedName=AssistLK.IntegrationTests.PostgreSql.ClarificationWorkflowPostgreSqlTests.ScenarioI_J_AnswerSubmission_IdempotentRetry_AndLockedWhenAnalyzing"
     [Fact]
     public async Task ScenarioI_J_AnswerSubmission_IdempotentRetry_AndLockedWhenAnalyzing()
     {
@@ -507,6 +560,12 @@ public class ClarificationWorkflowPostgreSqlTests : PostgreSqlIntegrationTestBas
         }
     }
 
+    // Purpose: Checks that when maximum round 2 is reached, an AI result indicating NeedsMoreInformation = true does not persist any Round 3 questions.
+    // Why: Business rule enforcement that prevents infinite clarification cycles with customers.
+    // Scenario: Service request has completed and answered round 1 and round 2; problem analysis is applied with NeedsMoreInformation = true and candidate questions.
+    // Pass condition: Exactly 2 clarification rows remain in DB and none exist with ClarificationRound >= 3.
+    // Run from repository root:
+    //   dotnet test backend/AssistLK.sln --filter "FullyQualifiedName=AssistLK.IntegrationTests.PostgreSql.ClarificationWorkflowPostgreSqlTests.ScenarioK_MaxRound2Reached_NeedsMoreInformation_DoesNotCreateRound3"
     [Fact]
     public async Task ScenarioK_MaxRound2Reached_NeedsMoreInformation_DoesNotCreateRound3()
     {
@@ -585,6 +644,12 @@ public class ClarificationWorkflowPostgreSqlTests : PostgreSqlIntegrationTestBas
         }
     }
 
+    // Purpose: Checks that fetching a service request returns authentic persisted ProblemAnalysis values rather than fabricated or default placeholders.
+    // Why: Ensures downstream consumers and customers see real analysis confidence, detected problem, and agent metadata stored in PostgreSQL.
+    // Scenario: ProblemAnalysis is seeded with DetectedProblem, Confidence = 0.83, and AgentName; request is reloaded.
+    // Pass condition: LatestAnalysis fields match the persisted entity (Confidence == 0.83, not hardcoded 0.90).
+    // Run from repository root:
+    //   dotnet test backend/AssistLK.sln --filter "FullyQualifiedName=AssistLK.IntegrationTests.PostgreSql.ClarificationWorkflowPostgreSqlTests.ScenarioL_M_AuthoritativeLatestAnalysisRestoration_NoFabricatedValues"
     [Fact]
     public async Task ScenarioL_M_AuthoritativeLatestAnalysisRestoration_NoFabricatedValues()
     {
@@ -635,6 +700,12 @@ public class ClarificationWorkflowPostgreSqlTests : PostgreSqlIntegrationTestBas
         }
     }
 
+    // Purpose: Checks that PostgreSQL enforces a unique constraint on (ServiceRequestId, ClarificationRound, Sequence) to prevent duplicate question sequencing.
+    // Why: Database-level safety net ensuring clarification questions retain deterministic ordering and uniqueness per round.
+    // Scenario: Inserting two ServiceRequestClarification rows with the same ServiceRequestId, ClarificationRound (1), and Sequence (1).
+    // Pass condition: SaveChangesAsync throws DbUpdateException caused by PostgresException SQL state 23505 (unique_violation).
+    // Run from repository root:
+    //   dotnet test backend/AssistLK.sln --filter "FullyQualifiedName=AssistLK.IntegrationTests.PostgreSql.ClarificationWorkflowPostgreSqlTests.ScenarioN_UniqueConstraint_PreventsDuplicateRoundAndSequence"
     [Fact]
     public async Task ScenarioN_UniqueConstraint_PreventsDuplicateRoundAndSequence()
     {

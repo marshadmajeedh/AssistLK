@@ -21,6 +21,19 @@ using Microsoft.EntityFrameworkCore.Infrastructure;
 
 namespace AssistLK.IntegrationTests;
 
+/// <summary>
+/// What this class tests:
+///   End-to-end transport, validation, wire serialization, and privacy protection of customer problem photo evidence sent from C# backend to the Python FastAPI agent service (ProblemUnderstandingHttpClient), covering base64 exclusion from persistent logs/audit records, visual payload limits, corrupt metadata rejection, concurrent revision changes, customer isolation, error path sanitization, and transient image serialization ignore attributes.
+/// Why these tests are needed:
+///   Ensures that high-resolution image data (up to 4MB aggregate) passes securely over the internal wire with X-Internal-Api-Key without leaking private image binaries, internal storage paths, or base64 blobs into database tables (AgentExecutions, AgentMemories, ProblemAnalyses), audit logs, or error messages.
+/// What is real and what is mocked/faked:
+///   - Real: ProblemVisualEvidenceService, ProblemUnderstandingWorkflowService, ExternalProblemUnderstandingAgentAdapter, AgentMemoryService, AgentMonitoringService, AgentSafetyService, ServiceRequestService backed by EF Core In-Memory database.
+///   - Mocked/Faked: HTTP transport via in-memory HttpMessageHandler simulating Python FastAPI responses and FakeAttachmentStorage.
+/// Prerequisites:
+///   None. Runs in-memory.
+/// Run from repository root:
+///   dotnet test backend/AssistLK.sln --filter "FullyQualifiedName~AssistLK.IntegrationTests.VisualEvidenceTransportTests"
+/// </summary>
 public class VisualEvidenceTransportTests
 {
     private sealed class Fixture : IDisposable
@@ -90,6 +103,14 @@ public class VisualEvidenceTransportTests
         public void Dispose() => Db.Dispose();
     }
 
+    /// <summary>
+    /// Purpose: Checks that valid visual analysis results (used, unsupported, failed) map to domain entities and execution logs without storing binary base64 or provider payloads.
+    /// Why: Verifies that image insights are captured while preventing multi-megabyte image binaries from bloating database execution logs.
+    /// Scenario: Agent returns visual results for status in ["used", "unsupported", "failed"].
+    /// Pass condition: Domain VisionStatus matches, observations map correctly, base64 is not contained in persisted audit/memory, and execution output is under 5KB.
+    /// Note: Parameterized test (Theory). The command below executes all 3 InlineData cases.
+    /// Run from repository root: dotnet test backend/AssistLK.sln --filter "FullyQualifiedName~AssistLK.IntegrationTests.VisualEvidenceTransportTests.BoundedVisualResultIsMappedAndAuditedWithoutBinaryOrProviderPayload"
+    /// </summary>
     [Theory]
     [InlineData("used")] [InlineData("unsupported")] [InlineData("failed")]
     public async Task BoundedVisualResultIsMappedAndAuditedWithoutBinaryOrProviderPayload(string status)
@@ -134,6 +155,14 @@ public class VisualEvidenceTransportTests
         Assert.Equal(7, Assert.Single(f.Db.ProblemAnalyses).EvidenceRevision);
     }
 
+    /// <summary>
+    /// Purpose: Checks that malformed visual output (unknown attachment IDs, >5 observations, >2 per image, >240 chars, partial status, unacknowledged photos, echoed base64, >3 limitations) fails safely.
+    /// Why: Prevents hallucinated or corrupted visual agent outputs from polluting the database or echoing large base64 data in error logs.
+    /// Scenario: Tests 12 fault types in visual agent response.
+    /// Pass condition: Workflow result is Failed, zero ProblemAnalyses or AgentMemories persisted, status recovers to Created, and base64 is absent from errors and execution logs.
+    /// Note: Parameterized test (Theory). The command below executes all 12 InlineData cases.
+    /// Run from repository root: dotnet test backend/AssistLK.sln --filter "FullyQualifiedName~AssistLK.IntegrationTests.VisualEvidenceTransportTests.InvalidVisualOutputFailsWithoutPersistingRejectedContent"
+    /// </summary>
     [Theory]
     [InlineData("unknown-id")] [InlineData("too-many")] [InlineData("long")]
     [InlineData("per-image")] [InlineData("partial")] [InlineData("no-ack")]
@@ -183,6 +212,13 @@ public class VisualEvidenceTransportTests
         protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken ct) => send(request);
     }
 
+    /// <summary>
+    /// Purpose: Checks that whitespace-only description with attached photos does not call Python agent and returns unsupported vision status requesting more info.
+    /// Why: Architectural constraint: images cannot substitute for a problem description text; empty text must request clarification without consuming AI inference tokens.
+    /// Scenario: Context has whitespace description and an attached image.
+    /// Pass condition: Python client is not called, VisionStatus is "unsupported", and NeedsMoreInformation is true.
+    /// Run from repository root: dotnet test backend/AssistLK.sln --filter "FullyQualifiedName=AssistLK.IntegrationTests.VisualEvidenceTransportTests.EmptyTextCannotClaimImageUnderstandingOrCallPython"
+    /// </summary>
     [Fact]
     public async Task EmptyTextCannotClaimImageUnderstandingOrCallPython()
     {
@@ -203,6 +239,14 @@ public class VisualEvidenceTransportTests
         Assert.True(output.NeedsMoreInformation);
     }
 
+    /// <summary>
+    /// Purpose: Checks that HTTP request payload carries exact ordered image base64, but persisted audit log contains only attachment GUIDs.
+    /// Why: High-bandwidth images belong strictly on the internal HTTP wire, while the database audit table must store lightweight metadata only.
+    /// Scenario: Sends 0, 1, and 3 attachments to the agent.
+    /// Pass condition: Wire payload has correct ContentType, dimensions, and base64; audit log contains only attachment IDs with no base64 and length < 2000 chars.
+    /// Note: Parameterized test (Theory). The command below executes all 3 InlineData cases.
+    /// Run from repository root: dotnet test backend/AssistLK.sln --filter "FullyQualifiedName~AssistLK.IntegrationTests.VisualEvidenceTransportTests.WireHasExactOrderedNormalizedEvidenceButAuditContainsOnlyBoundedIdentities"
+    /// </summary>
     [Theory]
     [InlineData(0)] [InlineData(1)] [InlineData(3)]
     public async Task WireHasExactOrderedNormalizedEvidenceButAuditContainsOnlyBoundedIdentities(int count)
@@ -234,6 +278,14 @@ public class VisualEvidenceTransportTests
         Assert.Equal(7, Assert.Single(f.Db.ProblemAnalyses).EvidenceRevision);
     }
 
+    /// <summary>
+    /// Purpose: Checks that corrupted attachment metadata (exceeding individual/aggregate size, >3 count, non-JPEG MIME, dimensions >2048px) aborts before reading disk or sending HTTP.
+    /// Why: Fail-fast defense: corrupt database records must never trigger storage reads or network traffic to Python agents.
+    /// Scenario: Tests oversize, aggregate size, count > 3, wrong MIME, and oversized width.
+    /// Pass condition: Workflow fails, zero HTTP requests sent (Sent is null), no analyses persisted.
+    /// Note: Parameterized test (Theory). The command below executes all 5 InlineData cases.
+    /// Run from repository root: dotnet test backend/AssistLK.sln --filter "FullyQualifiedName~AssistLK.IntegrationTests.VisualEvidenceTransportTests.CorruptMetadataFailsBeforeReadingOrSending"
+    /// </summary>
     [Theory]
     [InlineData("oversize")] [InlineData("aggregate")] [InlineData("count")]
     [InlineData("mime")] [InlineData("dimension")]
@@ -260,6 +312,14 @@ public class VisualEvidenceTransportTests
         Assert.Equal(ServiceRequestStatus.Created, f.Request.Status);
     }
 
+    /// <summary>
+    /// Purpose: Checks that missing files, empty files, size mismatches, or oversized binaries fail cleanly without exposing internal filesystem paths in error messages.
+    /// Why: Protects against information disclosure vulnerabilities regarding server file paths.
+    /// Scenario: Attachment file is missing from storage, empty (0 bytes), size mismatched (65 bytes), or exceeds max bytes.
+    /// Pass condition: Result fails, ErrorMessage does not contain StorageKey path, status recovers to Created, and execution marked Failed.
+    /// Note: Parameterized test (Theory). The command below executes all 4 InlineData cases.
+    /// Run from repository root: dotnet test backend/AssistLK.sln --filter "FullyQualifiedName~AssistLK.IntegrationTests.VisualEvidenceTransportTests.MissingOrMismatchedBinaryFailsAndRecoversWithoutLeakingPaths"
+    /// </summary>
     [Theory]
     [InlineData("missing")] [InlineData("empty")] [InlineData("size-mismatch")] [InlineData("actual-oversize")]
     public async Task MissingOrMismatchedBinaryFailsAndRecoversWithoutLeakingPaths(string kind)
@@ -279,6 +339,14 @@ public class VisualEvidenceTransportTests
         Assert.Equal(ServiceRequestStatus.Created, f.Request.Status);
     }
 
+    /// <summary>
+    /// Purpose: Checks that HTTP error responses (422, 503, 401) recover cleanly without echoing private image content in error strings.
+    /// Why: Prevents upstream AI service error bodies containing image snippets from leaking into user-visible error messages.
+    /// Scenario: Python service returns 422, 503, or 401 with error body containing private image tokens.
+    /// Pass condition: Result fails, ErrorMessage does not contain "PRIVATE_IMAGE_CONTENT", and status recovers to Created.
+    /// Note: Parameterized test (Theory). The command below executes all 3 InlineData cases.
+    /// Run from repository root: dotnet test backend/AssistLK.sln --filter "FullyQualifiedName~AssistLK.IntegrationTests.VisualEvidenceTransportTests.PythonFailureRecoversWithoutEchoingRejectedImageContent"
+    /// </summary>
     [Theory]
     [InlineData(422)] [InlineData(503)] [InlineData(401)]
     public async Task PythonFailureRecoversWithoutEchoingRejectedImageContent(int status)
@@ -294,6 +362,13 @@ public class VisualEvidenceTransportTests
         Assert.Empty(f.Db.ProblemAnalyses);
     }
 
+    /// <summary>
+    /// Purpose: Checks that network failure connecting to Python agent recovers cleanly without attempting an unauthorized in-process fallback.
+    /// Why: Ensures failures in external microservices are handled deterministically without silent degradation.
+    /// Scenario: HttpClient throws HttpRequestException ("unavailable").
+    /// Pass condition: Result fails, no analyses saved, status recovers to Created.
+    /// Run from repository root: dotnet test backend/AssistLK.sln --filter "FullyQualifiedName=AssistLK.IntegrationTests.VisualEvidenceTransportTests.UnavailablePythonRecoversWithoutNativeFallback"
+    /// </summary>
     [Fact]
     public async Task UnavailablePythonRecoversWithoutNativeFallback()
     {
@@ -305,6 +380,13 @@ public class VisualEvidenceTransportTests
         Assert.Equal(ServiceRequestStatus.Created, f.Request.Status);
     }
 
+    /// <summary>
+    /// Purpose: Checks that if evidence revision changes during agent execution, the result is rejected with ConflictException.
+    /// Why: Concurrency protection: guarantees analysis based on old photos is discarded if a customer updates their photos mid-flight.
+    /// Scenario: EvidenceRevision is incremented during agent execution callback.
+    /// Pass condition: Throws ConflictException, zero analyses or memories saved, and execution status is Failed.
+    /// Run from repository root: dotnet test backend/AssistLK.sln --filter "FullyQualifiedName=AssistLK.IntegrationTests.VisualEvidenceTransportTests.ChangedRevisionCannotBecomeCurrentOrEnterSemanticMemory"
+    /// </summary>
     [Fact]
     public async Task ChangedRevisionCannotBecomeCurrentOrEnterSemanticMemory()
     {
@@ -318,6 +400,13 @@ public class VisualEvidenceTransportTests
         Assert.Equal(ServiceRequestStatus.Created, f.Request.Status);
     }
 
+    /// <summary>
+    /// Purpose: Checks that concurrent revision change from a separate DbContext cleanly recovers using fresh state.
+    /// Why: Verifies that separate HTTP requests updating photos concurrently trigger conflict rejection and leave database in a clean state.
+    /// Scenario: Second DbContext increments EvidenceRevision concurrently.
+    /// Pass condition: Throws ConflictException, database verifies updated revision 8, and status remains Created with zero memories.
+    /// Run from repository root: dotnet test backend/AssistLK.sln --filter "FullyQualifiedName=AssistLK.IntegrationTests.VisualEvidenceTransportTests.ConcurrentRevisionChangeRecoversUsingFreshState"
+    /// </summary>
     [Fact]
     public async Task ConcurrentRevisionChangeRecoversUsingFreshState()
     {
@@ -340,6 +429,14 @@ public class VisualEvidenceTransportTests
         Assert.Empty(verify.AgentMemories);
     }
 
+    /// <summary>
+    /// Purpose: Checks that VisualEvidenceLimits enforces individual (2MB) and aggregate (4MB) decoded byte caps.
+    /// Why: Guarantees memory safety at the HTTP boundary before serialization.
+    /// Scenario: Validates combinations of image payload sizes.
+    /// Pass condition: Accepted payloads pass validation; over-limit payloads throw ArgumentException.
+    /// Note: Parameterized test (Theory). The command below executes all 3 InlineData cases.
+    /// Run from repository root: dotnet test backend/AssistLK.sln --filter "FullyQualifiedName~AssistLK.IntegrationTests.VisualEvidenceTransportTests.HttpBoundaryEnforcesDecodedAndAggregateLimits"
+    /// </summary>
     [Theory]
     [InlineData(2097152, 2097152, true)]
     [InlineData(2097152, 2097153, false)]
@@ -357,6 +454,13 @@ public class VisualEvidenceTransportTests
         else Assert.Throws<ArgumentException>(() => VisualEvidenceLimits.Validate(images));
     }
 
+    /// <summary>
+    /// Purpose: Checks that 3 individually valid images exceeding the 4MB aggregate limit are rejected.
+    /// Why: Prevents multi-image aggregate denial of service.
+    /// Scenario: Two 2MB images plus one 1-byte image (4MB + 1 byte total).
+    /// Pass condition: Throws ArgumentException.
+    /// Run from repository root: dotnet test backend/AssistLK.sln --filter "FullyQualifiedName=AssistLK.IntegrationTests.VisualEvidenceTransportTests.HttpBoundaryRejectsAggregateOfIndividuallyValidImages"
+    /// </summary>
     [Fact]
     public void HttpBoundaryRejectsAggregateOfIndividuallyValidImages()
     {
@@ -368,6 +472,13 @@ public class VisualEvidenceTransportTests
         Assert.Throws<ArgumentException>(() => VisualEvidenceLimits.Validate(images));
     }
 
+    /// <summary>
+    /// Purpose: Checks that AnalysisEvidenceRepository enforces customer ID ownership when fetching photos.
+    /// Why: Multi-tenancy security: customer A must never load customer B's photos into evidence snapshots.
+    /// Scenario: Queries photos for Request.Id using a foreign CustomerId.
+    /// Pass condition: Returns null.
+    /// Run from repository root: dotnet test backend/AssistLK.sln --filter "FullyQualifiedName=AssistLK.IntegrationTests.VisualEvidenceTransportTests.EvidenceRepositoryDoesNotReturnAnotherCustomersPhotos"
+    /// </summary>
     [Fact]
     public async Task EvidenceRepositoryDoesNotReturnAnotherCustomersPhotos()
     {
@@ -376,6 +487,13 @@ public class VisualEvidenceTransportTests
         Assert.Null(await new AnalysisEvidenceRepository(f.Db).GetAsync(f.Request.Id, Guid.NewGuid(), default));
     }
 
+    /// <summary>
+    /// Purpose: Checks that a real normalized ImageMagick JPEG matches byte-for-byte on the wire and is completely omitted from audits and memories.
+    /// Why: End-to-end confirmation that real binary image bytes reach the agent wire accurately while never touching audit or memory storage.
+    /// Scenario: Normalizes a synthetic PNG into JPEG, attaches it, and runs workflow.
+    /// Pass condition: Wire payload decodes to exact JPEG bytes, while persisted execution inputs/outputs and memories do not contain the base64 string.
+    /// Run from repository root: dotnet test backend/AssistLK.sln --filter "FullyQualifiedName=AssistLK.IntegrationTests.VisualEvidenceTransportTests.RealNormalizedJpegIsExactOnWireAndAbsentFromEveryPersistedAuditAndMemory"
+    /// </summary>
     [Fact]
     public async Task RealNormalizedJpegIsExactOnWireAndAbsentFromEveryPersistedAuditAndMemory()
     {
@@ -401,6 +519,13 @@ public class VisualEvidenceTransportTests
         Assert.DoesNotContain("dataBase64", persisted);
     }
 
+    /// <summary>
+    /// Purpose: Checks that [JsonIgnore] on AgentContext.VisualEvidence prevents accidental serialization of transient images.
+    /// Why: Defense-in-depth: if an engineer serializes AgentContext, image data must not be written out.
+    /// Scenario: Serializes AgentContext with attached visual evidence.
+    /// Pass condition: Serialized JSON does not contain "PRIVATE_IMAGE_DATA" or "VisualEvidence".
+    /// Run from repository root: dotnet test backend/AssistLK.sln --filter "FullyQualifiedName=AssistLK.IntegrationTests.VisualEvidenceTransportTests.AccidentalContextSerializationCannotIncludeTransientImages"
+    /// </summary>
     [Fact]
     public void AccidentalContextSerializationCannotIncludeTransientImages()
     {
@@ -413,6 +538,13 @@ public class VisualEvidenceTransportTests
         Assert.DoesNotContain("VisualEvidence", serialized);
     }
 
+    /// <summary>
+    /// Purpose: Checks that cancelling CancellationToken throws OperationCanceledException instead of being swallowed as a storage error.
+    /// Why: Proper task cancellation propagation across async storage operations.
+    /// Scenario: Calls Evidence.LoadAsync with a pre-cancelled token.
+    /// Pass condition: Throws OperationCanceledException.
+    /// Run from repository root: dotnet test backend/AssistLK.sln --filter "FullyQualifiedName=AssistLK.IntegrationTests.VisualEvidenceTransportTests.CancellationIsNotConvertedToStorageFailure"
+    /// </summary>
     [Fact]
     public async Task CancellationIsNotConvertedToStorageFailure()
     {
@@ -425,6 +557,13 @@ public class VisualEvidenceTransportTests
         await Assert.ThrowsAnyAsync<OperationCanceledException>(() => f.Evidence.LoadAsync(snapshot, cancellation.Token));
     }
 
+    /// <summary>
+    /// Purpose: Checks that evidence snapshot queries read fresh database values even if the request entity is already tracked by EF Core.
+    /// Why: Ensures snapshot generation is not blinded by stale in-memory entity cache.
+    /// Scenario: Modifies EvidenceRevision in another context, queries snapshot via repository.
+    /// Pass condition: Snapshot Revision reflects updated database value (8) rather than tracked value (7).
+    /// Run from repository root: dotnet test backend/AssistLK.sln --filter "FullyQualifiedName=AssistLK.IntegrationTests.VisualEvidenceTransportTests.FreshSnapshotSeesChangesDespiteTrackedRequest"
+    /// </summary>
     [Fact]
     public async Task FreshSnapshotSeesChangesDespiteTrackedRequest()
     {
@@ -447,6 +586,13 @@ public class VisualEvidenceTransportTests
         public IReadOnlyList<StoredAttachmentFile> GetCleanupCandidates(DateTime before) => [];
     }
 
+    /// <summary>
+    /// Purpose: Checks that storage I/O exceptions are sanitized so internal file paths are stripped and not exposed via InnerException.
+    /// Why: Prevents local server directory structures from leaking through unhandled exception handlers.
+    /// Scenario: ThrowingStorage throws IOException with path "PRIVATE/path/photo.jpg".
+    /// Pass condition: Throws InvalidOperationException with null InnerException and no "PRIVATE" string.
+    /// Run from repository root: dotnet test backend/AssistLK.sln --filter "FullyQualifiedName=AssistLK.IntegrationTests.VisualEvidenceTransportTests.StorageExceptionIsSanitizedWithoutInnerException"
+    /// </summary>
     [Fact]
     public async Task StorageExceptionIsSanitizedWithoutInnerException()
     {

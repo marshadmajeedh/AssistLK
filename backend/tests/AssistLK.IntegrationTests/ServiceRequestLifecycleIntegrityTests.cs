@@ -15,6 +15,27 @@ using Xunit;
 
 namespace AssistLK.IntegrationTests;
 
+// ==============================================================================
+// TEST SUITE: ServiceRequestLifecycleIntegrityTests
+// What this class tests:
+//   - Architectural integrity and boundary enforcement of the ServiceRequestStatus enum.
+//   - Verification that only the 6 authoritative C1 status values exist (Created, Analyzing,
+//     AwaitingInformation, Analyzed, ReadyForMatching, Cancelled).
+//   - Isolation between components: Component 2 (MatchingExecution) and Component 3 (Quotation, Booking)
+//     manage their own lifecycles without mutating the parent ServiceRequest.Status.
+//   - Materialization of all valid statuses in EF Core and admin query filtering across statuses.
+// Why these tests are needed:
+//   - Prevents domain pollution and architectural leakage where downstream operations (matching, quotation,
+//     booking) might incorrectly mutate ServiceRequest.Status into non-C1 values like Matched or Booked.
+// What is real and what is mocked/faked:
+//   - Real: ServiceRequestService, ServiceRequestRepository, ProblemAnalysisRepository,
+//           EF Core domain entities (ServiceRequest, MatchingExecution, MatchedCandidate, Quotation, Booking).
+//   - In-Memory/Faked: EF Core InMemory database (AssistLKDbContext).
+// Prerequisites:
+//   - None (runs purely in-memory).
+// Run from repository root:
+//   dotnet test backend/AssistLK.sln --filter "FullyQualifiedName~AssistLK.IntegrationTests.ServiceRequestLifecycleIntegrityTests"
+// ==============================================================================
 public class ServiceRequestLifecycleIntegrityTests
 {
     private static AssistLKDbContext CreateInMemoryDbContext()
@@ -26,6 +47,11 @@ public class ServiceRequestLifecycleIntegrityTests
         return new AssistLKDbContext(options);
     }
 
+    // Purpose: Checks that all 6 valid ServiceRequestStatus enum values can be persisted and retrieved via EF Core without mapping errors.
+    // Why: Verifies that database mappings correctly support all valid lifecycle states.
+    // Scenario: Persisting an entity with each of the 6 enum values (Created, Analyzing, AwaitingInformation, Analyzed, ReadyForMatching, Cancelled).
+    // Pass condition: Retrieved entity has the exact status specified. Note: Parameterized test running all 6 InlineData cases.
+    // Run from repository root: dotnet test backend/AssistLK.sln --filter "FullyQualifiedName~AssistLK.IntegrationTests.ServiceRequestLifecycleIntegrityTests.ValidServiceRequestStatuses_MaterializeSuccessfully"
     [Theory]
     [InlineData(ServiceRequestStatus.Created)]
     [InlineData(ServiceRequestStatus.Analyzing)]
@@ -60,6 +86,11 @@ public class ServiceRequestLifecycleIntegrityTests
         Assert.Equal(validStatus, retrieved.Status);
     }
 
+    // Purpose: Checks that ServiceRequestStatus enum defines exactly 6 values and contains no downstream workflow names (e.g. "Completed", "Matched", "Booked").
+    // Why: Enforces architectural boundary: C1 service request lifecycle terminates at ReadyForMatching or Cancelled.
+    // Scenario: Reflection inspection of Enum.GetNames<ServiceRequestStatus>().
+    // Pass condition: Length is exactly 6 and excluded downstream status names are not present.
+    // Run from repository root: dotnet test backend/AssistLK.sln --filter "FullyQualifiedName=AssistLK.IntegrationTests.ServiceRequestLifecycleIntegrityTests.ServiceRequestStatus_Enum_DoesNotContainCompletedOrMatchingStatuses"
     [Fact]
     public void ServiceRequestStatus_Enum_DoesNotContainCompletedOrMatchingStatuses()
     {
@@ -84,6 +115,11 @@ public class ServiceRequestLifecycleIntegrityTests
         Assert.Contains("Cancelled", statusNames);
     }
 
+    // Purpose: Checks that MatchingExecutionStatus enum contains its own execution states (Pending, Running, Completed, Failed, PendingApproval).
+    // Why: Confirms that Component 2 isolates its lifecycle within its own execution entity.
+    // Scenario: Inspecting Enum.GetNames<MatchingExecutionStatus>().
+    // Pass condition: All expected matching execution status names are present.
+    // Run from repository root: dotnet test backend/AssistLK.sln --filter "FullyQualifiedName=AssistLK.IntegrationTests.ServiceRequestLifecycleIntegrityTests.MatchingExecutionStatus_Enum_ContainsExpectedExecutionLifecycle"
     [Fact]
     public void MatchingExecutionStatus_Enum_ContainsExpectedExecutionLifecycle()
     {
@@ -96,6 +132,11 @@ public class ServiceRequestLifecycleIntegrityTests
         Assert.Contains("PendingApproval", statusNames);
     }
 
+    // Purpose: Checks that transitioning to ReadyForMatching requires prior analysis (Analyzed status) and exposes the clean handoff contract for Component 2.
+    // Why: Protects the C1/C2 handoff contract so incomplete requests cannot be marked ready.
+    // Scenario: Request transitions from Created (fails) -> Analyzed with analysis -> ReadyForMatching (succeeds) -> handoff DTO inspected.
+    // Pass condition: Direct transition from Created throws ConflictException; transition from Analyzed succeeds; handoff DTO matches expected category and confidence.
+    // Run from repository root: dotnet test backend/AssistLK.sln --filter "FullyQualifiedName=AssistLK.IntegrationTests.ServiceRequestLifecycleIntegrityTests.C1_ReadyForMatching_SemanticsRemainAuthoritativeHandoff"
     [Fact]
     public async Task C1_ReadyForMatching_SemanticsRemainAuthoritativeHandoff()
     {
@@ -153,6 +194,11 @@ public class ServiceRequestLifecycleIntegrityTests
         Assert.Equal(0.95m, matchingHandoff.Confidence);
     }
 
+    // Purpose: Checks that GetAllForAdminAsync with no status filter returns requests across all 6 lifecycle statuses.
+    // Why: Verifies that admin views receive the full spectrum of requests without unintended status filtering.
+    // Scenario: 6 requests seeded across all 6 statuses; queried with status = null.
+    // Pass condition: All 6 requests are returned.
+    // Run from repository root: dotnet test backend/AssistLK.sln --filter "FullyQualifiedName=AssistLK.IntegrationTests.ServiceRequestLifecycleIntegrityTests.Admin_GetAllForAdmin_WithNoFilter_ReturnsAllValidRequestsAcrossStatuses"
     [Fact]
     public async Task Admin_GetAllForAdmin_WithNoFilter_ReturnsAllValidRequestsAcrossStatuses()
     {
@@ -204,6 +250,11 @@ public class ServiceRequestLifecycleIntegrityTests
         }
     }
 
+    // Purpose: Checks that filtering by specific status names in GetAllForAdminAsync returns only requests with that status.
+    // Why: Enables admins to filter requests by specific operational state.
+    // Scenario: Requests in Created, ReadyForMatching, and Analyzed filtered individually.
+    // Pass condition: Each query returns only the matching request ID.
+    // Run from repository root: dotnet test backend/AssistLK.sln --filter "FullyQualifiedName=AssistLK.IntegrationTests.ServiceRequestLifecycleIntegrityTests.Admin_GetAllForAdmin_WithStatusFilter_ReturnsOnlyMatchingRequests"
     [Fact]
     public async Task Admin_GetAllForAdmin_WithStatusFilter_ReturnsOnlyMatchingRequests()
     {
@@ -274,6 +325,11 @@ public class ServiceRequestLifecycleIntegrityTests
         Assert.Equal(reqAnalyzed, analyzedList[0].ServiceRequestId);
     }
 
+    // Purpose: Checks that running and completing a Component 2 MatchingExecution and accepting a candidate leaves the parent ServiceRequest.Status unchanged as ReadyForMatching.
+    // Why: Verifies that C2 provider matching actions do not corrupt or overwrite C1 service request status.
+    // Scenario: MatchingExecution and MatchedCandidate progress to Completed and Accepted for a request in ReadyForMatching.
+    // Pass condition: ServiceRequest.Status remains ReadyForMatching while matching execution is Completed.
+    // Run from repository root: dotnet test backend/AssistLK.sln --filter "FullyQualifiedName=AssistLK.IntegrationTests.ServiceRequestLifecycleIntegrityTests.C2_MatchingExecution_CanBeCompleted_WithoutMutatingServiceRequestStatus"
     [Fact]
     public async Task C2_MatchingExecution_CanBeCompleted_WithoutMutatingServiceRequestStatus()
     {
@@ -344,6 +400,11 @@ public class ServiceRequestLifecycleIntegrityTests
         Assert.Equal(MatchedCandidateStatus.Accepted, retrievedCandidate.Status);
     }
 
+    // Purpose: Checks that creating, approving a quotation, and confirming a booking in Component 3 leaves the parent ServiceRequest.Status as ReadyForMatching.
+    // Why: Guarantees that quotation and booking domain entities maintain their own statuses without mutating C1 service request state.
+    // Scenario: Quotation approved and Booking confirmed for a request in ReadyForMatching.
+    // Pass condition: ServiceRequest.Status remains ReadyForMatching, Quotation is Approved, and Booking is Confirmed.
+    // Run from repository root: dotnet test backend/AssistLK.sln --filter "FullyQualifiedName=AssistLK.IntegrationTests.ServiceRequestLifecycleIntegrityTests.C3_QuotationApprovalAndBooking_DoesNotMutateServiceRequestStatus"
     [Fact]
     public async Task C3_QuotationApprovalAndBooking_DoesNotMutateServiceRequestStatus()
     {

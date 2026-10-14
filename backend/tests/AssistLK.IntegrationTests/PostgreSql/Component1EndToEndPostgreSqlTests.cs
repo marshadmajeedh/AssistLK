@@ -12,6 +12,22 @@ using Microsoft.Extensions.Logging.Abstractions;
 
 namespace AssistLK.IntegrationTests.PostgreSql;
 
+// What this class tests:
+//   Full end-to-end workflow execution of Component 1 (Service Request and Problem Understanding)
+//   against a real PostgreSQL database, covering happy path with photo evidence, ambiguous multi-step
+//   clarification flow, emergency safety scenarios, and customer ownership authorization at the workflow boundary.
+// Why these tests are needed:
+//   Validates that domain entities, repositories, workflow orchestrators, memory stores, audit logs,
+//   and status transitions work cohesively with real relational database integrity constraints before
+//   handing off to Component 2 (Matching).
+// What is real and what is mocked/faked:
+//   - Real: PostgreSQL database (schema, tables, constraints, foreign keys, EF Core repositories).
+//   - Real: ImageMagick image normalization, ServiceRequestService, ProblemUnderstandingWorkflowService.
+//   - Mocked/Faked: FakeProblemUnderstandingClient provides deterministic AI classification outputs without calling external LLMs, and FakeAttachmentStorage simulates blob storage.
+// Prerequisites:
+//   A running PostgreSQL instance accessible via connection string configured in appsettings / environment variables.
+// Run from repository root:
+//   dotnet test backend/AssistLK.sln --filter "FullyQualifiedName~AssistLK.IntegrationTests.PostgreSql.Component1EndToEndPostgreSqlTests"
 public class Component1EndToEndPostgreSqlTests : PostgreSqlIntegrationTestBase
 {
     public Component1EndToEndPostgreSqlTests(PostgreSqlTestFixture fixture)
@@ -55,6 +71,12 @@ public class Component1EndToEndPostgreSqlTests : PostgreSqlIntegrationTestBase
                 storage ?? new AssistLK.Tests.Shared.FakeAttachmentStorage()));
     }
 
+    // Purpose: Checks that a clear plumbing request with photo evidence executes the full analysis workflow in PostgreSQL, persists analysis results, agent memory, and audit logs, and cleanly transitions to ReadyForMatching.
+    // Why: Represents the primary happy path for customer request creation and AI problem understanding leading directly to provider matching.
+    // Scenario: Kitchen pipe leak with uploaded JPEG evidence; workflow executes AnalyzeAsync, updates status, and transitions to ReadyForMatching.
+    // Pass condition: Analysis succeeds (Category="Plumbing", Urgency=High, Confidence>=0.80), entity status updates to Analyzed then ReadyForMatching, EvidenceRevision is incremented, and audit logs record metadata without leaking binary payloads.
+    // Run from repository root:
+    //   dotnet test backend/AssistLK.sln --filter "FullyQualifiedName=AssistLK.IntegrationTests.PostgreSql.Component1EndToEndPostgreSqlTests.HappyPath_KitchenPipeBurst_EndToEnd_PersistsInRealPostgreSql_AndTransitionsToReadyForMatching"
     [Fact]
     public async Task HappyPath_KitchenPipeBurst_EndToEnd_PersistsInRealPostgreSql_AndTransitionsToReadyForMatching()
     {
@@ -174,6 +196,12 @@ public class Component1EndToEndPostgreSqlTests : PostgreSqlIntegrationTestBase
         }
     }
 
+    // Purpose: Checks that a vague customer problem transitions to AwaitingInformation with follow-up questions, allows description update (which supersedes old questions), and resolves to Analyzed then ReadyForMatching upon re-analysis.
+    // Why: Ensures ambiguous requests guide the customer to provide missing details while preserving canonical category taxonomies and audit histories across multiple iterations.
+    // Scenario: Initial description "refrigerator" produces follow-up questions; customer updates description to "The refrigerator is warm..."; re-analysis resolves problem.
+    // Pass condition: Initial analysis yields NeedsMoreInformation=true; status becomes AwaitingInformation; description revision marks round 1 questions as SupersededAt; second analysis succeeds with NeedsMoreInformation=false; request transitions to ReadyForMatching.
+    // Run from repository root:
+    //   dotnet test backend/AssistLK.sln --filter "FullyQualifiedName=AssistLK.IntegrationTests.PostgreSql.Component1EndToEndPostgreSqlTests.AmbiguousPath_RefrigeratorScenario_PreservesCanonicalCategory_AndResolvesWithFollowUp"
     [Fact]
     public async Task AmbiguousPath_RefrigeratorScenario_PreservesCanonicalCategory_AndResolvesWithFollowUp()
     {
@@ -293,6 +321,12 @@ public class Component1EndToEndPostgreSqlTests : PostgreSqlIntegrationTestBase
         }
     }
 
+    // Purpose: Checks that an electrical hazard scenario detects High urgency and safely persists throughout the workflow into PostgreSQL.
+    // Why: Critical safety feature to prioritize hazardous jobs and protect customer safety.
+    // Scenario: Request describes "Exposed sparking wire in bathroom near water"; workflow executes AnalyzeAsync.
+    // Pass condition: Category is "Electrical", Urgency is High, status becomes Analyzed, and transitions to ReadyForMatching.
+    // Run from repository root:
+    //   dotnet test backend/AssistLK.sln --filter "FullyQualifiedName=AssistLK.IntegrationTests.PostgreSql.Component1EndToEndPostgreSqlTests.SafetyRegression_ExposedSparkingWire_DetectsHighUrgency_AndPersistsSafetyGuidance"
     [Fact]
     public async Task SafetyRegression_ExposedSparkingWire_DetectsHighUrgency_AndPersistsSafetyGuidance()
     {
@@ -344,6 +378,12 @@ public class Component1EndToEndPostgreSqlTests : PostgreSqlIntegrationTestBase
         }
     }
 
+    // Purpose: Checks that calling AnalyzeAsync with a CustomerId that does not own the service request throws KeyNotFoundException and leaves the request untouched in PostgreSQL.
+    // Why: Prevents unauthorized customers or malicious actors from triggering AI workflows on other users' service requests.
+    // Scenario: User B attempts to run workflow AnalyzeAsync on a service request owned by User A.
+    // Pass condition: Throws KeyNotFoundException and database entity remains in Created status.
+    // Run from repository root:
+    //   dotnet test backend/AssistLK.sln --filter "FullyQualifiedName=AssistLK.IntegrationTests.PostgreSql.Component1EndToEndPostgreSqlTests.OwnershipEnforcement_AtWorkflowBoundary_PreventsUnauthorizedAnalysis"
     [Fact]
     public async Task OwnershipEnforcement_AtWorkflowBoundary_PreventsUnauthorizedAnalysis()
     {

@@ -4,6 +4,24 @@ using Npgsql;
 
 namespace AssistLK.IntegrationTests.PostgreSql;
 
+// =========================================================================================
+// Class: MigrationPostgreSqlTests
+// What this class tests:
+//   Complete EF Core migration execution chain on real PostgreSQL from initial foundation to latest schema.
+// Why these tests are needed:
+//   Proves that an empty, newly provisioned PostgreSQL database successfully applies every migration
+//   in order (workflows, memory, service requests, clarifications, attachments, visual evidence)
+//   without DDL syntax errors or migration ordering issues.
+// What is real vs mocked/faked:
+//   - REAL: Live PostgreSQL instance creating a temporary database (assistlk_mig_test_*), running
+//     actual DDL migrations, querying information_schema.tables, and dropping the database upon completion.
+//   - MOCKED: None.
+// Prerequisites:
+//   A running PostgreSQL instance with permissions to create and drop test databases, configured
+//   via ASSISTLK_TEST_POSTGRESQL_CONNECTION, ConnectionStrings__TestConnection, or local User Secrets.
+// Run from repository root:
+//   dotnet test backend/AssistLK.sln --filter "FullyQualifiedName~AssistLK.IntegrationTests.PostgreSql.MigrationPostgreSqlTests"
+// =========================================================================================
 [Collection("PostgreSqlDatabase")]
 public class MigrationPostgreSqlTests
 {
@@ -14,6 +32,11 @@ public class MigrationPostgreSqlTests
         _fixture = fixture;
     }
 
+    // Purpose: Verifies that the entire EF Core migration chain applies cleanly to an empty PostgreSQL database and creates all 13 expected tables.
+    // Why: Validates deployment readiness; confirms a brand-new database installation reaches the desired schema without failure.
+    // Scenario: Creates a unique temporary database, applies all pending migrations, queries applied migrations, and inspects information_schema.tables.
+    // Pass condition: All 11 expected migration names exist in __EFMigrationsHistory and all 13 expected table names exist in the public schema.
+    // Run from repository root: dotnet test backend/AssistLK.sln --filter "FullyQualifiedName=AssistLK.IntegrationTests.PostgreSql.MigrationPostgreSqlTests.RealPostgreSql_MigrationChain_AppliesAllMigrations_AndCreatesRequiredTables"
     [Fact]
     public async Task RealPostgreSql_MigrationChain_AppliesAllMigrations_AndCreatesRequiredTables()
     {

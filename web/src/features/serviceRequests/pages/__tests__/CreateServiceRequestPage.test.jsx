@@ -1,3 +1,19 @@
+// What this suite tests:
+//   The CreateServiceRequestPage React page component where customers create new service requests,
+//   covering form field rendering, client-side input validation, manual location input,
+//   opt-in browser geolocation capture, permission denial fallbacks, and payload purity.
+// Why these tests are needed:
+//   Guarantees that customers must provide non-empty descriptions and locations, GPS is never
+//   requested unprompted without user consent, geolocation errors do not brick manual submission,
+//   and the frontend never attempts to set backend-controlled properties (customerId, category, urgency, status).
+// What is real and what is mocked/faked:
+//   - Real: CreateServiceRequestPage component rendered with MemoryRouter and @testing-library/react.
+//   - Mocked/Faked: navigator.geolocation is mocked with custom vi.fn() implementations to simulate GPS success/denial; serviceRequestService.create and useNavigate are mocked via vi.fn().
+// Prerequisites:
+//   Node.js dependencies installed in web folder (npm install).
+// Run from repository root:
+//   npm --prefix web test -- src/features/serviceRequests/pages/__tests__/CreateServiceRequestPage.test.jsx
+
 import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { MemoryRouter } from "react-router-dom";
@@ -49,6 +65,12 @@ describe("CreateServiceRequestPage", () => {
     }
   });
 
+  // Purpose: Checks that form input controls (description textarea, location text input, Use Current Location button, Create Request submit button) are rendered.
+  // Why: Confirms all necessary UI elements are available to the customer upon opening the page.
+  // Scenario: Rendering CreateServiceRequestPage in its initial state.
+  // Pass condition: All labeled form inputs and action buttons are present in the DOM.
+  // Run from repository root:
+  //   npm --prefix web test -- src/features/serviceRequests/pages/__tests__/CreateServiceRequestPage.test.jsx -t "renders problem description, location, and Use Current Location button"
   it("renders problem description, location, and Use Current Location button", () => {
     render(
       <MemoryRouter>
@@ -68,6 +90,12 @@ describe("CreateServiceRequestPage", () => {
     ).toBeInTheDocument();
   });
 
+  // Purpose: Checks that submitting an empty form or whitespace-only inputs blocks submission and renders validation errors.
+  // Why: Prevents blank or meaningless service requests from being submitted to the backend.
+  // Scenario: User clicks submit with empty inputs, then types whitespace and clicks submit.
+  // Pass condition: Validation error messages appear and serviceRequestService.create is never invoked.
+  // Run from repository root:
+  //   npm --prefix web test -- src/features/serviceRequests/pages/__tests__/CreateServiceRequestPage.test.jsx -t "rejects empty submission and whitespace-only inputs"
   it("rejects empty submission and whitespace-only inputs", async () => {
     const user = userEvent.setup();
     render(
@@ -95,6 +123,12 @@ describe("CreateServiceRequestPage", () => {
     expect(serviceRequestService.create).not.toHaveBeenCalled();
   });
 
+  // Purpose: Checks that valid manual location submissions send only permitted fields and exclude customerId, category, urgency, and status.
+  // Why: Security and architectural contract: creation payload must only contain customer-authored text; backend sets customer ID from JWT and manages initial lifecycle state.
+  // Scenario: User enters description and manual location and submits.
+  // Pass condition: serviceRequestService.create is called with { description, locationText, latitude: null, longitude: null } with no extraneous fields, then navigates to /service-requests.
+  // Run from repository root:
+  //   npm --prefix web test -- src/features/serviceRequests/pages/__tests__/CreateServiceRequestPage.test.jsx -t "submits valid manual location and excludes customerId, category, urgency, status"
   it("submits valid manual location and excludes customerId, category, urgency, status", async () => {
     const user = userEvent.setup();
     serviceRequestService.create.mockResolvedValueOnce({
@@ -140,6 +174,12 @@ describe("CreateServiceRequestPage", () => {
     expect(mockNavigate).toHaveBeenCalledWith("/service-requests");
   });
 
+  // Purpose: Checks that browser geolocation is NOT queried automatically when the page loads.
+  // Why: Privacy-first design: location permissions must never be requested without explicit customer action.
+  // Scenario: Rendering CreateServiceRequestPage without interacting with the GPS button.
+  // Pass condition: mockGetCurrentPosition has not been called.
+  // Run from repository root:
+  //   npm --prefix web test -- src/features/serviceRequests/pages/__tests__/CreateServiceRequestPage.test.jsx -t "does not request GPS on initial render"
   it("does not request GPS on initial render", () => {
     render(
       <MemoryRouter>
@@ -150,6 +190,12 @@ describe("CreateServiceRequestPage", () => {
     expect(mockGetCurrentPosition).not.toHaveBeenCalled();
   });
 
+  // Purpose: Checks that clicking "Use Current Location" prompts the browser for GPS coordinates and includes latitude and longitude in the creation payload.
+  // Why: Enables precision location tagging for service provider dispatch.
+  // Scenario: User clicks "Use Current Location", GPS coordinates (6.92708, 79.86124) resolve, and user submits the form.
+  // Pass condition: Coordinates display on screen and serviceRequestService.create is called with latitude and longitude numbers.
+  // Run from repository root:
+  //   npm --prefix web test -- src/features/serviceRequests/pages/__tests__/CreateServiceRequestPage.test.jsx -t "captures GPS coordinates when Use Current Location is clicked and includes them in payload"
   it("captures GPS coordinates when Use Current Location is clicked and includes them in payload", async () => {
     const user = userEvent.setup();
     mockGetCurrentPosition.mockImplementationOnce((success) => {
@@ -206,6 +252,12 @@ describe("CreateServiceRequestPage", () => {
     });
   });
 
+  // Purpose: Checks that if the user denies geolocation permission, a friendly warning is displayed while manual text entry remains fully usable.
+  // Why: Prevents permission denials from blocking users from submitting requests manually.
+  // Scenario: Geolocation error with code 1 (PERMISSION_DENIED); user types manual location and submits.
+  // Pass condition: Warning text "location permission was denied" appears, and create is called with null latitude/longitude.
+  // Run from repository root:
+  //   npm --prefix web test -- src/features/serviceRequests/pages/__tests__/CreateServiceRequestPage.test.jsx -t "displays friendly message on GPS permission denial and leaves manual location usable"
   it("displays friendly message on GPS permission denial and leaves manual location usable", async () => {
     const user = userEvent.setup();
     mockGetCurrentPosition.mockImplementationOnce((_success, error) => {
@@ -251,6 +303,12 @@ describe("CreateServiceRequestPage", () => {
     });
   });
 
+  // Purpose: Checks that clicking "Clear GPS Location" removes previously captured coordinates and restores the "Use Current Location" button.
+  // Why: Allows the user to retract auto-captured coordinates if they wish to submit manual text location only.
+  // Scenario: Capturing GPS location and then clicking the "Clear GPS Location" button.
+  // Pass condition: "Current location captured" banner is removed and "Use Current Location" button is re-rendered.
+  // Run from repository root:
+  //   npm --prefix web test -- src/features/serviceRequests/pages/__tests__/CreateServiceRequestPage.test.jsx -t "resets coordinates when Clear GPS Location is clicked"
   it("resets coordinates when Clear GPS Location is clicked", async () => {
     const user = userEvent.setup();
     mockGetCurrentPosition.mockImplementationOnce((success) => {

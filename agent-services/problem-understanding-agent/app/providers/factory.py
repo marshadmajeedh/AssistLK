@@ -4,6 +4,7 @@ from typing import Optional
 import httpx
 from app.config import Settings, get_settings
 from app.providers.base import BaseLLMProvider, PermanentProviderError
+from app.providers.azure_openai_provider import AzureOpenAIProvider
 from app.providers.gemini_provider import GeminiProvider
 from app.providers.offline_provider import OfflineSimulationProvider
 from app.providers.openai_provider import OpenAIProvider
@@ -66,4 +67,23 @@ class ProviderFactory:
                 client=client,
             )
 
-        raise ValueError(f"Unsupported LLM_PROVIDER '{cfg.LLM_PROVIDER}'. Allowed: gemini, openai, offline.")
+        if provider_type == "azure_openai":
+            if not cfg.AZURE_OPENAI_API_KEY or not cfg.AZURE_OPENAI_API_KEY.strip() or not cfg.AZURE_OPENAI_ENDPOINT or not cfg.AZURE_OPENAI_ENDPOINT.strip():
+                if cfg.ALLOW_OFFLINE_SIMULATION:
+                    logger.info("AZURE_OPENAI_API_KEY or AZURE_OPENAI_ENDPOINT missing. Engaging OfflineSimulationProvider (dev/test mode).")
+                    return OfflineSimulationProvider(model_name="offline-azure-sim")
+                raise PermanentProviderError(
+                    "AZURE_OPENAI_API_KEY and AZURE_OPENAI_ENDPOINT are required for azure_openai provider when offline simulation is disabled."
+                )
+
+            return AzureOpenAIProvider(
+                api_key=cfg.AZURE_OPENAI_API_KEY,
+                endpoint=cfg.AZURE_OPENAI_ENDPOINT,
+                deployment_name=cfg.AZURE_OPENAI_DEPLOYMENT_NAME,
+                api_version=cfg.AZURE_OPENAI_API_VERSION,
+                timeout_seconds=cfg.LLM_TIMEOUT_SECONDS,
+                max_attempts=cfg.LLM_MAX_ATTEMPTS,
+                client=client,
+            )
+
+        raise ValueError(f"Unsupported LLM_PROVIDER '{cfg.LLM_PROVIDER}'. Allowed: gemini, openai, azure_openai, offline.")

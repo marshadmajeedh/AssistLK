@@ -4,6 +4,22 @@ using Microsoft.EntityFrameworkCore;
 
 namespace AssistLK.IntegrationTests.PostgreSql;
 
+// =========================================================================================
+// Class: TimestampPostgreSqlTests
+// What this class tests:
+//   Automated UTC timestamp management (CreatedAt and UpdatedAt) for ServiceRequest entities in PostgreSQL.
+// Why these tests are needed:
+//   Validates that EF Core and PostgreSQL timestamp triggers populate UTC timestamps on creation,
+//   keep CreatedAt strictly immutable, and advance UpdatedAt whenever an entity is modified.
+// What is real vs mocked/faked:
+//   - REAL: Live PostgreSQL instance, EF Core ChangeTracker timestamp interceptors, and timestamp with time zone columns.
+//   - MOCKED: None.
+// Prerequisites:
+//   A running PostgreSQL database instance configured via ASSISTLK_TEST_POSTGRESQL_CONNECTION,
+//   ConnectionStrings__TestConnection, or local User Secrets.
+// Run from repository root:
+//   dotnet test backend/AssistLK.sln --filter "FullyQualifiedName~AssistLK.IntegrationTests.PostgreSql.TimestampPostgreSqlTests"
+// =========================================================================================
 public class TimestampPostgreSqlTests : PostgreSqlIntegrationTestBase
 {
     public TimestampPostgreSqlTests(PostgreSqlTestFixture fixture)
@@ -11,6 +27,11 @@ public class TimestampPostgreSqlTests : PostgreSqlIntegrationTestBase
     {
     }
 
+    // Purpose: Verifies that newly created ServiceRequest records automatically populate both CreatedAt and UpdatedAt with the current UTC time.
+    // Why: Provides reliable audit trails and sorting for customer requests without relying on manual timestamp assignments.
+    // Scenario: Inserts a new request without explicit timestamps and reloads it in a fresh context.
+    // Pass condition: CreatedAt and UpdatedAt fall within the test execution time window, equal each other, and have DateTimeKind.Utc.
+    // Run from repository root: dotnet test backend/AssistLK.sln --filter "FullyQualifiedName=AssistLK.IntegrationTests.PostgreSql.TimestampPostgreSqlTests.Timestamps_OnCreation_AreSetToUtcNow"
     [Fact]
     public async Task Timestamps_OnCreation_AreSetToUtcNow()
     {
@@ -49,6 +70,11 @@ public class TimestampPostgreSqlTests : PostgreSqlIntegrationTestBase
         }
     }
 
+    // Purpose: Verifies that modifying an existing ServiceRequest advances UpdatedAt while keeping CreatedAt strictly immutable.
+    // Why: Audit compliance requires preserving the original creation date of records while accurately reflecting modification times.
+    // Scenario: Updates description and status after a small delay, then asserts timestamps in a fresh context.
+    // Pass condition: updated.CreatedAt equals initialCreatedAt, and updated.UpdatedAt is strictly greater than initialUpdatedAt.
+    // Run from repository root: dotnet test backend/AssistLK.sln --filter "FullyQualifiedName=AssistLK.IntegrationTests.PostgreSql.TimestampPostgreSqlTests.Timestamps_OnUpdate_UpdatesUpdatedAt_WhileCreatedAtRemainsImmutable"
     [Fact]
     public async Task Timestamps_OnUpdate_UpdatesUpdatedAt_WhileCreatedAtRemainsImmutable()
     {

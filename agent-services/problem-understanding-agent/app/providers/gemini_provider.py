@@ -2,6 +2,7 @@
 import asyncio
 import json
 import logging
+import random
 from typing import Any
 import httpx
 from app.schemas.visual_evidence import VisualEvidence
@@ -139,18 +140,22 @@ class GeminiProvider(BaseLLMProvider):
 
                     # Transient retriable conditions: HTTP 429 (TooManyRequests), 503, 502, 504
                     if attempt < self._max_attempts:
-                        delay = 0.5 * attempt
+                        delay = self._calculate_backoff_delay(response, attempt)
                         logger.warning(
-                            "Gemini transient HTTP %d error on attempt %d/%d. Retrying in %.1fs...",
+                            "Gemini transient HTTP %d error on attempt %d/%d. Retrying in %.2fs...",
                             status_code, attempt, self._max_attempts, delay,
                         )
                         await asyncio.sleep(delay)
                         continue
 
-                    raise TransientProviderError(
-                        f"Gemini failed with HTTP {status_code} after {self._max_attempts} attempts.",
-                        status_code=status_code,
-                    )
+                    if status_code == 429:
+                        msg = f"Gemini rate limit or quota exceeded (HTTP 429) after {self._max_attempts} attempts."
+                    elif status_code == 503:
+                        msg = f"Gemini service unavailable (HTTP 503) after {self._max_attempts} attempts."
+                    else:
+                        msg = f"Gemini failed with HTTP {status_code} after {self._max_attempts} attempts."
+
+                    raise TransientProviderError(msg, status_code=status_code)
 
                 except asyncio.CancelledError:
                     # Respect caller cancellation immediately
@@ -159,9 +164,9 @@ class GeminiProvider(BaseLLMProvider):
                     raise
                 except (httpx.TimeoutException, httpx.NetworkError) as ex:
                     if attempt < self._max_attempts:
-                        delay = 0.5 * attempt
+                        delay = self._calculate_backoff_delay(None, attempt)
                         logger.warning(
-                            "Gemini network/timeout exception (%s) on attempt %d/%d. Retrying in %.1fs...",
+                            "Gemini network/timeout exception (%s) on attempt %d/%d. Retrying in %.2fs...",
                             type(ex).__name__, attempt, self._max_attempts, delay,
                         )
                         await asyncio.sleep(delay)
@@ -178,6 +183,36 @@ class GeminiProvider(BaseLLMProvider):
         finally:
             if should_close_client:
                 await client.aclose()
+
+    def _calculate_backoff_delay(self, response: httpx.Response | None, attempt: int) -> float:
+        """Calculates bounded exponential backoff with jitter, respecting Retry-After when available."""
+        if response is not None:
+            # 1. Parse standard Retry-After header
+            retry_after_str = response.headers.get("Retry-After") or response.headers.get("retry-after")
+            if retry_after_str:
+                try:
+                    val = float(retry_after_str)
+                    if 0.0 < val <= 10.0:
+                        return round(val, 2)
+                except ValueError:
+                    pass
+
+            # 2. Parse Google RPC retryDelay from error payload if present
+            try:
+                data = response.json()
+                for detail in data.get("error", {}).get("details", []):
+                    if "retryDelay" in detail:
+                        val = float(str(detail["retryDelay"]).rstrip("s"))
+                        if 0.0 < val <= 10.0:
+                            return round(val, 2)
+            except Exception:
+                pass
+
+        # 3. Bounded exponential backoff with jitter
+        base = min(1.0, max(0.2, self._timeout_seconds / 4))
+        backoff = base * (2 ** (attempt - 1))
+        jitter = random.uniform(0.05, 0.25)
+        return round(min(5.0, backoff + jitter), 2)
 
     def _extract_text(self, data: dict[str, Any]) -> str | None:
         candidates = data.get("candidates") or []

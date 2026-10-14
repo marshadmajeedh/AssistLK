@@ -9,6 +9,23 @@ using Xunit;
 
 namespace AssistLK.Api.Tests.PostgreSql;
 
+/// <summary>
+/// ServiceRequestsApiPostgreSqlTests verifies the Service Requests HTTP API
+/// against a real PostgreSQL database instance.
+///
+/// Viva Preparation Notes:
+/// - What this class tests: Full end-to-end integration across the HTTP layer, controllers,
+///   application services, EF Core DbContext, and a live PostgreSQL database for customer requests.
+/// - Why these tests are needed: In-memory tests verify routing and logic, but only PostgreSQL tests
+///   verify real SQL execution, relational foreign keys, schema migrations, and column types.
+/// - What is real vs mocked:
+///   * Real: ASP.NET Core test server, HTTP pipeline, EF Core Npgsql provider, and real PostgreSQL database.
+///   * Mocked/Faked: AI agent client (FakeProblemUnderstandingClient) and SMS service (TestSmsService).
+/// - Prerequisites: A running PostgreSQL instance with connection string configured in
+///   ASSISTLK_TEST_POSTGRESQL_CONNECTION, ConnectionStrings__TestConnection, or User Secrets.
+/// - PowerShell command to run class from repository root:
+///   dotnet test backend/AssistLK.sln --filter "FullyQualifiedName~AssistLK.Api.Tests.PostgreSql.ServiceRequestsApiPostgreSqlTests"
+/// </summary>
 [Collection("EnvironmentTests")]
 public class ServiceRequestsApiPostgreSqlTests : IClassFixture<PostgreSqlAssistLKApiTestFactory>, IAsyncLifetime
 {
@@ -35,6 +52,13 @@ public class ServiceRequestsApiPostgreSqlTests : IClassFixture<PostgreSqlAssistL
         return Task.CompletedTask;
     }
 
+    /// <summary>
+    /// Purpose: Checks that POST /api/service-requests creates a record in real PostgreSQL and returns 201 Created.
+    /// Why: Proves real database insertion, ID generation, and schema constraint adherence over HTTP.
+    /// Scenario: Customer submits description and GPS coordinates to the API.
+    /// Pass condition: HTTP 201 Created, response has status Created, and direct DB query confirms record in PostgreSQL.
+    /// Run from repository root: dotnet test backend/AssistLK.sln --filter "FullyQualifiedName=AssistLK.Api.Tests.PostgreSql.ServiceRequestsApiPostgreSqlTests.CreateServiceRequest_OverHttp_PersistsInRealPostgreSql_AndReturns201Created"
+    /// </summary>
     [Fact]
     public async Task CreateServiceRequest_OverHttp_PersistsInRealPostgreSql_AndReturns201Created()
     {
@@ -71,6 +95,13 @@ public class ServiceRequestsApiPostgreSqlTests : IClassFixture<PostgreSqlAssistL
         Assert.Equal(ServiceRequestStatus.Created, savedInDb.Status);
     }
 
+    /// <summary>
+    /// Purpose: Checks customer ownership isolation over HTTP backed by a real PostgreSQL database.
+    /// Why: Verifies that multi-tenant isolation holds in the presence of real database foreign keys and queries.
+    /// Scenario: Customer A creates request; Customer A queries it (200 OK); Customer B queries it (404 Not Found).
+    /// Pass condition: Customer A receives 200 OK; Customer B receives 404 Not Found.
+    /// Run from repository root: dotnet test backend/AssistLK.sln --filter "FullyQualifiedName=AssistLK.Api.Tests.PostgreSql.ServiceRequestsApiPostgreSqlTests.GetById_OverHttp_Returns200ForOwner_And404ForDifferentCustomer"
+    /// </summary>
     [Fact]
     public async Task GetById_OverHttp_Returns200ForOwner_And404ForDifferentCustomer()
     {
@@ -102,6 +133,13 @@ public class ServiceRequestsApiPostgreSqlTests : IClassFixture<PostgreSqlAssistL
         Assert.Equal(HttpStatusCode.NotFound, getForOtherResponse.StatusCode);
     }
 
+    /// <summary>
+    /// Purpose: Checks analysis execution, persistence of ProblemAnalysis in PostgreSQL, and transition to ReadyForMatching.
+    /// Why: Validates the entire analysis and handoff pipeline with real relational database storage.
+    /// Scenario: Customer creates request, triggers analysis over HTTP, verifies ProblemAnalysis entity in PostgreSQL, then triggers ready-for-matching.
+    /// Pass condition: Status is Analyzed, ProblemAnalysis row exists with matching summary and confidence in PostgreSQL, and final status is ReadyForMatching.
+    /// Run from repository root: dotnet test backend/AssistLK.sln --filter "FullyQualifiedName=AssistLK.Api.Tests.PostgreSql.ServiceRequestsApiPostgreSqlTests.Analyze_OverHttp_ExecutesWorkflow_PersistsAnalysis_AndReturnsSafeDto"
+    /// </summary>
     [Fact]
     public async Task Analyze_OverHttp_ExecutesWorkflow_PersistsAnalysis_AndReturnsSafeDto()
     {
@@ -164,6 +202,13 @@ public class ServiceRequestsApiPostgreSqlTests : IClassFixture<PostgreSqlAssistL
         Assert.Equal(ServiceRequestStatus.ReadyForMatching, finalInDb.Status);
     }
 
+    /// <summary>
+    /// Purpose: Checks that ambiguous descriptions yield AwaitingInformation status and follow-up questions in PostgreSQL.
+    /// Why: Guarantees ambiguous issues are prevented from progressing to provider matching in the real database.
+    /// Scenario: Customer posts ambiguous "refrigerator" description and triggers analysis.
+    /// Pass condition: Status is AwaitingInformation in HTTP response and PostgreSQL, NeedsMoreInformation is True, follow-up questions populated.
+    /// Run from repository root: dotnet test backend/AssistLK.sln --filter "FullyQualifiedName=AssistLK.Api.Tests.PostgreSql.ServiceRequestsApiPostgreSqlTests.AmbiguousRefrigeratorRequest_OverHttp_ReturnsAwaitingInformation_WithQuestions"
+    /// </summary>
     [Fact]
     public async Task AmbiguousRefrigeratorRequest_OverHttp_ReturnsAwaitingInformation_WithQuestions()
     {
@@ -199,6 +244,13 @@ public class ServiceRequestsApiPostgreSqlTests : IClassFixture<PostgreSqlAssistL
         Assert.Equal(ServiceRequestStatus.AwaitingInformation, req.Status);
     }
 
+    /// <summary>
+    /// Purpose: Checks submitting clarification answers via HTTP, verifying they persist in PostgreSQL and restore on GET.
+    /// Why: Ensures customer answers are durably stored in the relational schema and accurately returned in detail projections.
+    /// Scenario: Ambiguous request analyzed -> GET details -> Submit answers payload -> GET details reloaded.
+    /// Pass condition: HTTP 200 OK on submission, answered questions returned, and reload GET confirms answers are persisted in PostgreSQL.
+    /// Run from repository root: dotnet test backend/AssistLK.sln --filter "FullyQualifiedName=AssistLK.Api.Tests.PostgreSql.ServiceRequestsApiPostgreSqlTests.SubmitClarificationAnswers_OverHttp_PersistsInPostgreSql_AndRestoresOnGet"
+    /// </summary>
     [Fact]
     public async Task SubmitClarificationAnswers_OverHttp_PersistsInPostgreSql_AndRestoresOnGet()
     {

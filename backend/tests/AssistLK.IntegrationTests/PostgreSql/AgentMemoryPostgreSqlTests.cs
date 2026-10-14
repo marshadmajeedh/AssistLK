@@ -8,6 +8,23 @@ using Microsoft.EntityFrameworkCore;
 
 namespace AssistLK.IntegrationTests.PostgreSql;
 
+// =========================================================================================
+// Class: AgentMemoryPostgreSqlTests
+// What this class tests:
+//   PostgreSQL persistence and update semantics for AgentMemoryService and AgentWorkflow memory.
+// Why these tests are needed:
+//   Validates that agent semantic memory keys (category, summary, urgency, confidence, location)
+//   persist across separate database contexts, internal LLM Chain of Thought (CoT) strings
+//   are omitted, and updating an existing key updates in-place without duplicate rows.
+// What is real vs mocked/faked:
+//   - REAL: Live PostgreSQL database, EF Core database tables, and AgentMemoryService.
+//   - MOCKED: None.
+// Prerequisites:
+//   A running PostgreSQL database instance configured via ASSISTLK_TEST_POSTGRESQL_CONNECTION,
+//   ConnectionStrings__TestConnection, or local User Secrets.
+// Run from repository root:
+//   dotnet test backend/AssistLK.sln --filter "FullyQualifiedName~AssistLK.IntegrationTests.PostgreSql.AgentMemoryPostgreSqlTests"
+// =========================================================================================
 public class AgentMemoryPostgreSqlTests : PostgreSqlIntegrationTestBase
 {
     public AgentMemoryPostgreSqlTests(PostgreSqlTestFixture fixture)
@@ -33,6 +50,11 @@ public class AgentMemoryPostgreSqlTests : PostgreSqlIntegrationTestBase
         return workflow;
     }
 
+    // Purpose: Verifies that all 8 standardized semantic memory keys persist in PostgreSQL and contain no internal CoT reasoning keys.
+    // Why: Downstream agents read these exact 8 keys from workflow memory; privacy and security rules mandate omitting internal LLM thoughts.
+    // Scenario: Saves 8 semantic memory keys in one DbContext scope and reads them back in a second distinct DbContext.
+    // Pass condition: Exactly 8 keys exist with expected values, JSON arrays/dictionaries deserialize accurately, and no keys contain "thought", "reasoning", or "cot".
+    // Run from repository root: dotnet test backend/AssistLK.sln --filter "FullyQualifiedName=AssistLK.IntegrationTests.PostgreSql.AgentMemoryPostgreSqlTests.AgentMemory_Persists8SemanticMemoryKeys_AcrossContextDisposal_InPostgreSql"
     [Fact]
     public async Task AgentMemory_Persists8SemanticMemoryKeys_AcrossContextDisposal_InPostgreSql()
     {
@@ -102,6 +124,11 @@ public class AgentMemoryPostgreSqlTests : PostgreSqlIntegrationTestBase
         }
     }
 
+    // Purpose: Verifies that updating an existing key (problem.confidence) updates the value in-place in PostgreSQL rather than inserting duplicate rows.
+    // Why: Ensures workflow memory behaves as a true key-value store per workflow ID and prevents database row bloat.
+    // Scenario: Saves confidence "0.40", then updates it to "0.95" in a separate DbContext.
+    // Pass condition: GetAllAsync returns exactly 1 memory item with updated value "0.95".
+    // Run from repository root: dotnet test backend/AssistLK.sln --filter "FullyQualifiedName=AssistLK.IntegrationTests.PostgreSql.AgentMemoryPostgreSqlTests.AgentMemory_UpdatesExistingKey_WithoutDuplication_InPostgreSql"
     [Fact]
     public async Task AgentMemory_UpdatesExistingKey_WithoutDuplication_InPostgreSql()
     {

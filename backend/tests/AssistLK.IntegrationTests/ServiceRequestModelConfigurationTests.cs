@@ -7,8 +7,31 @@ using Microsoft.EntityFrameworkCore.Metadata;
 
 namespace AssistLK.IntegrationTests;
 
+/// <summary>
+/// What this class tests:
+///   Entity Framework Core database model configuration for ServiceRequest, covering table mapping, property nullability/lengths, coordinate precision (9,6), enum converters, indexes, User foreign key, and database check constraints.
+/// Why these tests are needed:
+///   Verifies schema integrity at design-time without connecting to a live database, ensuring migrations and database check constraints (CK_ServiceRequests_Latitude, CK_ServiceRequests_Longitude, CK_ServiceRequests_Status_Valid) stay strictly in sync with domain rules.
+/// What is real and what is mocked/faked:
+///   - Real: EF Core Npgsql model metadata (IDesignTimeModel).
+///   - Mocked/Faked: None. No live database connection is opened; schema is inspected in-memory.
+/// Prerequisites:
+///   None. Runs in-memory.
+/// Run from repository root:
+///   dotnet test backend/AssistLK.sln --filter "FullyQualifiedName~AssistLK.IntegrationTests.ServiceRequestModelConfigurationTests"
+/// </summary>
 public class ServiceRequestModelConfigurationTests
 {
+    private static readonly IEntityType EntityType = CreateModel()
+        .FindEntityType(typeof(ServiceRequest))!;
+
+    /// <summary>
+    /// Purpose: Checks that LocationSource defaults to Manual, is stored as a string, and confirms no redundant granular address columns exist.
+    /// Why: Verifies the lightweight address approach (single location text + coordinates + source) rather than unnecessary multi-column address schema.
+    /// Scenario: Inspects LocationSource property configuration and verifies absence of street/neighborhood/city/GooglePlaceId properties.
+    /// Pass condition: LocationSource is non-nullable, defaults to Manual, converts to string, and structured address columns are null.
+    /// Run from repository root: dotnet test backend/AssistLK.sln --filter "FullyQualifiedName=AssistLK.IntegrationTests.ServiceRequestModelConfigurationTests.LocationSource_DefaultsToManual_WithoutStructuredAddressColumns"
+    /// </summary>
     [Fact]
     public void LocationSource_DefaultsToManual_WithoutStructuredAddressColumns()
     {
@@ -21,9 +44,13 @@ public class ServiceRequestModelConfigurationTests
             Assert.Null(EntityType.FindProperty(name));
     }
 
-    private static readonly IEntityType EntityType = CreateModel()
-        .FindEntityType(typeof(ServiceRequest))!;
-
+    /// <summary>
+    /// Purpose: Checks that ServiceRequest maps to "ServiceRequests" table with precise column types, string lengths, coordinate precision (9,6), and enum string converters.
+    /// Why: Ensures data integrity in PostgreSQL for geospatial coordinates and status strings.
+    /// Scenario: Inspects EntityType properties for CustomerId, Category, Description, LocationText, Latitude, Longitude, Urgency, Status.
+    /// Pass condition: Table name is "ServiceRequests", description is "text", location text max length is 255, coordinates have precision 9 scale 6, and enums map to string.
+    /// Run from repository root: dotnet test backend/AssistLK.sln --filter "FullyQualifiedName=AssistLK.IntegrationTests.ServiceRequestModelConfigurationTests.ServiceRequest_IsMappedToTheExpectedTableAndProperties"
+    /// </summary>
     [Fact]
     public void ServiceRequest_IsMappedToTheExpectedTableAndProperties()
     {
@@ -54,6 +81,13 @@ public class ServiceRequestModelConfigurationTests
         Assert.Equal(typeof(string), status.GetTypeMapping().Converter!.ProviderClrType);
     }
 
+    /// <summary>
+    /// Purpose: Checks that CategoryHint is optional (nullable), max length 100, and does not alter the non-nullable Category column.
+    /// Why: Verifies that customer category suggestions are optional hints while verified Category remains a mandatory database column.
+    /// Scenario: Inspects CategoryHint and Category property metadata on EntityType.
+    /// Pass condition: CategoryHint is nullable with max length 100 and no default; Category is non-nullable with max length 100.
+    /// Run from repository root: dotnet test backend/AssistLK.sln --filter "FullyQualifiedName=AssistLK.IntegrationTests.ServiceRequestModelConfigurationTests.ServiceRequest_CategoryHint_IsConfiguredAsOptionalWithExpectedMaxLength"
+    /// </summary>
     [Fact]
     public void ServiceRequest_CategoryHint_IsConfiguredAsOptionalWithExpectedMaxLength()
     {
@@ -71,6 +105,13 @@ public class ServiceRequestModelConfigurationTests
         Assert.Equal(100, category.GetMaxLength());
     }
 
+    /// <summary>
+    /// Purpose: Checks that indexes on CustomerId and Status exist, and that a foreign key links CustomerId to User.Id with DeleteBehavior.Restrict.
+    /// Why: Speeds up customer and status queries and prevents accidental cascading deletion of customer records.
+    /// Scenario: Inspects EntityType indexes and foreign keys.
+    /// Pass condition: Indexes exist for CustomerId and Status; foreign key references User.Id with Restrict delete behavior.
+    /// Run from repository root: dotnet test backend/AssistLK.sln --filter "FullyQualifiedName=AssistLK.IntegrationTests.ServiceRequestModelConfigurationTests.ServiceRequest_HasTheExpectedIndexesAndCustomerRelationship"
+    /// </summary>
     [Fact]
     public void ServiceRequest_HasTheExpectedIndexesAndCustomerRelationship()
     {
@@ -91,6 +132,13 @@ public class ServiceRequestModelConfigurationTests
         Assert.Equal(DeleteBehavior.Restrict, foreignKey.DeleteBehavior);
     }
 
+    /// <summary>
+    /// Purpose: Checks that database check constraints enforce valid Latitude (-90 to 90), Longitude (-180 to 180), and valid Status values.
+    /// Why: Protects the database at the engine level from out-of-range coordinates or illegal status transitions.
+    /// Scenario: Inspects check constraints collection on EntityType.
+    /// Pass condition: Contains Latitude, Longitude, and Status_Valid check constraints with all 6 status strings in the SQL expression.
+    /// Run from repository root: dotnet test backend/AssistLK.sln --filter "FullyQualifiedName=AssistLK.IntegrationTests.ServiceRequestModelConfigurationTests.ServiceRequest_HasTheExpectedCheckConstraints"
+    /// </summary>
     [Fact]
     public void ServiceRequest_HasTheExpectedCheckConstraints()
     {

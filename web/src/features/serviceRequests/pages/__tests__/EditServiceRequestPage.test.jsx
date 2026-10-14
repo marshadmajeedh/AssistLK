@@ -1,3 +1,18 @@
+// What this suite tests:
+//   The EditServiceRequestPage React page component where customers modify an existing service request,
+//   verifying data pre-population, lifecycle status guardrails (editable only in Created and AwaitingInformation),
+//   read-only lockout for Analyzed/Cancelled states, and validation before update submission.
+// Why these tests are needed:
+//   Enforces business rules preventing customers from altering requests that have already been
+//   analyzed or cancelled, while allowing refinements during early creation and clarification phases.
+// What is real and what is mocked/faked:
+//   - Real: EditServiceRequestPage component rendered with MemoryRouter and React Router route params.
+//   - Mocked/Faked: serviceRequestService (getById, update) and useNavigate are mocked using Vitest vi.fn().
+// Prerequisites:
+//   Node.js dependencies installed in web folder (npm install).
+// Run from repository root:
+//   npm --prefix web test -- src/features/serviceRequests/pages/__tests__/EditServiceRequestPage.test.jsx
+
 import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { MemoryRouter, Routes, Route } from "react-router-dom";
@@ -39,6 +54,12 @@ describe("EditServiceRequestPage", () => {
     vi.clearAllMocks();
   });
 
+  // Purpose: Checks that existing description, location, and GPS coordinates are pre-filled in form inputs for a Created request.
+  // Why: Ensures customers see their previously saved request details when editing.
+  // Scenario: Loading an existing request in Created status with coordinates (6.9271, 79.8612).
+  // Pass condition: Text inputs contain original values and persisted GPS badge is displayed.
+  // Run from repository root:
+  //   npm --prefix web test -- src/features/serviceRequests/pages/__tests__/EditServiceRequestPage.test.jsx -t "renders form prepopulated with persisted description, location, and GPS for Created status"
   it("renders form prepopulated with persisted description, location, and GPS for Created status", async () => {
     serviceRequestService.getById.mockResolvedValueOnce({
       serviceRequestId: "req-100",
@@ -68,6 +89,12 @@ describe("EditServiceRequestPage", () => {
     expect(screen.getByText(/79\.86120/)).toBeInTheDocument();
   });
 
+  // Purpose: Checks that a service request in AwaitingInformation status allows editing of its details.
+  // Why: When the AI agent asks for clarification, the customer must be able to revise their problem description.
+  // Scenario: Loading a request with status "AwaitingInformation".
+  // Pass condition: Edit form renders with description input accessible and pre-filled.
+  // Run from repository root:
+  //   npm --prefix web test -- src/features/serviceRequests/pages/__tests__/EditServiceRequestPage.test.jsx -t "allows editing when status is AwaitingInformation"
   it("allows editing when status is AwaitingInformation", async () => {
     serviceRequestService.getById.mockResolvedValueOnce({
       serviceRequestId: "req-100",
@@ -90,6 +117,12 @@ describe("EditServiceRequestPage", () => {
     );
   });
 
+  // Purpose: Checks that editing is blocked and a lock message is shown when the request is already in Analyzed status.
+  // Why: Once the AI problem analysis is complete, description edits are disabled to prevent stale analysis results.
+  // Scenario: Loading a request with status "Analyzed".
+  // Pass condition: "Request not editable" heading displays and "Save Changes" button is not rendered.
+  // Run from repository root:
+  //   npm --prefix web test -- src/features/serviceRequests/pages/__tests__/EditServiceRequestPage.test.jsx -t "blocks editing when status is Analyzed"
   it("blocks editing when status is Analyzed", async () => {
     serviceRequestService.getById.mockResolvedValueOnce({
       serviceRequestId: "req-100",
@@ -115,6 +148,12 @@ describe("EditServiceRequestPage", () => {
     ).not.toBeInTheDocument();
   });
 
+  // Purpose: Checks that editing is blocked when the service request has been Cancelled.
+  // Why: Terminal states like Cancelled are immutable and cannot be re-opened via the edit form.
+  // Scenario: Loading a request with status "Cancelled".
+  // Pass condition: "Request not editable" heading is displayed and save button is absent.
+  // Run from repository root:
+  //   npm --prefix web test -- src/features/serviceRequests/pages/__tests__/EditServiceRequestPage.test.jsx -t "blocks editing when status is Cancelled"
   it("blocks editing when status is Cancelled", async () => {
     serviceRequestService.getById.mockResolvedValueOnce({
       serviceRequestId: "req-100",
@@ -133,6 +172,12 @@ describe("EditServiceRequestPage", () => {
     ).not.toBeInTheDocument();
   });
 
+  // Purpose: Checks that clearing input fields and submitting is rejected by client-side validation.
+  // Why: Prevents submitting blank descriptions or blank location text during updates.
+  // Scenario: User clears pre-populated inputs and clicks "Save Changes".
+  // Pass condition: Validation error strings appear and serviceRequestService.update is not called.
+  // Run from repository root:
+  //   npm --prefix web test -- src/features/serviceRequests/pages/__tests__/EditServiceRequestPage.test.jsx -t "rejects blank inputs during validation"
   it("rejects blank inputs during validation", async () => {
     const user = userEvent.setup();
     serviceRequestService.getById.mockResolvedValueOnce({
@@ -162,6 +207,12 @@ describe("EditServiceRequestPage", () => {
     expect(serviceRequestService.update).not.toHaveBeenCalled();
   });
 
+  // Purpose: Checks that submitting an update sends only allowed editable fields (description, locationText, latitude, longitude) and navigates to the details page.
+  // Why: Prevents the client from modifying category, urgency, or customer ownership during edits.
+  // Scenario: User enters new description and location details and clicks "Save Changes".
+  // Pass condition: serviceRequestService.update is called with { description, locationText, latitude, longitude } and mockNavigate routes to "/service-requests/req-100".
+  // Run from repository root:
+  //   npm --prefix web test -- src/features/serviceRequests/pages/__tests__/EditServiceRequestPage.test.jsx -t "submits only allowed payload fields on valid update"
   it("submits only allowed payload fields on valid update", async () => {
     const user = userEvent.setup();
     serviceRequestService.getById.mockResolvedValueOnce({

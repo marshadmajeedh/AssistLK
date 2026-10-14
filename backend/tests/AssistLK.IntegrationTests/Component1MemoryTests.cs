@@ -9,6 +9,19 @@ using Microsoft.EntityFrameworkCore;
 
 namespace AssistLK.IntegrationTests;
 
+/// <summary>
+/// What this class tests:
+///   Semantic agent memory storage, privacy/safety constraints (excluding chain-of-thought), key deduplication, workflow isolation, and context memory loading in Component 1.
+/// Why these tests are needed:
+///   Ensures agent execution states are reliably saved across workflow turns while preventing sensitive reasoning traces from being leaked into persistence.
+/// What is real and what is mocked/faked:
+///   - Real: AgentMemoryService and AgentContextService running against an EF Core In-Memory database (AssistLKDbContext).
+///   - Mocked/Faked: None. Uses real services and in-memory EF Core.
+/// Prerequisites:
+///   None. Runs completely in-memory without external services or network calls.
+/// Run from repository root:
+///   dotnet test backend/AssistLK.sln --filter "FullyQualifiedName~AssistLK.IntegrationTests.Component1MemoryTests"
+/// </summary>
 public class Component1MemoryTests
 {
     private static AssistLKDbContext CreateInMemoryDb()
@@ -19,6 +32,13 @@ public class Component1MemoryTests
         return new AssistLKDbContext(options);
     }
 
+    /// <summary>
+    /// Purpose: Checks that all 8 standardized semantic memory keys are persisted with correct source attribution.
+    /// Why: Verifies complete semantic memory capture for downstream agent stages and audits.
+    /// Scenario: Saves category, summary, urgency, confidence, needs_more_information, follow_up_questions, location, and additional_info.
+    /// Pass condition: Stored count equals 8, all 8 expected keys exist, and SourceAgent equals "ProblemUnderstandingAgent".
+    /// Run from repository root: dotnet test backend/AssistLK.sln --filter "FullyQualifiedName=AssistLK.IntegrationTests.Component1MemoryTests.AgentMemoryService_StoresAll8SemanticMemoryKeys"
+    /// </summary>
     [Fact]
     public async Task AgentMemoryService_StoresAll8SemanticMemoryKeys()
     {
@@ -70,6 +90,13 @@ public class Component1MemoryTests
         }
     }
 
+    /// <summary>
+    /// Purpose: Checks that private chain-of-thought (CoT), internal thoughts, or rationale keys are never written to agent memory.
+    /// Why: Protects system prompts, model reasoning traces, and token costs from unintended persistence or leakage.
+    /// Scenario: Saves problem memory and verifies key names for reasoning, thought, cot, internal, rationale.
+    /// Pass condition: Stored keys collection contains no matches for forbidden reasoning tokens.
+    /// Run from repository root: dotnet test backend/AssistLK.sln --filter "FullyQualifiedName=AssistLK.IntegrationTests.Component1MemoryTests.AgentMemory_DoesNotStoreChainOfThoughtOrInternalReasoningKeys"
+    /// </summary>
     [Fact]
     public async Task AgentMemory_DoesNotStoreChainOfThoughtOrInternalReasoningKeys()
     {
@@ -90,6 +117,13 @@ public class Component1MemoryTests
         Assert.DoesNotContain(keys, k => k.Contains("rationale"));
     }
 
+    /// <summary>
+    /// Purpose: Checks that follow-up questions are serialized and retrieved as valid JSON arrays.
+    /// Why: Ensures structured question lists are deserializable by mobile/web frontends and subsequent agent turns.
+    /// Scenario: Stores JSON serialized string array with 2 questions and deserializes it back.
+    /// Pass condition: Retrieved string deserializes to a 2-element array matching original questions.
+    /// Run from repository root: dotnet test backend/AssistLK.sln --filter "FullyQualifiedName=AssistLK.IntegrationTests.Component1MemoryTests.AgentMemory_FollowUpQuestionsAreStoredAsValidJsonArray"
+    /// </summary>
     [Fact]
     public async Task AgentMemory_FollowUpQuestionsAreStoredAsValidJsonArray()
     {
@@ -111,6 +145,13 @@ public class Component1MemoryTests
         Assert.Equal("Which room is affected?", deserialized[0]);
     }
 
+    /// <summary>
+    /// Purpose: Checks that AgentContextService loads persisted memory entries into the agent's in-memory dictionary.
+    /// Why: Gives agents context from prior turns or previous workflow steps during execution.
+    /// Scenario: Pre-populates 2 memory keys in DB, then calls LoadMemoryAsync on AgentContext.
+    /// Pass condition: Context Memory dictionary contains both keys with exact matching values.
+    /// Run from repository root: dotnet test backend/AssistLK.sln --filter "FullyQualifiedName=AssistLK.IntegrationTests.Component1MemoryTests.AgentContextService_LoadMemoryAsync_PopulatesContextMemoryDictionary"
+    /// </summary>
     [Fact]
     public async Task AgentContextService_LoadMemoryAsync_PopulatesContextMemoryDictionary()
     {
@@ -135,6 +176,13 @@ public class Component1MemoryTests
         Assert.Equal("High", context.Memory["problem.urgency"]);
     }
 
+    /// <summary>
+    /// Purpose: Checks that saving an existing memory key updates its value in-place instead of creating duplicate records.
+    /// Why: Prevents database bloat and ensures queries retrieve the latest updated confidence or category value.
+    /// Scenario: Saves confidence "0.4", then saves "0.85" with the same key for the same workflow.
+    /// Pass condition: DB contains a single record whose Value equals "0.85".
+    /// Run from repository root: dotnet test backend/AssistLK.sln --filter "FullyQualifiedName=AssistLK.IntegrationTests.Component1MemoryTests.AgentMemoryService_SaveAsync_UpdatesExistingEntryInsteadOfDuplicating"
+    /// </summary>
     [Fact]
     public async Task AgentMemoryService_SaveAsync_UpdatesExistingEntryInsteadOfDuplicating()
     {
@@ -152,6 +200,13 @@ public class Component1MemoryTests
         Assert.Equal("0.85", entry.Value);
     }
 
+    /// <summary>
+    /// Purpose: Checks that memory entries are strictly isolated by WorkflowId.
+    /// Why: Multi-tenant safety: guarantees data from one service request workflow never leaks to another.
+    /// Scenario: Two workflows save different values for "problem.category" ("Plumbing" vs "Electrical").
+    /// Pass condition: Querying workflow 1 returns "Plumbing" and workflow 2 returns "Electrical".
+    /// Run from repository root: dotnet test backend/AssistLK.sln --filter "FullyQualifiedName=AssistLK.IntegrationTests.Component1MemoryTests.AgentMemoryService_IsolatedByWorkflowId"
+    /// </summary>
     [Fact]
     public async Task AgentMemoryService_IsolatedByWorkflowId()
     {

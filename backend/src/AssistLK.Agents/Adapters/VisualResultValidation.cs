@@ -49,7 +49,7 @@ internal static class VisualResultValidation
         };
     }
 
-    private static bool SafeText(string? text, IReadOnlyList<VisualEvidencePayloadDto> supplied, int maxLength)
+    internal static bool SafeText(string? text, IReadOnlyList<VisualEvidencePayloadDto> supplied, int maxLength)
         => !string.IsNullOrWhiteSpace(text) && text.Length <= maxLength && !Payload.IsMatch(text)
             && !Forbidden.Any(term => text.Contains(term, StringComparison.OrdinalIgnoreCase))
             && !supplied.Any(image => text.Contains(image.DataBase64, StringComparison.Ordinal));

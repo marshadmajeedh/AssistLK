@@ -13,8 +13,31 @@ using Microsoft.Extensions.Logging.Abstractions;
 
 namespace AssistLK.IntegrationTests;
 
+/// <summary>
+/// What this class tests:
+///   Failure handling, error isolation, cancellation tokens, schema validation, and recovery workflows for Component 1 Problem Understanding.
+/// Why these tests are needed:
+///   Guarantees that when external AI services crash, time out, return invalid scores/summaries, or when clients disconnect,
+///   service requests cleanly revert to their pre-analysis state (Created or AwaitingInformation) instead of becoming stuck in 'Analyzing'.
+/// What is real and what is mocked/faked:
+///   - Real: AgentWorkflowService, AgentMemoryService, AgentContextService, AgentMonitoringService, AgentSafetyService,
+///     ProblemUnderstandingWorkflowService, ToolRegistry, and ToolExecutor backed by EF Core In-Memory database.
+///   - Mocked/Faked: Agent adapters (FaultyAgent, ThrowingAgent, CancellingAgent, DisconnectingAgent, MidExecutionCancellingAgent)
+///     and in-memory repositories (InMemoryServiceRequestRepository, InMemoryProblemAnalysisRepository).
+/// Prerequisites:
+///   None. Runs completely in-memory without external services or network calls.
+/// Run from repository root:
+///   dotnet test backend/AssistLK.sln --filter "FullyQualifiedName~AssistLK.IntegrationTests.Component1FailureTests"
+/// </summary>
 public class Component1FailureTests
 {
+    /// <summary>
+    /// Purpose: Checks that invoking a non-registered tool name returns a tool-not-found error result.
+    /// Why: Prevents crashes when an LLM agent hallucinates or calls an unrecognised tool function.
+    /// Scenario: ToolExecutor executes "NonExistentTool" against an empty ToolRegistry.
+    /// Pass condition: Success is false, ErrorCode is "TOOL_NOT_FOUND", and message contains "not found".
+    /// Run from repository root: dotnet test backend/AssistLK.sln --filter "FullyQualifiedName=AssistLK.IntegrationTests.Component1FailureTests.ToolExecutor_UnknownTool_ReturnsToolNotFoundResult"
+    /// </summary>
     [Fact]
     public async Task ToolExecutor_UnknownTool_ReturnsToolNotFoundResult()
     {
@@ -28,6 +51,13 @@ public class Component1FailureTests
         Assert.Contains("not found", result.Message);
     }
 
+    /// <summary>
+    /// Purpose: Checks that agent output with an out-of-range confidence score (> 1.0) is rejected and not saved.
+    /// Why: Protects the database against invalid machine learning confidence scores and rolls back request status.
+    /// Scenario: FaultyAgent returns confidence = 1.5m for a newly created request.
+    /// Pass condition: Workflow fails, error mentions confidence, no ProblemAnalysis is saved, and status resets to Created.
+    /// Run from repository root: dotnet test backend/AssistLK.sln --filter "FullyQualifiedName=AssistLK.IntegrationTests.Component1FailureTests.Workflow_RejectsInvalidConfidenceScoreWithoutPersistingAnalysis"
+    /// </summary>
     [Fact]
     public async Task Workflow_RejectsInvalidConfidenceScoreWithoutPersistingAnalysis()
     {
@@ -109,6 +139,13 @@ public class Component1FailureTests
         Assert.Equal(ServiceRequestStatus.Created, requests.Single().Status);
     }
 
+    /// <summary>
+    /// Purpose: Checks that agent output with an empty or whitespace summary is rejected and not saved.
+    /// Why: Ensures meaningless or blank problem descriptions from LLMs are never committed to the database.
+    /// Scenario: FaultyAgent returns whitespace ProblemSummary ("   ").
+    /// Pass condition: Workflow fails, no ProblemAnalysis is saved, and request status resets to Created.
+    /// Run from repository root: dotnet test backend/AssistLK.sln --filter "FullyQualifiedName=AssistLK.IntegrationTests.Component1FailureTests.Workflow_RejectsEmptySummaryWithoutPersistingAnalysis"
+    /// </summary>
     [Fact]
     public async Task Workflow_RejectsEmptySummaryWithoutPersistingAnalysis()
     {
@@ -176,6 +213,13 @@ public class Component1FailureTests
         Assert.Equal(ServiceRequestStatus.Created, requests.Single().Status);
     }
 
+    /// <summary>
+    /// Purpose: Checks that running problem analysis for a non-existent service request ID fails gracefully without an unhandled exception.
+    /// Why: Prevents unhandled server exceptions when a workflow is triggered for a deleted or invalid request ID.
+    /// Scenario: Analysis is started with a random Guid not present in the repository.
+    /// Pass condition: Result success is false, outcome is "Failed", and error message contains "not found".
+    /// Run from repository root: dotnet test backend/AssistLK.sln --filter "FullyQualifiedName=AssistLK.IntegrationTests.Component1FailureTests.Workflow_NonExistentServiceRequestId_FailsGracefully"
+    /// </summary>
     [Fact]
     public async Task Workflow_NonExistentServiceRequestId_FailsGracefully()
     {
@@ -228,6 +272,13 @@ public class Component1FailureTests
         Assert.Contains("not found", result.ErrorMessage?.ToLowerInvariant() ?? "");
     }
 
+    /// <summary>
+    /// Purpose: Checks that a newly created request transitioning to Analyzing recovers back to Created when the agent throws an exception.
+    /// Why: Ensures customers can re-attempt analysis if an external AI provider crashes during initial submission.
+    /// Scenario: ThrowingAgent throws InvalidOperationException ("External AI service crashed").
+    /// Pass condition: Result fails with the exception message, request status recovers to Created, and metric is recorded as Failed.
+    /// Run from repository root: dotnet test backend/AssistLK.sln --filter "FullyQualifiedName=AssistLK.IntegrationTests.Component1FailureTests.Workflow_CreatedToAnalyzing_OnFailure_RecoversToCreated"
+    /// </summary>
     [Fact]
     public async Task Workflow_CreatedToAnalyzing_OnFailure_RecoversToCreated()
     {
@@ -297,6 +348,13 @@ public class Component1FailureTests
         Assert.Equal("Failed", metric.Status);
     }
 
+    /// <summary>
+    /// Purpose: Checks that a clarification request transitioning to Analyzing recovers back to AwaitingInformation on agent failure.
+    /// Why: Preserves customer clarification context instead of resetting the request to Created when follow-up analysis times out.
+    /// Scenario: ThrowingAgent throws TimeoutException during clarification re-analysis.
+    /// Pass condition: Result fails, request status recovers to AwaitingInformation, and no analysis is saved.
+    /// Run from repository root: dotnet test backend/AssistLK.sln --filter "FullyQualifiedName=AssistLK.IntegrationTests.Component1FailureTests.Workflow_AwaitingInformationToAnalyzing_OnFailure_RecoversToAwaitingInformation"
+    /// </summary>
     [Fact]
     public async Task Workflow_AwaitingInformationToAnalyzing_OnFailure_RecoversToAwaitingInformation()
     {
@@ -361,6 +419,13 @@ public class Component1FailureTests
         Assert.Equal("Failed", wf.Status);
     }
 
+    /// <summary>
+    /// Purpose: Checks that cancelling the cancellation token before or during analysis cleanly recovers request status.
+    /// Why: Handles client-side HTTP request cancellations or API gateway timeouts without leaving the request stuck in Analyzing.
+    /// Scenario: CancellationTokenSource is pre-cancelled before calling AnalyzeAsync.
+    /// Pass condition: Result fails, workflow records Failed, and request status recovers to Created.
+    /// Run from repository root: dotnet test backend/AssistLK.sln --filter "FullyQualifiedName=AssistLK.IntegrationTests.Component1FailureTests.Workflow_CancellationDuringAnalysis_RecoversStateSuccessfully"
+    /// </summary>
     [Fact]
     public async Task Workflow_CancellationDuringAnalysis_RecoversStateSuccessfully()
     {
@@ -430,6 +495,13 @@ public class Component1FailureTests
         Assert.Equal("Failed", wf.Status);
     }
 
+    /// <summary>
+    /// Purpose: Checks that if agent analysis finishes successfully just as the HTTP client disconnects, the analysis result is safely persisted.
+    /// Why: Prevents throwing away expensive AI reasoning work when an end-user navigates away or disconnects at the final moment.
+    /// Scenario: DisconnectingAgent cancels the client token immediately as agent reasoning finishes.
+    /// Pass condition: Result succeeds with "Analyzed", status is Analyzed, and ProblemAnalysis entity is safely saved.
+    /// Run from repository root: dotnet test backend/AssistLK.sln --filter "FullyQualifiedName=AssistLK.IntegrationTests.Component1FailureTests.Workflow_CompletedAnalysis_PersistsSafely_EvenIfClientDisconnects"
+    /// </summary>
     [Fact]
     public async Task Workflow_CompletedAnalysis_PersistsSafely_EvenIfClientDisconnects()
     {
@@ -510,6 +582,13 @@ public class Component1FailureTests
         Assert.Equal("Completed", wf.Status);
     }
 
+    /// <summary>
+    /// Purpose: Checks baseline positive workflow execution without any failure or cancellation.
+    /// Why: Verifies that failure recovery wrappers do not interfere with normal happy-path analysis completion.
+    /// Scenario: FaultyAgent configured with valid electrical problem analysis output.
+    /// Pass condition: Result succeeds with "Analyzed", request status is Analyzed, and Category is set to "Electrical".
+    /// Run from repository root: dotnet test backend/AssistLK.sln --filter "FullyQualifiedName=AssistLK.IntegrationTests.Component1FailureTests.Workflow_SuccessfulAnalysis_BehaviorRemainsUnchanged"
+    /// </summary>
     [Fact]
     public async Task Workflow_SuccessfulAnalysis_BehaviorRemainsUnchanged()
     {
@@ -587,6 +666,13 @@ public class Component1FailureTests
         Assert.Equal("Completed", metric.Status);
     }
 
+    /// <summary>
+    /// Purpose: Checks that cancellation triggered mid-way through agent execution recovers a Created request back to Created.
+    /// Why: Simulates an abort signal arriving while the agent is executing tools or calling LLM APIs after the request entered Analyzing status.
+    /// Scenario: MidExecutionCancellingAgent cancels the token during agent execution.
+    /// Pass condition: Result fails, request status recovers from Analyzing back to Created, and metric is recorded as Failed.
+    /// Run from repository root: dotnet test backend/AssistLK.sln --filter "FullyQualifiedName=AssistLK.IntegrationTests.Component1FailureTests.Workflow_MidExecutionCancellation_AfterBeginAnalysis_RecoversToCreated"
+    /// </summary>
     [Fact]
     public async Task Workflow_MidExecutionCancellation_AfterBeginAnalysis_RecoversToCreated()
     {
@@ -658,6 +744,13 @@ public class Component1FailureTests
         Assert.Equal("Failed", metric.Status);
     }
 
+    /// <summary>
+    /// Purpose: Checks that mid-execution cancellation during clarification recovers the request back to AwaitingInformation.
+    /// Why: Ensures cancellation during clarification does not demote the request backwards to Created.
+    /// Scenario: MidExecutionCancellingAgent cancels the token during re-analysis of an AwaitingInformation request.
+    /// Pass condition: Result fails, request status recovers from Analyzing back to AwaitingInformation.
+    /// Run from repository root: dotnet test backend/AssistLK.sln --filter "FullyQualifiedName=AssistLK.IntegrationTests.Component1FailureTests.Workflow_MidExecutionCancellation_WhenAwaitingInformation_RecoversToAwaitingInformation"
+    /// </summary>
     [Fact]
     public async Task Workflow_MidExecutionCancellation_WhenAwaitingInformation_RecoversToAwaitingInformation()
     {
@@ -729,6 +822,13 @@ public class Component1FailureTests
         Assert.Equal("Failed", metric.Status);
     }
 
+    /// <summary>
+    /// Purpose: Checks that when an agent requests more info, the workflow transitions request status to AwaitingInformation with follow-up questions.
+    /// Why: Verifies the multi-turn clarification flow properly prompts the customer for missing details.
+    /// Scenario: Agent output sets NeedsMoreInformation = true with 2 follow-up questions.
+    /// Pass condition: Outcome is "AwaitingInformation", status is AwaitingInformation, and follow-up questions are populated.
+    /// Run from repository root: dotnet test backend/AssistLK.sln --filter "FullyQualifiedName=AssistLK.IntegrationTests.Component1FailureTests.Workflow_SuccessfulAnalysis_WithClarifications_TransitionsToAwaitingInformation"
+    /// </summary>
     [Fact]
     public async Task Workflow_SuccessfulAnalysis_WithClarifications_TransitionsToAwaitingInformation()
     {
@@ -812,6 +912,13 @@ public class Component1FailureTests
         Assert.Equal("Completed", metric.Status);
     }
 
+    /// <summary>
+    /// Purpose: Checks that if recovery itself throws an error, the original AI failure exception is preserved and not masked.
+    /// Why: Critical for diagnostic logging so engineers can see the root cause failure instead of a secondary recovery exception.
+    /// Scenario: Agent throws "Original AI processing error" and FaultyRecoveryServiceRequestService throws during recovery.
+    /// Pass condition: Result is Failed and ErrorMessage contains "Original AI processing error".
+    /// Run from repository root: dotnet test backend/AssistLK.sln --filter "FullyQualifiedName=AssistLK.IntegrationTests.Component1FailureTests.Workflow_WhenRecoveryFails_OriginalExceptionIsPreservedAndNotMasked"
+    /// </summary>
     [Fact]
     public async Task Workflow_WhenRecoveryFails_OriginalExceptionIsPreservedAndNotMasked()
     {

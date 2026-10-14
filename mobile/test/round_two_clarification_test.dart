@@ -28,7 +28,43 @@ Map<String, dynamic> requestJson({bool answered = false, bool analyzed = false, 
   }],
 };
 
+/**
+ * TEST SUITE: Round Two Clarification Lifecycle and Limit Enforcement Tests
+ *
+ * 1. What this test suite tests:
+ *    - Verifies boundary conditions for the round 2 clarification limit (`hasCompletedFinalClarificationAnalysis`).
+ *    - Tests that an answered round 2 request only enters the "max rounds reached / Further Details Needed" state after a persisted final analysis has been created.
+ *    - Tests that reloading an answered round 2 request before analysis presents a "Re-analyze" action rather than premature limit guidance.
+ *    - Tests description supersession: if a description edit supersedes questions, limit guidance requires a subsequent analysis created after the supersession timestamp.
+ *    - Tests end-to-end round 2 workflow via Dio interceptors: submitting answers, triggering analysis, refreshing from backend, and displaying either "Analyzed" (sufficient) or "Further Details Needed" (insufficient), verifying that round 3 is never created or displayed.
+ * 2. Why these tests are needed:
+ *    - Component 1 enforces a strict 2-round clarification ceiling. Customers must never be trapped in infinite clarification loops.
+ *      However, premature limit guidance must not block the user from triggering their second-round analysis.
+ * 3. What is real and what is mocked:
+ *    - Real `ClarificationSection` widget, `ServiceRequestModel`, and `ServiceRequestProvider`.
+ *    - Mocked: Dio network client configured with `InterceptorsWrapper` to intercept `/clarifications/answers`, `/analyze`, and GET `/service-requests/{id}`.
+ * 4. Prerequisites: None.
+ * 5. PowerShell command to run this suite from repository root:
+ *    Push-Location mobile; flutter test test/round_two_clarification_test.dart; Pop-Location
+ */
 void main() {
+  /**
+   * Purpose: What this specific test checks
+   * - Verifies the boolean logic of `hasCompletedFinalClarificationAnalysis`.
+   *
+   * Why: Why this scenario matters
+   * - Ensures limit guidance triggers only when round 2 has been both answered AND analyzed by the AI agent.
+   *
+   * Scenario: Input or condition being tested
+   * - Test unanswered, answered without final analysis, answered with final analysis in `AwaitingInformation` status,
+   *   answered with status `Analyzed` (sufficient), and answered with missing `latestAnalysis`.
+   *
+   * Pass condition: What result or assertion makes it pass
+   * - `hasCompletedFinalClarificationAnalysis` is true ONLY when round 2 is answered and followed by a persisted analysis in `AwaitingInformation` status.
+   *
+   * Run from repository root:
+   * Push-Location mobile; flutter test test/round_two_clarification_test.dart --plain-name "answered Round 2 only reaches the limit after persisted final analysis"; Pop-Location
+   */
   test('answered Round 2 only reaches the limit after persisted final analysis', () {
     expect(ServiceRequestModel.fromJson(requestJson()).hasCompletedFinalClarificationAnalysis, isFalse);
     expect(ServiceRequestModel.fromJson(requestJson(answered: true)).hasCompletedFinalClarificationAnalysis, isFalse);
@@ -39,6 +75,22 @@ void main() {
     expect(ServiceRequestModel.fromJson(finalJson).hasCompletedFinalClarificationAnalysis, isFalse);
   });
 
+  /**
+   * Purpose: What this specific test checks
+   * - Verifies that if a user reloads the app after answering round 2 (before analysis has executed), the UI offers "Re-analyze" instead of showing premature "Further Details Needed".
+   *
+   * Why: Why this scenario matters
+   * - Prevents the customer from being stuck in a dead-end UI state if the app was closed during analysis.
+   *
+   * Scenario: Input or condition being tested
+   * - Mount `ClarificationSection` with answered round 2 where `hasCompletedFinalClarificationAnalysis` is false.
+   *
+   * Pass condition: What result or assertion makes it pass
+   * - 'Further Details Needed' is NOT shown; tapping 'Re-analyze' triggers the `onReanalyze` callback.
+   *
+   * Run from repository root:
+   * Push-Location mobile; flutter test test/round_two_clarification_test.dart --plain-name "answered Round 2 after reload offers Re-analyze rather than premature limit guidance"; Pop-Location
+   */
   testWidgets('answered Round 2 after reload offers Re-analyze rather than premature limit guidance', (tester) async {
     var tapped = false;
     final request = ServiceRequestModel.fromJson(requestJson(answered: true));
@@ -52,6 +104,22 @@ void main() {
     expect(tapped, isTrue);
   });
 
+  /**
+   * Purpose: What this specific test checks
+   * - Verifies that when customer description edits supersede questions (`supersededAt`), limit guidance is withheld until a new analysis is performed after the supersession.
+   *
+   * Why: Why this scenario matters
+   * - Editing description provides fresh details that may resolve the problem without exhausting clarification rounds.
+   *
+   * Scenario: Input or condition being tested
+   * - Question superseded at 12:00, prior analysis at 11:00 vs subsequent analysis at 13:00.
+   *
+   * Pass condition: What result or assertion makes it pass
+   * - `hasCompletedFinalClarificationAnalysis` is false when analysis predates supersession, and true when analysis occurs after supersession.
+   *
+   * Run from repository root:
+   * Push-Location mobile; flutter test test/round_two_clarification_test.dart --plain-name "description supersession needs a subsequent persisted analysis before limit guidance"; Pop-Location
+   */
   test('description supersession needs a subsequent persisted analysis before limit guidance', () {
     final json = requestJson(analyzed: true);
     final question = (json['clarifications'] as List).single as Map;
@@ -61,6 +129,25 @@ void main() {
     expect(ServiceRequestModel.fromJson(json).hasCompletedFinalClarificationAnalysis, isTrue);
   });
 
+  /**
+   * Parameterized Round 2 E2E Workflow Tests
+   * Note: Parameterized across `sufficient` flag (`[false, true]`). The test runner executes both cases.
+   *
+   * Purpose: What this specific test checks
+   * - Verifies complete round 2 lifecycle through submission, AI analysis, status refresh, and UI presentation.
+   *
+   * Why: Why this scenario matters
+   * - Confirms that even if the AI suggests follow-up questions for a hypothetical round 3, the client strictly suppresses round 3 and either marks the request 'Analyzed' or shows 'Further Details Needed'.
+   *
+   * Scenario: Input or condition being tested
+   * - User enters round 2 answer, taps 'Submit & Re-analyze'. Interceptor captures POST answer, POST analyze, and GET refresh.
+   *
+   * Pass condition: What result or assertion makes it pass
+   * - Calls match expected sequence, `provider.isAnalyzing` toggles, UI renders 'Analyzed' when sufficient or 'Further Details Needed' when insufficient, unpersisted round 3 candidate is never shown.
+   *
+   * Run from repository root:
+   * Push-Location mobile; flutter test test/round_two_clarification_test.dart --plain-name "Round 2 submits, analyzes, refreshes then displays sufficient=false"; Pop-Location
+   */
   for (final sufficient in [false, true]) {
     testWidgets('Round 2 submits, analyzes, refreshes then displays sufficient=$sufficient', (tester) async {
       final calls = <String>[];

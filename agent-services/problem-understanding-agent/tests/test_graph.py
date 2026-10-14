@@ -1,3 +1,9 @@
+# Purpose: Tests the LangGraph state machine graph for Component 1 Problem Understanding Agent.
+# Why: Validates workflow state transitions, tool execution sequencing, customer category hint override, clarification history merging, and error propagation.
+# Real vs Mocked: Real LangGraph compiled workflow and deterministic domain tools. The LLM provider is either OfflineSimulationProvider or a FailingMockProvider; no live model calls.
+# Prerequisites: Python virtual environment with dependencies installed in agent-services/problem-understanding-agent/.venv.
+# Run from repository root: & agent-services/problem-understanding-agent/.venv/Scripts/python.exe -m pytest agent-services/problem-understanding-agent/tests/test_graph.py
+
 """Integration tests for the LangGraph Problem Understanding state machine."""
 import pytest
 from app.graphs.problem_graph import create_problem_understanding_graph
@@ -20,6 +26,11 @@ class FailingMockProvider(BaseLLMProvider):
         raise TransientProviderError("Simulated LLM network connection timeout.")
 
 
+# Purpose: Verifies that customer CategoryHint is non-authoritative and overridden by actual problem description evidence.
+# Why: Customers often pick incorrect categories (e.g. Electrical for a plumbing leak); AI reasoning must classify by factual description.
+# Input/Condition: category_hint="Electrical", but description="Water is gushing out from the broken pipe under my kitchen sink."
+# Pass condition: Output category is "Plumbing" (not "Electrical"), urgency="High", confidence >= 0.8.
+# Run from repository root: & agent-services/problem-understanding-agent/.venv/Scripts/python.exe -m pytest agent-services/problem-understanding-agent/tests/test_graph.py::test_graph_category_hint_is_non_authoritative
 @pytest.mark.asyncio
 async def test_graph_category_hint_is_non_authoritative():
     """
@@ -48,6 +59,11 @@ async def test_graph_category_hint_is_non_authoritative():
     assert output["confidence"] >= 0.8
 
 
+# Purpose: Verifies that clarification Q&A history is incorporated into reasoning to resolve ambiguous requests.
+# Why: When customers answer follow-up questions, subsequent reasoning must use those answers to reach high confidence.
+# Input/Condition: Description "Water leaking in bathroom" + clarification round 1 answering "Yes, water is heavily flooding through the ceiling pipe."
+# Pass condition: Output category is "Plumbing" and needsMoreInformation is False (sufficient information reached).
+# Run from repository root: & agent-services/problem-understanding-agent/.venv/Scripts/python.exe -m pytest agent-services/problem-understanding-agent/tests/test_graph.py::test_graph_evaluates_clarification_history
 @pytest.mark.asyncio
 async def test_graph_evaluates_clarification_history():
     """
@@ -77,6 +93,11 @@ async def test_graph_evaluates_clarification_history():
     assert output["needsMoreInformation"] is False
 
 
+# Purpose: Verifies that empty/whitespace-only descriptions bypass tool execution and route immediately to finalization.
+# Why: Optimizes resource usage: empty inputs cannot be classified by domain tools and must immediately prompt for more info.
+# Input/Condition: description="   " (whitespace-only).
+# Pass condition: Category is "Unclassified", urgency="Unknown", needsMoreInformation=True, confidence=0.0, and 0 tool executions were recorded.
+# Run from repository root: & agent-services/problem-understanding-agent/.venv/Scripts/python.exe -m pytest agent-services/problem-understanding-agent/tests/test_graph.py::test_graph_empty_input_fast_path
 @pytest.mark.asyncio
 async def test_graph_empty_input_fast_path():
     """
@@ -104,6 +125,11 @@ async def test_graph_empty_input_fast_path():
     assert len(final_state.get("tool_executions", [])) == 0
 
 
+# Purpose: Verifies that overly brief or vague descriptions trigger NeedsMoreInformation=True and follow-up questions.
+# Why: Prevents assigning an arbitrary category to ambiguous requests like "It is broken."
+# Input/Condition: description="It is broken." without specific keywords.
+# Pass condition: Category is "Unclassified", urgency="Unknown", needsMoreInformation=True, followUpQuestions has at least 1 item.
+# Run from repository root: & agent-services/problem-understanding-agent/.venv/Scripts/python.exe -m pytest agent-services/problem-understanding-agent/tests/test_graph.py::test_graph_ambiguous_input_demands_clarification
 @pytest.mark.asyncio
 async def test_graph_ambiguous_input_demands_clarification():
     """
@@ -128,11 +154,17 @@ async def test_graph_ambiguous_input_demands_clarification():
     assert len(output["followUpQuestions"]) >= 1
 
 
+# Purpose: Verifies that when an LLM provider fails with TransientProviderError, the graph propagates the error rather than inventing a result.
+# Why: Fabricating a fake diagnosis when the model is down is unsafe; raising allows the backend orchestrator to recover or retry.
+# Input/Condition: Provider configured as FailingMockProvider raising TransientProviderError.
+# Pass condition: Graph execution raises TransientProviderError.
+# Run from repository root: & agent-services/problem-understanding-agent/.venv/Scripts/python.exe -m pytest agent-services/problem-understanding-agent/tests/test_graph.py::test_graph_propagates_provider_error_when_provider_fails
 @pytest.mark.asyncio
-async def test_graph_degraded_fallback_when_provider_fails():
+async def test_graph_propagates_provider_error_when_provider_fails():
     """
-    Verifies Requirement 22: If LLM fails, graph degrades safely:
-    Category = Unclassified, Urgency = Unknown, confidence = 0.2, needsMoreInformation = True, Degraded = True.
+    Verifies that when LLM provider fails with a ProviderError (e.g. transient 503/429),
+    the graph does NOT fabricate an AI result with NeedsMoreInformation=True.
+    Instead, it raises the ProviderError to allow proper backend recovery.
     """
     provider = FailingMockProvider()
     graph = create_problem_understanding_graph(provider)
@@ -144,17 +176,15 @@ async def test_graph_degraded_fallback_when_provider_fails():
         "clarification_history": [],
     }
 
-    final_state = await graph.ainvoke(initial_state)
-    output = final_state["output"]
-
-    assert final_state["degraded"] is True
-    assert output["category"] == "Unclassified"
-    assert output["urgency"] == "Unknown"
-    assert output["needsMoreInformation"] is True
-    assert output["confidence"] <= 0.4
-    assert output["additionalInformation"].get("Degraded") == "True"
+    with pytest.raises(TransientProviderError):
+        await graph.ainvoke(initial_state)
 
 
+# Purpose: Verifies that domain tool executions are audited with tool name, success flag, and execution timing.
+# Why: Observability requirement to monitor tool execution performance and failures across pipeline runs.
+# Input/Condition: Valid service request with description, location, and GPS.
+# Pass condition: Exactly 3 tool executions recorded (LocationExtractionTool, ProblemClassificationTool, ServiceKnowledgeTool), all with success=True and durationMs >= 0.
+# Run from repository root: & agent-services/problem-understanding-agent/.venv/Scripts/python.exe -m pytest agent-services/problem-understanding-agent/tests/test_graph.py::test_graph_produces_safe_tool_execution_audits
 @pytest.mark.asyncio
 async def test_graph_produces_safe_tool_execution_audits():
     """

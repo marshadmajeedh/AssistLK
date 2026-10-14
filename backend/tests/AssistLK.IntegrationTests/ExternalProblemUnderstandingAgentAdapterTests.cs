@@ -21,6 +21,28 @@ namespace AssistLK.IntegrationTests;
 /// and mode-switch registration.
 /// Normal test execution requires zero running Python processes.
 /// </summary>
+// =========================================================================================
+// Class: ExternalProblemUnderstandingAgentAdapterTests
+// What this class tests:
+//   Unit and HTTP wire contract tests for ExternalProblemUnderstandingAgentAdapter and
+//   ProblemUnderstandingHttpClient, which bridge the C# backend to the external Python
+//   Problem Understanding agent microservice.
+// Why these tests are needed:
+//   Ensures that outgoing request payloads conform to the FastAPI contract, response fields
+//   (category, urgency, confidence, visual evidence) map accurately into C# domain models,
+//   degraded agent results are handled gracefully, security boundaries are enforced (no customer
+//   JWTs or provider secrets leaked), and HTTP errors/timeouts fail safely without crashing.
+// What is real vs mocked/faked:
+//   - REAL: C# adapter, ProblemUnderstandingHttpClient, JSON serialization/deserialization,
+//     urgency/confidence parsers, and AgentServicesOptions validation logic.
+//   - MOCKED: HTTP transport is mocked via MockHttpMessageHandler returning preconfigured
+//     JSON responses or throwing simulated network/timeout exceptions.
+//   - Zero live Python processes, external network calls, or paid AI models are used.
+// Prerequisites:
+//   None. Runs entirely in-memory with mocked HTTP handlers.
+// Run from repository root:
+//   dotnet test backend/AssistLK.sln --filter "FullyQualifiedName~AssistLK.IntegrationTests.ExternalProblemUnderstandingAgentAdapterTests"
+// =========================================================================================
 public class ExternalProblemUnderstandingAgentAdapterTests
 {
     #region Test Helpers
@@ -113,6 +135,11 @@ public class ExternalProblemUnderstandingAgentAdapterTests
 
     #region Section 15: Required Tests 1-4 (Request Serialization)
 
+    // Purpose: Checks that ProblemUnderstandingInput serializes into the exact JSON wire format expected by the Python FastAPI agent service.
+    // Why: Python agent will reject the request with 422 if required fields (requestId, agentName, operation, input) are missing or misnamed.
+    // Scenario: C# executes adapter with a standard problem description, location, and category hint.
+    // Pass condition: handler.LastRequestBody contains "agentName": "ProblemUnderstandingAgent", "operation": "analyze-problem", and omits null timestamp and parameters.
+    // Run from repository root: dotnet test backend/AssistLK.sln --filter "FullyQualifiedName=AssistLK.IntegrationTests.ExternalProblemUnderstandingAgentAdapterTests.Test01_RequestSerialization_SerializesExpectedContract"
     [Fact]
     public async Task Test01_RequestSerialization_SerializesExpectedContract()
     {
@@ -161,6 +188,11 @@ public class ExternalProblemUnderstandingAgentAdapterTests
         Assert.False(root.TryGetProperty("parameters", out _));
     }
 
+    // Purpose: Verifies that prior rounds of clarification Q&A are properly serialized in the JSON wire payload under input.clarificationHistory.
+    // Why: When re-analyzing after customer answers a question, the Python agent needs past round numbers, questions, and answers to avoid repeating questions.
+    // Scenario: Input contains a 2-round clarification history list.
+    // Pass condition: JSON payload contains a 2-element clarificationHistory array with matching round numbers, question texts, and answers.
+    // Run from repository root: dotnet test backend/AssistLK.sln --filter "FullyQualifiedName=AssistLK.IntegrationTests.ExternalProblemUnderstandingAgentAdapterTests.Test02_ClarificationHistorySerialization_PreservesRoundQuestionAnswer"
     [Fact]
     public async Task Test02_ClarificationHistorySerialization_PreservesRoundQuestionAnswer()
     {
@@ -199,6 +231,11 @@ public class ExternalProblemUnderstandingAgentAdapterTests
         Assert.Equal(2, historyProp[1].GetProperty("round").GetInt32());
     }
 
+    // Purpose: Checks that GPS latitude and longitude serialize properly both when null and when floating-point coordinates are provided.
+    // Why: Customers may or may not provide GPS coordinates; serialization must preserve null as JSON null without crashing or defaulting to 0.0.
+    // Scenario: Tests Case A (null coordinates) and Case B (populated coordinates: latitude 6.9044, longitude 79.8665).
+    // Pass condition: Null inputs produce null JSON values; populated inputs produce double values matching coordinates to 4 decimal places.
+    // Run from repository root: dotnet test backend/AssistLK.sln --filter "FullyQualifiedName=AssistLK.IntegrationTests.ExternalProblemUnderstandingAgentAdapterTests.Test03_NullableGpsSerialization_PreservesNullAndPopulatedCoordinates"
     [Fact]
     public async Task Test03_NullableGpsSerialization_PreservesNullAndPopulatedCoordinates()
     {
@@ -240,6 +277,11 @@ public class ExternalProblemUnderstandingAgentAdapterTests
         }
     }
 
+    // Purpose: Checks that a customer-provided category hint ("Electrical") is passed through to the JSON request payload.
+    // Why: Category hints help the Python agent narrow its classification search space when available.
+    // Scenario: Context initialized with categoryHint = "Electrical".
+    // Pass condition: Wire JSON contains "categoryHint": "Electrical".
+    // Run from repository root: dotnet test backend/AssistLK.sln --filter "FullyQualifiedName=AssistLK.IntegrationTests.ExternalProblemUnderstandingAgentAdapterTests.Test04_CategoryHintSerialization_PreservesHintWhenPresentOrNull"
     [Fact]
     public async Task Test04_CategoryHintSerialization_PreservesHintWhenPresentOrNull()
     {
@@ -262,6 +304,11 @@ public class ExternalProblemUnderstandingAgentAdapterTests
 
     #region Section 15: Required Tests 5-9 (Response Mapping & Validation)
 
+    // Purpose: Verifies full mapping of a successful Plumbing response DTO from Python into C# ProblemUnderstandingOutput.
+    // Why: Ensures all output fields (category, summary, urgency enum, confidence, extracted location, additional info, provider) map cleanly into C# domain objects.
+    // Scenario: Python returns HTTP 200 with Plumbing category, high urgency, 0.92 confidence, extracted location, and metadata.
+    // Pass condition: result.Success is true, NextAction is "Analysed", and all fields on ProblemUnderstandingOutput match the response DTO.
+    // Run from repository root: dotnet test backend/AssistLK.sln --filter "FullyQualifiedName=AssistLK.IntegrationTests.ExternalProblemUnderstandingAgentAdapterTests.Test05_ResponseMapping_SuccessfulPlumbingResponse_MapsAllFields"
     [Fact]
     public async Task Test05_ResponseMapping_SuccessfulPlumbingResponse_MapsAllFields()
     {
@@ -318,6 +365,11 @@ public class ExternalProblemUnderstandingAgentAdapterTests
         Assert.Equal("gemini", output.AdditionalInformation["Provider"]);
     }
 
+    // Purpose: Checks mapping of a Vehicle Repair category response from Python into C# models.
+    // Why: Confirms multi-category support across different service categories in AssistLK.
+    // Scenario: Python returns Vehicle Repair category with 0.88 confidence for a car breakdown description.
+    // Pass condition: result.Success is true, output category is "Vehicle Repair", urgency is High, and confidence is 0.88.
+    // Run from repository root: dotnet test backend/AssistLK.sln --filter "FullyQualifiedName=AssistLK.IntegrationTests.ExternalProblemUnderstandingAgentAdapterTests.Test06_ResponseMapping_SuccessfulVehicleRepairResponse_MapsAllFields"
     [Fact]
     public async Task Test06_ResponseMapping_SuccessfulVehicleRepairResponse_MapsAllFields()
     {
@@ -359,6 +411,12 @@ public class ExternalProblemUnderstandingAgentAdapterTests
         Assert.Equal(0.88m, output.Confidence);
     }
 
+    // Purpose: Verifies that string urgency values from Python (case-insensitive) map to ServiceRequestUrgency enum values.
+    // Why: Python serializes urgency strings ("Low", "Medium", "High", "Critical", "Unknown", "critical", "LOW") which must parse into C# strongly typed enum values.
+    // Scenario: Parameterized test running various casing variations of urgency strings.
+    // Pass condition: output.Urgency equals the expected ServiceRequestUrgency enum member for each case.
+    // Run from repository root: dotnet test backend/AssistLK.sln --filter "FullyQualifiedName~AssistLK.IntegrationTests.ExternalProblemUnderstandingAgentAdapterTests.Test07_UrgencyMapping_MapsAllRecognizedUrgencyLevels"
+    // Note: Parameterized theory test; this command executes all 7 inline data cases.
     [Theory]
     [InlineData("Low", ServiceRequestUrgency.Low)]
     [InlineData("Medium", ServiceRequestUrgency.Medium)]
@@ -391,6 +449,11 @@ public class ExternalProblemUnderstandingAgentAdapterTests
         Assert.Equal(expected, output.Urgency);
     }
 
+    // Purpose: Checks that valid confidence scores (0.0 to 1.0) are preserved, while scores exceeding 1.0 trigger safe agent failure.
+    // Why: Confidence must be bounded between 0 and 1; out-of-range scores indicate corrupted agent outputs.
+    // Scenario: Valid confidence (0.77) followed by invalid out-of-bounds confidence (1.50).
+    // Pass condition: Valid returns success with confidence 0.77; invalid returns Success = false with an error message mentioning "confidence".
+    // Run from repository root: dotnet test backend/AssistLK.sln --filter "FullyQualifiedName=AssistLK.IntegrationTests.ExternalProblemUnderstandingAgentAdapterTests.Test08_ConfidenceMapping_PreservesNormalizedScore_AndRejectsInvalidBounds"
     [Fact]
     public async Task Test08_ConfidenceMapping_PreservesNormalizedScore_AndRejectsInvalidBounds()
     {
@@ -433,6 +496,11 @@ public class ExternalProblemUnderstandingAgentAdapterTests
         Assert.Contains("confidence", invalidResult.Message, StringComparison.OrdinalIgnoreCase);
     }
 
+    // Purpose: Verifies that follow-up clarification questions are capped at a maximum of 3 items and trigger the "AwaitingInformation" action.
+    // Why: AssistLK business rules limit clarification questions to at most 3 to prevent overwhelming customers.
+    // Scenario: Python response contains 5 follow-up questions including an excessively long string.
+    // Pass condition: Result is successful with NextAction "AwaitingInformation", NeedsMoreInformation is true, and exactly 3 questions are kept.
+    // Run from repository root: dotnet test backend/AssistLK.sln --filter "FullyQualifiedName=AssistLK.IntegrationTests.ExternalProblemUnderstandingAgentAdapterTests.Test09_FollowUpQuestionsMapping_BoundsToMaxThreeAndSanitizesLength"
     [Fact]
     public async Task Test09_FollowUpQuestionsMapping_BoundsToMaxThreeAndSanitizesLength()
     {
@@ -478,6 +546,11 @@ public class ExternalProblemUnderstandingAgentAdapterTests
 
     #region Section 15: Required Tests 10-12 (Degraded & Metadata Mapping)
 
+    // Purpose: Checks that a degraded Python agent response (Degraded = true) is treated as a valid agent result rather than a transport error.
+    // Why: When AI models time out or fail, the agent produces fallback/degraded outputs; C# must accept this output and guide the user rather than crashing.
+    // Scenario: Python returns Success = true, Degraded = true, category "Unclassified", and asks for more details.
+    // Pass condition: result.Success is true, NextAction is "AwaitingInformation", context Degraded flag is true, and output contains degraded metadata.
+    // Run from repository root: dotnet test backend/AssistLK.sln --filter "FullyQualifiedName=AssistLK.IntegrationTests.ExternalProblemUnderstandingAgentAdapterTests.Test10_DegradedResultMapping_TreatedAsValidAgentResult"
     [Fact]
     public async Task Test10_DegradedResultMapping_TreatedAsValidAgentResult()
     {
@@ -521,6 +594,11 @@ public class ExternalProblemUnderstandingAgentAdapterTests
         Assert.Equal("True", output.AdditionalInformation["Degraded"]);
     }
 
+    // Purpose: Checks that agent execution metadata (provider name e.g. "offline", duration in ms) is recorded into context.Data and output.AdditionalInformation.
+    // Why: Provides auditability of which AI provider was used and how long the analysis took.
+    // Scenario: Python returns metadata with Provider = "offline" and DurationMs = 45.
+    // Pass condition: context.Data["Provider"] is "offline", context.Data["AgentDurationMs"] is 45, and output contains "offline".
+    // Run from repository root: dotnet test backend/AssistLK.sln --filter "FullyQualifiedName=AssistLK.IntegrationTests.ExternalProblemUnderstandingAgentAdapterTests.Test11_ProviderMetadataMapping_RecordsProviderInContextAndOutput"
     [Fact]
     public async Task Test11_ProviderMetadataMapping_RecordsProviderInContextAndOutput()
     {
@@ -556,6 +634,11 @@ public class ExternalProblemUnderstandingAgentAdapterTests
         Assert.Equal("offline", output.AdditionalInformation["Provider"]);
     }
 
+    // Purpose: Verifies that the count of executed tools reported in metadata is captured in context.Data["ToolCalls"] and ["ToolCallCount"].
+    // Why: Allows monitoring and billing systems to track LangGraph tool invocations.
+    // Scenario: Python returns metadata with 3 tool executions.
+    // Pass condition: Both ToolCalls and ToolCallCount in context.Data equal 3.
+    // Run from repository root: dotnet test backend/AssistLK.sln --filter "FullyQualifiedName=AssistLK.IntegrationTests.ExternalProblemUnderstandingAgentAdapterTests.Test12_ToolExecutionCountMapping_SetsToolCallsAndToolCallCountInContext"
     [Fact]
     public async Task Test12_ToolExecutionCountMapping_SetsToolCallsAndToolCallCountInContext()
     {
@@ -594,6 +677,11 @@ public class ExternalProblemUnderstandingAgentAdapterTests
 
     #region Section 15: Required Tests 13-20 (Transport & Error Handling)
 
+    // Purpose: Checks that unparseable or broken JSON from the Python service returns a graceful failure result instead of an unhandled exception.
+    // Why: Protects the backend workflow from crashing if Python emits invalid or truncated JSON.
+    // Scenario: HTTP 200 returned with content "{\"invalid_json\": [unterminated".
+    // Pass condition: result.Success is false, and result.Message mentions "Malformed".
+    // Run from repository root: dotnet test backend/AssistLK.sln --filter "FullyQualifiedName=AssistLK.IntegrationTests.ExternalProblemUnderstandingAgentAdapterTests.Test13_MalformedJson_ReturnsSafeAgentResultFailure"
     [Fact]
     public async Task Test13_MalformedJson_ReturnsSafeAgentResultFailure()
     {
@@ -610,6 +698,11 @@ public class ExternalProblemUnderstandingAgentAdapterTests
         Assert.Contains("Malformed", result.Message, StringComparison.OrdinalIgnoreCase);
     }
 
+    // Purpose: Verifies that when Python returns a JSON envelope with Success = false, the C# adapter returns failure with the Python error message.
+    // Why: The external agent may catch an internal LangGraph exception and report it in the JSON envelope; C# must relay the failure.
+    // Scenario: Python returns Success = false and ErrorMessage = "LangGraph unrecoverable execution failure".
+    // Pass condition: result.Success is false and result.Message contains "unrecoverable".
+    // Run from repository root: dotnet test backend/AssistLK.sln --filter "FullyQualifiedName=AssistLK.IntegrationTests.ExternalProblemUnderstandingAgentAdapterTests.Test14_SuccessFalse_ReturnsSafeAgentResultFailure"
     [Fact]
     public async Task Test14_SuccessFalse_ReturnsSafeAgentResultFailure()
     {
@@ -628,6 +721,11 @@ public class ExternalProblemUnderstandingAgentAdapterTests
         Assert.Contains("unrecoverable", result.Message, StringComparison.OrdinalIgnoreCase);
     }
 
+    // Purpose: Checks that a response claiming Success = true but having Result = null fails safely.
+    // Why: Defensive coding against malformed payloads missing expected payload data.
+    // Scenario: Response JSON with Success = true and Result = null.
+    // Pass condition: result.Success is false and result.Message mentions "missing".
+    // Run from repository root: dotnet test backend/AssistLK.sln --filter "FullyQualifiedName=AssistLK.IntegrationTests.ExternalProblemUnderstandingAgentAdapterTests.Test15_MissingResult_ReturnsSafeAgentResultFailure"
     [Fact]
     public async Task Test15_MissingResult_ReturnsSafeAgentResultFailure()
     {
@@ -645,6 +743,11 @@ public class ExternalProblemUnderstandingAgentAdapterTests
         Assert.Contains("missing", result.Message, StringComparison.OrdinalIgnoreCase);
     }
 
+    // Purpose: Checks that HTTP 401 Unauthorized from the agent service is caught and converted to a safe agent failure.
+    // Why: If the internal API key is misconfigured or expired, the C# adapter should fail cleanly.
+    // Scenario: HTTP 401 response with "Invalid API key" detail.
+    // Pass condition: result.Success is false and result.Message contains "401".
+    // Run from repository root: dotnet test backend/AssistLK.sln --filter "FullyQualifiedName=AssistLK.IntegrationTests.ExternalProblemUnderstandingAgentAdapterTests.Test16_Http401_ReturnsSafeAgentResultFailure"
     [Fact]
     public async Task Test16_Http401_ReturnsSafeAgentResultFailure()
     {
@@ -661,6 +764,11 @@ public class ExternalProblemUnderstandingAgentAdapterTests
         Assert.Contains("401", result.Message);
     }
 
+    // Purpose: Checks that HTTP 422 Unprocessable Entity (FastAPI validation error) fails cleanly.
+    // Why: If request payload fails Pydantic schema validation, C# reports the error without throwing an uncaught exception.
+    // Scenario: HTTP 422 response with Pydantic field validation error.
+    // Pass condition: result.Success is false and result.Message contains "422".
+    // Run from repository root: dotnet test backend/AssistLK.sln --filter "FullyQualifiedName=AssistLK.IntegrationTests.ExternalProblemUnderstandingAgentAdapterTests.Test17_Http422_ReturnsSafeAgentResultFailure"
     [Fact]
     public async Task Test17_Http422_ReturnsSafeAgentResultFailure()
     {
@@ -677,6 +785,11 @@ public class ExternalProblemUnderstandingAgentAdapterTests
         Assert.Contains("422", result.Message);
     }
 
+    // Purpose: Checks that HTTP 500 Internal Server Error returns safe failure.
+    // Why: Python server-side errors must not crash the C# backend workflow.
+    // Scenario: HTTP 500 response with "Internal Server Error" body.
+    // Pass condition: result.Success is false and result.Message contains "500".
+    // Run from repository root: dotnet test backend/AssistLK.sln --filter "FullyQualifiedName=AssistLK.IntegrationTests.ExternalProblemUnderstandingAgentAdapterTests.Test18_Http500_ReturnsSafeAgentResultFailure"
     [Fact]
     public async Task Test18_Http500_ReturnsSafeAgentResultFailure()
     {
@@ -693,6 +806,11 @@ public class ExternalProblemUnderstandingAgentAdapterTests
         Assert.Contains("500", result.Message);
     }
 
+    // Purpose: Verifies that network connection refusal (e.g. Python service down) fails cleanly.
+    // Why: The system must remain resilient when external microservices are unreachable.
+    // Scenario: Mock handler throws HttpRequestException ("Connection refused").
+    // Pass condition: result.Success is false and result.Message contains "Connection".
+    // Run from repository root: dotnet test backend/AssistLK.sln --filter "FullyQualifiedName=AssistLK.IntegrationTests.ExternalProblemUnderstandingAgentAdapterTests.Test19_ConnectionFailure_ReturnsSafeAgentResultFailure"
     [Fact]
     public async Task Test19_ConnectionFailure_ReturnsSafeAgentResultFailure()
     {
@@ -706,6 +824,11 @@ public class ExternalProblemUnderstandingAgentAdapterTests
         Assert.Contains("Connection", result.Message, StringComparison.OrdinalIgnoreCase);
     }
 
+    // Purpose: Verifies that HTTP timeouts throw TaskCanceledException which is caught and converted to safe failure.
+    // Why: Prevents threads from hanging indefinitely when an AI model takes too long to respond.
+    // Scenario: Mock handler throws TaskCanceledException simulating a timeout.
+    // Pass condition: result.Success is false and result.Message contains "timed out".
+    // Run from repository root: dotnet test backend/AssistLK.sln --filter "FullyQualifiedName=AssistLK.IntegrationTests.ExternalProblemUnderstandingAgentAdapterTests.Test20_Timeout_ReturnsSafeAgentResultFailure"
     [Fact]
     public async Task Test20_Timeout_ReturnsSafeAgentResultFailure()
     {
@@ -723,6 +846,11 @@ public class ExternalProblemUnderstandingAgentAdapterTests
 
     #region Section 15: Required Tests 21-23 (Security & No Native Fallback)
 
+    // Purpose: Verifies that X-Internal-Api-Key HTTP header is included in outgoing requests when configured in AgentServicesOptions.
+    // Why: Authenticates the backend to the internal Python agent service.
+    // Scenario: Adapter configured with InternalApiKey = "my-secret-internal-key-999".
+    // Pass condition: Outgoing request contains X-Internal-Api-Key header with matching secret string.
+    // Run from repository root: dotnet test backend/AssistLK.sln --filter "FullyQualifiedName=AssistLK.IntegrationTests.ExternalProblemUnderstandingAgentAdapterTests.Test21_InternalApiKeyHeader_SentOnlyWhenConfigured"
     [Fact]
     public async Task Test21_InternalApiKeyHeader_SentOnlyWhenConfigured()
     {
@@ -747,6 +875,11 @@ public class ExternalProblemUnderstandingAgentAdapterTests
         Assert.Equal("my-secret-internal-key-999", keyVal);
     }
 
+    // Purpose: Checks that customer JWT tokens and LLM API keys are NEVER forwarded to the Python agent service.
+    // Why: Critical security boundary: Prevents leaking customer credentials or cloud provider secrets across internal microservice boundaries.
+    // Scenario: Context memory populated with JwtToken and Authorization bearer token.
+    // Pass condition: Outgoing HTTP request has null Authorization header and does not contain GOOGLE_API_KEY or OPENAI_API_KEY.
+    // Run from repository root: dotnet test backend/AssistLK.sln --filter "FullyQualifiedName=AssistLK.IntegrationTests.ExternalProblemUnderstandingAgentAdapterTests.Test22_NoCustomerJwtOrProviderKeysForwarded"
     [Fact]
     public async Task Test22_NoCustomerJwtOrProviderKeysForwarded()
     {
@@ -771,6 +904,11 @@ public class ExternalProblemUnderstandingAgentAdapterTests
         Assert.False(handler.LastRequest.Headers.Contains("OPENAI_API_KEY"));
     }
 
+    // Purpose: Ensures that adapter failure does NOT silently fall back to an in-process native AI service (like GeminiService).
+    // Why: Architecture design: Failures must be explicit so callers can handle fallback or retry deliberately.
+    // Scenario: Python service returns HTTP 500.
+    // Pass condition: Adapter returns Success = false, Data is null, and error message contains "500" without calling any native fallback.
+    // Run from repository root: dotnet test backend/AssistLK.sln --filter "FullyQualifiedName=AssistLK.IntegrationTests.ExternalProblemUnderstandingAgentAdapterTests.Test23_NoAutomaticNativeFallback_FailureReturnsFailureWithoutCallingNativeAgent"
     [Fact]
     public async Task Test23_NoAutomaticNativeFallback_FailureReturnsFailureWithoutCallingNativeAgent()
     {
@@ -786,6 +924,11 @@ public class ExternalProblemUnderstandingAgentAdapterTests
         Assert.Contains("500", result.Message);
     }
 
+    // Purpose: Checks that image-enhanced multimodal requests send the exact same X-Internal-Api-Key header and do not forward customer JWT.
+    // Why: Multimodal requests must follow the identical microservice security contract as text-only requests.
+    // Scenario: Adapter configured with internal API key executes context containing visual evidence JPEG byte data.
+    // Pass condition: result.Success is true, request has X-Internal-Api-Key with expected key, and Authorization is null.
+    // Run from repository root: dotnet test backend/AssistLK.sln --filter "FullyQualifiedName=AssistLK.IntegrationTests.ExternalProblemUnderstandingAgentAdapterTests.Test24_InternalApiKeyHeader_SentOnMultimodalRequestWithSameHeader"
     [Fact]
     public async Task Test24_InternalApiKeyHeader_SentOnMultimodalRequestWithSameHeader()
     {
@@ -839,6 +982,11 @@ public class ExternalProblemUnderstandingAgentAdapterTests
         Assert.Null(handler.LastRequest.Headers.Authorization);
     }
 
+    // Purpose: Checks that clarification re-analysis requests send the exact same X-Internal-Api-Key header.
+    // Why: Clarification requests must authenticate identically to initial analysis requests.
+    // Scenario: Adapter configured with internal API key executes context containing clarification Q&A history.
+    // Pass condition: result.Success is true, request contains X-Internal-Api-Key header with configured key.
+    // Run from repository root: dotnet test backend/AssistLK.sln --filter "FullyQualifiedName=AssistLK.IntegrationTests.ExternalProblemUnderstandingAgentAdapterTests.Test25_InternalApiKeyHeader_SentOnClarificationRequestWithSameHeader"
     [Fact]
     public async Task Test25_InternalApiKeyHeader_SentOnClarificationRequestWithSameHeader()
     {
@@ -876,6 +1024,11 @@ public class ExternalProblemUnderstandingAgentAdapterTests
         Assert.Equal("clarification-shared-secret-456", keyVal);
     }
 
+    // Purpose: Checks that accidental leading/trailing whitespace and quotes in InternalApiKey configuration are safely stripped before sending.
+    // Why: Common deployment mistake in .env or appsettings files where values are quoted with extra spaces.
+    // Scenario: Config has InternalApiKey = "  \"secret-with-quotes-and-spaces\"  ".
+    // Pass condition: Outgoing header value is cleanly stripped to "secret-with-quotes-and-spaces".
+    // Run from repository root: dotnet test backend/AssistLK.sln --filter "FullyQualifiedName=AssistLK.IntegrationTests.ExternalProblemUnderstandingAgentAdapterTests.Test26_InternalApiKeyHeader_StripsAccidentalSurroundingQuotesAndWhitespace"
     [Fact]
     public async Task Test26_InternalApiKeyHeader_StripsAccidentalSurroundingQuotesAndWhitespace()
     {
@@ -910,6 +1063,12 @@ public class ExternalProblemUnderstandingAgentAdapterTests
 
     #region Section 15: Agent Services Options Validation
 
+    // Purpose: Checks that AgentServicesOptions.Validate() throws an exception when ProblemUnderstandingUrl is empty, whitespace, malformed, or has an invalid scheme.
+    // Why: Early startup validation prevents misconfigured URLs from causing runtime failures later.
+    // Scenario: Parameterized test with empty string, spaces, "not-a-url", and "ftp://...".
+    // Pass condition: Throws InvalidOperationException mentioning "ProblemUnderstandingUrl".
+    // Run from repository root: dotnet test backend/AssistLK.sln --filter "FullyQualifiedName~AssistLK.IntegrationTests.ExternalProblemUnderstandingAgentAdapterTests.Test26_OptionsValidation_ThrowsOnInvalidUrl"
+    // Note: Parameterized theory test; this command executes all 4 inline data cases.
     [Theory]
     [InlineData("")]
     [InlineData("   ")]
@@ -926,6 +1085,12 @@ public class ExternalProblemUnderstandingAgentAdapterTests
         Assert.Contains("ProblemUnderstandingUrl", ex.Message);
     }
 
+    // Purpose: Checks that AgentServicesOptions.Validate() throws an exception when TimeoutSeconds is zero or negative.
+    // Why: HTTP client timeout must be a positive integer to prevent deadlocks or immediate cancellations.
+    // Scenario: Parameterized test with 0, -1, and -45 seconds.
+    // Pass condition: Throws InvalidOperationException mentioning "TimeoutSeconds".
+    // Run from repository root: dotnet test backend/AssistLK.sln --filter "FullyQualifiedName~AssistLK.IntegrationTests.ExternalProblemUnderstandingAgentAdapterTests.Test26_OptionsValidation_ThrowsOnNonPositiveTimeout"
+    // Note: Parameterized theory test; this command executes all 3 inline data cases.
     [Theory]
     [InlineData(0)]
     [InlineData(-1)]
@@ -941,6 +1106,11 @@ public class ExternalProblemUnderstandingAgentAdapterTests
         Assert.Contains("TimeoutSeconds", ex.Message);
     }
 
+    // Purpose: Checks that a whitespace-only problem description short-circuits locally and immediately returns NeedsMoreInformation = true without making any HTTP call.
+    // Why: Saves network overhead and API costs by immediately prompting customer for details when input is empty.
+    // Scenario: Context has description "   ". Handler is configured to throw if called.
+    // Pass condition: result.Success is true, NextAction is "AwaitingInformation", handler.LastRequest is null (zero remote calls), and category is "Unclassified".
+    // Run from repository root: dotnet test backend/AssistLK.sln --filter "FullyQualifiedName=AssistLK.IntegrationTests.ExternalProblemUnderstandingAgentAdapterTests.Test27_EmptyDescription_ReturnsFastNeedsMoreInformationWithoutRemoteCall"
     [Fact]
     public async Task Test27_EmptyDescription_ReturnsFastNeedsMoreInformationWithoutRemoteCall()
     {

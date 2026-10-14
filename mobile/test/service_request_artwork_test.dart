@@ -18,7 +18,46 @@ const artwork = {
   'Appliance Repair': AppAssets.applianceService,
 };
 
+/**
+ * TEST SUITE: Service Request Artwork and Card Presentation Tests
+ *
+ * 1. What this test suite tests:
+ *    - Verifies category artwork asset resolution (`serviceRequestCategoryAsset`), watermark rendering, semantics exclusion, and hit-test propagation in `ServiceRequestCard`.
+ *    - Confirms decorative artwork mapping across all categories (Unclassified, Plumbing, Electrical, Vehicle Repair, Appliance Repair).
+ *    - Confirms fallback behavior for unknown/unsupported categories (no image rendered, card remains tappable).
+ *    - Confirms responsive layout stability across small/standard viewport widths (320px, 393px) and high text scaling (1.0x, 2.0x).
+ * 2. Why these tests are needed:
+ *    - Ensures visual polish and accessibility: decorative artwork must not intercept touch gestures (must be wrapped in IgnorePointer),
+ *      must not clutter screen readers (must be ExcludeSemantics), and must scale gracefully without breaking card layouts on diverse mobile screen sizes.
+ * 3. What is real and what is mocked:
+ *    - Real Flutter widgets (`ServiceRequestCard`, `AppCard`, `Image.asset`, `ShaderMask`, `IgnorePointer`).
+ *    - No network mocks needed (uses in-memory `ServiceRequestModel`).
+ * 4. Prerequisites: None.
+ * 5. PowerShell command to run this suite from repository root:
+ *    Push-Location mobile; flutter test test/service_request_artwork_test.dart; Pop-Location
+ */
 void main() {
+  /**
+   * Parameterized Test Loop: Category Artwork & Metadata
+   * Note: Parameterized across all artwork map entries ('Unclassified', 'Plumbing', 'Electrical', 'Vehicle Repair', 'Appliance Repair').
+   * The test runner executes each category combination.
+   *
+   * Purpose: What this specific test checks
+   * - Verifies decorative category artwork image, semantics exclusion, tap passthrough via IgnorePointer, and request metadata (category, description, date, status, urgency).
+   *
+   * Why: Why this scenario matters
+   * - Guarantees artwork visually enriches cards without interfering with user interaction or accessibility.
+   *
+   * Scenario: Input or condition being tested
+   * - Render `ServiceRequestCard` for each service category.
+   *
+   * Pass condition: What result or assertion makes it pass
+   * - Correct asset is mapped, `excludeFromSemantics == true`, `IgnorePointer.ignoring == true`, metadata widgets render, tap on image triggers card `onTap`.
+   *   (Note: 'Unclassified' tests UI label expectation discrepancy where UI renders 'Pending AI analysis').
+   *
+   * Run from repository root:
+   * Push-Location mobile; flutter test test/service_request_artwork_test.dart --plain-name "Plumbing uses decorative artwork and preserves request information"; Pop-Location
+   */
   for (final entry in artwork.entries) {
     testWidgets(
       '${entry.key} uses decorative artwork and preserves request information',
@@ -63,6 +102,23 @@ void main() {
       },
     );
   }
+
+  /**
+   * Purpose: What this specific test checks
+   * - Verifies fallback handling when a service request has an unrecognized or arbitrary category name.
+   *
+   * Why: Why this scenario matters
+   * - Protects against missing asset crashes or broken layouts if a new category is introduced on the backend.
+   *
+   * Scenario: Input or condition being tested
+   * - Category set to `'Unexpected category'`.
+   *
+   * Pass condition: What result or assertion makes it pass
+   * - `serviceRequestCategoryAsset` returns null, no Image widget is found, card remains tappable.
+   *
+   * Run from repository root:
+   * Push-Location mobile; flutter test test/service_request_artwork_test.dart --plain-name "unsupported category has no image and remains tappable"; Pop-Location
+   */
   testWidgets('unsupported category has no image and remains tappable', (
     tester,
   ) async {
@@ -84,6 +140,27 @@ void main() {
     expect(taps, 1);
     expect(tester.takeException(), isNull);
   });
+
+  /**
+   * Parameterized Test Loops: Viewport Width x Text Scale Factor
+   * Note: Parameterized across viewport widths (320.0, 393.0) and text scale factors (1.0, 2.0).
+   * The test runner executes all 4 combinations.
+   *
+   * Purpose: What this specific test checks
+   * - Verifies responsive layout and text overflow protection under extreme text scaling and compact viewports.
+   *
+   * Why: Why this scenario matters
+   * - Ensures accessibility compliance (WCAG) for users with enlarged text settings without visual clipping or overflow errors.
+   *
+   * Scenario: Input or condition being tested
+   * - Test widths 320 and 393 at text scale 1.0 and 2.0 across all categories.
+   *
+   * Pass condition: What result or assertion makes it pass
+   * - Stack height matches Column height, image width is ~33% of stack, category heading does not exceed max lines, no exceptions thrown.
+   *
+   * Run from repository root:
+   * Push-Location mobile; flutter test test/service_request_artwork_test.dart --plain-name "artwork preserves card layout at 320.0 scale 1.0"; Pop-Location
+   */
   for (final width in [320.0, 393.0]) {
     for (final scale in [1.0, 2.0]) {
       testWidgets('artwork preserves card layout at $width scale $scale', (

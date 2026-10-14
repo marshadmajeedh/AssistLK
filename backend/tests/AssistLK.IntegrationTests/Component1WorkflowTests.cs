@@ -13,6 +13,25 @@ using Microsoft.Extensions.Logging.Abstractions;
 
 namespace AssistLK.IntegrationTests;
 
+/// <summary>
+/// Component1WorkflowTests verifies ProblemUnderstandingWorkflowService orchestration,
+/// lifecycle transitions, audit logging, agent memory recording, and category domain authority rules.
+///
+/// Viva Preparation Notes:
+/// - What this class tests: The complete C# problem understanding workflow orchestration:
+///   ProblemUnderstandingWorkflowService, AgentOrchestrator, AgentRegistry, ExternalProblemUnderstandingAgentAdapter,
+///   AgentMemoryService, AgentMonitoringService, and AgentSafetyService.
+/// - Why these tests are needed: Validates that problem analysis triggers the correct state transitions
+///   (Created -> Analyzing -> Analyzed / AwaitingInformation), records audit metrics and memory,
+///   and preserves the critical domain invariant that only the AI model can determine Category.
+/// - What is real vs mocked:
+///   * Real: Workflow service, agent orchestrator, adapter, safety service, memory service, monitoring service,
+///     and EF Core InMemory database.
+///   * Mocked/Faked: External Python LLM service (faked via FakeProblemUnderstandingClient).
+/// - Prerequisites: None (runs completely in-memory with .NET 8 SDK).
+/// - PowerShell command to run class from repository root:
+///   dotnet test backend/AssistLK.sln --filter "FullyQualifiedName~AssistLK.IntegrationTests.Component1WorkflowTests"
+/// </summary>
 public class Component1WorkflowTests
 {
     private sealed class WorkflowTestFixture
@@ -73,6 +92,13 @@ public class Component1WorkflowTests
         }
     }
 
+    /// <summary>
+    /// Purpose: Checks that a clear, unambiguous problem description transitions the request to Analyzed.
+    /// Why: Validates the happy path of the problem understanding agent workflow.
+    /// Scenario: A detailed burst-pipe problem is analyzed through ProblemUnderstandingWorkflowService.
+    /// Pass condition: Success is true, outcome is "Analyzed", Category is "Plumbing", ProblemAnalysis is saved, 3 tool calls are logged, 8 memory items are stored.
+    /// Run from repository root: dotnet test backend/AssistLK.sln --filter "FullyQualifiedName=AssistLK.IntegrationTests.Component1WorkflowTests.Workflow_ClearInput_CompletesAndTransitionsToAnalyzed"
+    /// </summary>
     [Fact]
     public async Task Workflow_ClearInput_CompletesAndTransitionsToAnalyzed()
     {
@@ -134,6 +160,13 @@ public class Component1WorkflowTests
         Assert.Equal("Completed", wf.Status);
     }
 
+    /// <summary>
+    /// Purpose: Checks that a vague description transitions the request to AwaitingInformation with follow-up questions.
+    /// Why: Prevents unclear issues from being dispatched to providers; prompts user for clarification.
+    /// Scenario: Customer submits "Something is broken in my house".
+    /// Pass condition: Success is true, outcome is "AwaitingInformation", NeedsMoreInformation is true, FollowUpQuestions is not empty, status is AwaitingInformation.
+    /// Run from repository root: dotnet test backend/AssistLK.sln --filter "FullyQualifiedName=AssistLK.IntegrationTests.Component1WorkflowTests.Workflow_AmbiguousInput_CompletesWithAwaitingInformation"
+    /// </summary>
     [Fact]
     public async Task Workflow_AmbiguousInput_CompletesWithAwaitingInformation()
     {
@@ -169,6 +202,13 @@ public class Component1WorkflowTests
         Assert.Equal(ServiceRequestStatus.AwaitingInformation, request.Status);
     }
 
+    /// <summary>
+    /// Purpose: Architectural test verifying that ExternalProblemUnderstandingAgentAdapter has no DbContext or Repository dependencies.
+    /// Why: Enforces hexagonal architecture and separation of concerns between agent network adapters and persistence.
+    /// Scenario: Constructor parameters of ExternalProblemUnderstandingAgentAdapter are inspected via reflection.
+    /// Pass condition: Single constructor exists accepting IProblemUnderstandingClient; contains no DbContext or Repository types.
+    /// Run from repository root: dotnet test backend/AssistLK.sln --filter "FullyQualifiedName=AssistLK.IntegrationTests.Component1WorkflowTests.Agent_DoesNotInjectDatabaseOrRepositoryDependencies"
+    /// </summary>
     [Fact]
     public void Agent_DoesNotInjectDatabaseOrRepositoryDependencies()
     {
@@ -180,6 +220,13 @@ public class Component1WorkflowTests
         Assert.DoesNotContain(pTypes, name => name.Contains("Repository"));
     }
 
+    /// <summary>
+    /// Purpose: Checks that the workflow invokes the tool executor and logs the count of tool executions in metrics.
+    /// Why: Verifies that agent tool calls (categorize, triage, clarify) are tracked in execution metrics.
+    /// Scenario: A car battery breakdown issue is analyzed through the workflow.
+    /// Pass condition: Success is true and Db.AgentExecutionMetrics records 3 tool calls with "Completed" status.
+    /// Run from repository root: dotnet test backend/AssistLK.sln --filter "FullyQualifiedName=AssistLK.IntegrationTests.Component1WorkflowTests.Workflow_InvokesToolExecutorAndSetsToolCallCount"
+    /// </summary>
     [Fact]
     public async Task Workflow_InvokesToolExecutorAndSetsToolCallCount()
     {
@@ -213,6 +260,13 @@ public class Component1WorkflowTests
         Assert.Equal("Completed", metrics.Single().Status);
     }
 
+    /// <summary>
+    /// Purpose: Checks that the workflow records an AgentExecution audit row and ANALYZE_PROBLEM action in the database.
+    /// Why: Guarantees full auditability and trace logs for every agent invocation.
+    /// Scenario: Problem analysis workflow runs for an electrical issue.
+    /// Pass condition: Single AgentExecution entity with Status "Completed" and single AgentAction entity with ActionType "ANALYZE_PROBLEM".
+    /// Run from repository root: dotnet test backend/AssistLK.sln --filter "FullyQualifiedName=AssistLK.IntegrationTests.Component1WorkflowTests.Workflow_RecordsExecutionAndAuditLog"
+    /// </summary>
     [Fact]
     public async Task Workflow_RecordsExecutionAndAuditLog()
     {
@@ -328,6 +382,14 @@ public class Component1WorkflowTests
     // Phase 3: CategoryHint Workflow Propagation & Domain Authority Tests
     // ---------------------------------------------------------------------------------
 
+    /// <summary>
+    /// Purpose: Checks that canonical category hints (Plumbing, Electrical, etc.) on the entity are propagated to the agent.
+    /// Why: Ensures user-provided category hints reach the agent input for contextual assistance.
+    /// Scenario: Requests with canonical hints are analyzed through Workflow.AnalyzeAsync(requestId, customerId).
+    /// Pass condition: Success is true, result.Category matches expectedCategory, entity.Category is updated, and CategoryHint is preserved.
+    /// Note: Parameterized test (Theory). The command below executes all 4 InlineData cases.
+    /// Run from repository root: dotnet test backend/AssistLK.sln --filter "FullyQualifiedName~AssistLK.IntegrationTests.Component1WorkflowTests.Workflow_AnalyzeAsync_PropagatesPersistedCanonicalCategoryHints"
+    /// </summary>
     [Theory]
     [InlineData("Plumbing", "Plumbing")]
     [InlineData("Electrical", "Electrical")]
@@ -374,6 +436,13 @@ public class Component1WorkflowTests
         Assert.Equal(hint, request.CategoryHint);
     }
 
+    /// <summary>
+    /// Purpose: Checks that when CategoryHint is null, the workflow proceeds without errors and classifies properly.
+    /// Why: Guarantees that hints are purely optional and omitting them does not break agent classification.
+    /// Scenario: A plumbing request without a CategoryHint is analyzed.
+    /// Pass condition: Success is true, Category is classified as "Plumbing", CategoryHint remains null.
+    /// Run from repository root: dotnet test backend/AssistLK.sln --filter "FullyQualifiedName=AssistLK.IntegrationTests.Component1WorkflowTests.Workflow_AnalyzeAsync_PropagatesNullCategoryHint_Correctly"
+    /// </summary>
     [Fact]
     public async Task Workflow_AnalyzeAsync_PropagatesNullCategoryHint_Correctly()
     {
@@ -400,6 +469,13 @@ public class Component1WorkflowTests
         Assert.Null(request.CategoryHint);
     }
 
+    /// <summary>
+    /// Purpose: Checks domain authority: the AI agent can override an incorrect customer category hint.
+    /// Why: Prevents customers from misleading matching by selecting an inaccurate category hint.
+    /// Scenario: Customer specifies "Electrical" hint, but description and AI determine "Plumbing".
+    /// Pass condition: Final Category is "Plumbing" (from AI), while CategoryHint remains "Electrical" (user hint).
+    /// Run from repository root: dotnet test backend/AssistLK.sln --filter "FullyQualifiedName=AssistLK.IntegrationTests.Component1WorkflowTests.Workflow_DomainAuthority_AgentCanDisagreeWithHint_CategoryComesOnlyFromAgent"
+    /// </summary>
     [Fact]
     public async Task Workflow_DomainAuthority_AgentCanDisagreeWithHint_CategoryComesOnlyFromAgent()
     {
@@ -434,6 +510,13 @@ public class Component1WorkflowTests
         Assert.Equal("Electrical", request.CategoryHint);
     }
 
+    /// <summary>
+    /// Purpose: Checks domain authority: category hint NEVER directly populates Category when description is ambiguous.
+    /// Why: Ensures unverified user hints are not used as fallbacks when problem classification is uncertain.
+    /// Scenario: Customer provides "Vehicle Repair" hint, but description is completely vague.
+    /// Pass condition: Status is AwaitingInformation, Category remains "Unclassified", CategoryHint remains "Vehicle Repair".
+    /// Run from repository root: dotnet test backend/AssistLK.sln --filter "FullyQualifiedName=AssistLK.IntegrationTests.Component1WorkflowTests.Workflow_DomainAuthority_CategoryHintNeverDirectlyUpdatesCategory_EvenWithAmbiguousDescription"
+    /// </summary>
     [Fact]
     public async Task Workflow_DomainAuthority_CategoryHintNeverDirectlyUpdatesCategory_EvenWithAmbiguousDescription()
     {
@@ -464,3 +547,4 @@ public class Component1WorkflowTests
         Assert.Equal("Vehicle Repair", request.CategoryHint);
     }
 }
+
